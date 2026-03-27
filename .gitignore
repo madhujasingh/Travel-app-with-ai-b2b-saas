@@ -31,6 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -39,3 +40,19 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Java / Spring Boot
+backend/target/
+*.class
+*.jar
+*.war
+
+# IDE files
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
