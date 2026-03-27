@@ -34,7 +34,6 @@ A comprehensive travel application built with React Native (Frontend) and Spring
 - React Native with Expo
 - React Navigation (Stack Navigator)
 - Axios for API calls
-- Orange & White theme
 
 ### Backend (Spring Boot)
 - Spring Boot 3.2.0
@@ -161,15 +160,6 @@ The backend will start on `http://localhost:8080/api`
 - `POST /api/suppliers` - Create new supplier
 - `PUT /api/suppliers/{id}/verify` - Verify supplier
 
-## Theme Colors
-
-- **Primary**: #FF6B35 (Orange)
-- **Secondary**: #FFFFFF (White)
-- **Background**: #FFF5F0 (Light Orange)
-- **Text**: #333333 (Dark Gray)
-- **Success**: #4CAF50 (Green)
-- **Error**: #F44336 (Red)
-
 ## Key Features Implementation
 
 ### 1. Splash Screen
@@ -186,7 +176,7 @@ The backend will start on `http://localhost:8080/api`
 - Budget input
 - Destination search
 - Number of people
-- Filter by type (Budget, Premium, Adventure, Family, Romantic)
+- Filter by type (Budget, Premium, Adventure, Family)
 
 ### 4. Itinerary Management
 - Day-wise activity planning
@@ -215,19 +205,4 @@ The backend will start on `http://localhost:8080/api`
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
 
-This project is licensed under the MIT License.
-
-## Contact
-
-For support or queries, contact us at:
-- Email: support@itinera.com
-- Phone: +91 98765 43210
-
-## Acknowledgments
-
-- React Native community
-- Spring Boot team
-- Expo team
-- All contributors
