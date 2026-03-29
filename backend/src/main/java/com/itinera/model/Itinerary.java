@@ -1,5 +1,6 @@
 package com.itinera.model;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -72,6 +73,7 @@ public class Itinerary {
     @Column(name = "exclusion")
     private List<String> exclusions;
 
+    @JsonManagedReference
     @OneToMany(mappedBy = "itinerary", cascade = CascadeType.ALL)
     private List<DayPlan> dayPlans;
 

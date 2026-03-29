@@ -7,6 +7,7 @@ import java.util.List;
 
 @Repository
 public interface ItineraryRepository extends JpaRepository<Itinerary, Long> {
+    boolean existsByTitleIgnoreCase(String title);
     List<Itinerary> findByDestinationContainingIgnoreCase(String destination);
     List<Itinerary> findByCategory(Itinerary.Category category);
     List<Itinerary> findByType(Itinerary.ItineraryType type);

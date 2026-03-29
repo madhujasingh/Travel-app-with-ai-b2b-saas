@@ -14,43 +14,13 @@ import { Colors } from '../constants/Colors';
 
 const ItineraryDetailScreen = ({ route, navigation }) => {
   const { itinerary, destination, people, adults, children } = route.params;
+  const dayPlans = itinerary.dayPlans || [];
   const [selectedDay, setSelectedDay] = useState(0);
-
-  const dayPlans = [
-    {
-      day: 1,
-      title: 'Arrival & City Exploration',
-      activities: [
-        { time: '09:00 AM', activity: 'Airport Pickup & Hotel Check-in', icon: 'car-outline' },
-        { time: '12:00 PM', activity: 'Lunch at Local Restaurant', icon: 'restaurant-outline' },
-        { time: '02:00 PM', activity: 'City Tour - Main Attractions', icon: 'business-outline' },
-        { time: '06:00 PM', activity: 'Sunset View Point', icon: 'sunny-outline' },
-        { time: '08:00 PM', activity: 'Welcome Dinner', icon: 'wine-outline' },
-      ],
-    },
-    {
-      day: 2,
-      title: 'Cultural Heritage Day',
-      activities: [
-        { time: '08:00 AM', activity: 'Breakfast at Hotel', icon: 'cafe-outline' },
-        { time: '10:00 AM', activity: 'Visit Historical Monuments', icon: 'library-outline' },
-        { time: '01:00 PM', activity: 'Traditional Lunch', icon: 'restaurant' },
-        { time: '03:00 PM', activity: 'Local Market Shopping', icon: 'cart-outline' },
-        { time: '07:00 PM', activity: 'Cultural Performance', icon: 'musical-notes-outline' },
-      ],
-    },
-    {
-      day: 3,
-      title: 'Adventure & Nature',
-      activities: [
-        { time: '06:00 AM', activity: 'Sunrise Trek', icon: 'sunny' },
-        { time: '09:00 AM', activity: 'Breakfast', icon: 'cafe' },
-        { time: '11:00 AM', activity: 'Adventure Activities', icon: 'bicycle-outline' },
-        { time: '02:00 PM', activity: 'Picnic Lunch', icon: 'basket-outline' },
-        { time: '05:00 PM', activity: 'Nature Walk', icon: 'leaf-outline' },
-      ],
-    },
-  ];
+  const selectedPlan = dayPlans[selectedDay];
+  const inclusions = itinerary.inclusions || [];
+  const exclusions = itinerary.exclusions || [];
+  const highlights = itinerary.highlights || [];
+  const reviewCount = itinerary.reviews ?? itinerary.reviewCount ?? 0;
 
   const handleAddToCart = () => {
     Alert.alert(
@@ -114,7 +84,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
             <View style={styles.heroRating}>
               <Ionicons name="star" size={16} color={Colors.warning} />
               <Text style={styles.ratingText}>{itinerary.rating}</Text>
-              <Text style={styles.reviewText}>({itinerary.reviews} reviews)</Text>
+              <Text style={styles.reviewText}>({reviewCount} reviews)</Text>
             </View>
           </View>
         </View>
@@ -140,7 +110,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Highlights</Text>
           <View style={styles.highlightsGrid}>
-            {itinerary.highlights.map((highlight, index) => (
+            {highlights.map((highlight, index) => (
               <View key={index} style={styles.highlightItem}>
                 <Ionicons name="sparkles" size={16} color={Colors.primary} style={styles.highlightIcon} />
                 <Text style={styles.highlightText}>{highlight}</Text>
@@ -150,6 +120,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
         </View>
 
         {/* Day-wise Itinerary */}
+        {dayPlans.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Day-wise Plan</Text>
           <ScrollView
@@ -172,17 +143,17 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
                     selectedDay === index && styles.dayTabTextActive,
                   ]}
                 >
-                  Day {plan.day}
+                  Day {plan.day || plan.dayNumber}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
           <View style={styles.dayPlanCard}>
-            <Text style={styles.dayPlanTitle}>{dayPlans[selectedDay].title}</Text>
-            {dayPlans[selectedDay].activities.map((activity, index) => (
+            <Text style={styles.dayPlanTitle}>{selectedPlan.title}</Text>
+            {selectedPlan.activities.map((activity, index) => (
               <View key={index} style={styles.activityItem}>
-                <Ionicons name={activity.icon} size={18} color={Colors.primary} style={styles.activityIcon} />
+                <Ionicons name={activity.icon || 'ellipse-outline'} size={18} color={Colors.primary} style={styles.activityIcon} />
                 <View style={styles.activityContent}>
                   <Text style={styles.activityTime}>{activity.time}</Text>
                   <Text style={styles.activityText}>{activity.activity}</Text>
@@ -191,19 +162,13 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
             ))}
           </View>
         </View>
+        )}
 
         {/* Inclusions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>What's Included</Text>
           <View style={styles.inclusionsList}>
-            {[
-              'Accommodation',
-              'Daily Breakfast',
-              'Airport Transfers',
-              'Sightseeing',
-              'Professional Guide',
-              'All Taxes',
-            ].map((item, index) => (
+            {inclusions.map((item, index) => (
               <View key={index} style={styles.inclusionItem}>
                 <Text style={styles.checkIcon}>✓</Text>
                 <Text style={styles.inclusionText}>{item}</Text>
@@ -216,12 +181,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>What's Not Included</Text>
           <View style={styles.exclusionsList}>
-            {[
-              'Airfare',
-              'Personal Expenses',
-              'Travel Insurance',
-              'Optional Activities',
-            ].map((item, index) => (
+            {exclusions.map((item, index) => (
               <View key={index} style={styles.exclusionItem}>
                 <Text style={styles.crossIcon}>✗</Text>
                 <Text style={styles.exclusionText}>{item}</Text>

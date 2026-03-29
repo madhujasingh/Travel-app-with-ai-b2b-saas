@@ -11,6 +11,39 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import API_CONFIG from '../config/api';
+
+const TYPE_TO_ICON = {
+  budget: 'wallet-outline',
+  premium: 'sparkles',
+  adventure: 'trail-sign',
+  family: 'people',
+  romantic: 'heart',
+};
+
+const normalizeItinerary = (item) => {
+  const normalizedType = item.type ? item.type.toLowerCase() : 'premium';
+
+  return {
+    ...item,
+    type: normalizedType,
+    image: item.imageUrl || TYPE_TO_ICON[normalizedType] || 'briefcase-outline',
+    rating: Number(item.rating || 0),
+    reviews: Number(item.reviewCount || 0),
+    price: Number(item.price || 0),
+    highlights: item.highlights || [],
+    inclusions: item.inclusions || [],
+    exclusions: item.exclusions || [],
+    dayPlans: (item.dayPlans || []).map((plan) => ({
+      ...plan,
+      day: plan.dayNumber,
+      activities: (plan.activities || []).map((activity) => ({
+        ...activity,
+        icon: activity.icon || 'ellipse-outline',
+      })),
+    })),
+  };
+};
 
 const ItineraryListScreen = ({ route, navigation }) => {
   const { destination, budget, people, adults, children, type } = route.params;
@@ -19,77 +52,47 @@ const ItineraryListScreen = ({ route, navigation }) => {
   const [filter, setFilter] = useState('all');
 
   useEffect(() => {
-    // Simulate API call to fetch itineraries
-    const fetchItineraries = () => {
-      setTimeout(() => {
-        const mockItineraries = [
-          {
-            id: 1,
-            title: `${destination} Explorer - 3 Days`,
-            duration: '3 Days / 2 Nights',
-            price: 15000,
-            rating: 4.5,
-            reviews: 128,
-            highlights: ['City Tour', 'Local Cuisine', 'Cultural Sites'],
-            image: 'sunny',
-            type: 'budget',
-          },
-          {
-            id: 2,
-            title: `${destination} Premium - 5 Days`,
-            duration: '5 Days / 4 Nights',
-            price: 35000,
-            rating: 4.8,
-            reviews: 256,
-            highlights: ['Luxury Stay', 'Private Tours', 'Fine Dining'],
-            image: 'sparkles',
-            type: 'premium',
-          },
-          {
-            id: 3,
-            title: `${destination} Adventure - 7 Days`,
-            duration: '7 Days / 6 Nights',
-            price: 45000,
-            rating: 4.7,
-            reviews: 189,
-            highlights: ['Adventure Sports', 'Nature Trails', 'Local Villages'],
-            image: 'trail-sign',
-            type: 'adventure',
-          },
-          {
-            id: 4,
-            title: `${destination} Family Fun - 4 Days`,
-            duration: '4 Days / 3 Nights',
-            price: 28000,
-            rating: 4.6,
-            reviews: 145,
-            highlights: ['Kid-Friendly', 'Theme Parks', 'Beach Activities'],
-            image: 'people',
-            type: 'family',
-          },
-          {
-            id: 5,
-            title: `${destination} Romantic - 5 Days`,
-            duration: '5 Days / 4 Nights',
-            price: 40000,
-            rating: 4.9,
-            reviews: 98,
-            highlights: ['Candlelight Dinner', 'Spa Sessions', 'Sunset Views'],
-            image: 'heart',
-            type: 'romantic',
-          },
-        ];
+    const fetchItineraries = async () => {
+      try {
+        let data = [];
 
-        // Filter by budget if provided
-        let filtered = mockItineraries;
+        if (destination) {
+          const searchResponse = await fetch(
+            `${API_CONFIG.BASE_URL}/itineraries/search?destination=${encodeURIComponent(destination)}`
+          );
+
+          if (!searchResponse.ok) {
+            throw new Error(`Failed to fetch itineraries: ${searchResponse.status}`);
+          }
+
+          data = await searchResponse.json();
+        }
+
+        if (!destination || data.length === 0) {
+          const fallbackResponse = await fetch(`${API_CONFIG.BASE_URL}/itineraries`);
+
+          if (!fallbackResponse.ok) {
+            throw new Error(`Failed to fetch itineraries: ${fallbackResponse.status}`);
+          }
+
+          data = await fallbackResponse.json();
+        }
+
+        const normalized = data.map(normalizeItinerary);
+        let filtered = normalized;
+
         if (budget) {
-          const budgetNum = parseInt(budget);
-          filtered = mockItineraries.filter((item) => item.price <= budgetNum * 1.2);
+          const budgetNum = parseInt(budget, 10);
+          filtered = normalized.filter((item) => item.price <= budgetNum * 1.2);
         }
 
         setItineraries(filtered);
+      } catch (error) {
+        console.error('Error fetching itineraries', error);
+        setItineraries([]);
+      } finally {
         setLoading(false);
-      }, 1500);
+      }
     };
 
     fetchItineraries();
@@ -230,7 +233,7 @@ const ItineraryListScreen = ({ route, navigation }) => {
             <View style={styles.emptyContainer}>
               <Ionicons name="search" size={52} color={Colors.primary} style={styles.emptyIcon} />
               <Text style={styles.emptyText}>
-                No itineraries found for this filter
+                No itineraries found yet. Add one in the backend and it will appear here.
               </Text>
             </View>
           }
