@@ -17,6 +17,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
   const dayPlans = itinerary.dayPlans || [];
   const [selectedDay, setSelectedDay] = useState(0);
   const selectedPlan = dayPlans[selectedDay];
+  const heroIcon = itinerary.image || itinerary.imageUrl || 'briefcase-outline';
   const inclusions = itinerary.inclusions || [];
   const exclusions = itinerary.exclusions || [];
   const highlights = itinerary.highlights || [];
@@ -77,7 +78,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Hero Section */}
         <View style={styles.heroSection}>
-          <Ionicons name={itinerary.image || 'briefcase-outline'} size={80} color={Colors.secondary} style={styles.heroImage} />
+          <Ionicons name={heroIcon} size={80} color={Colors.secondary} style={styles.heroImage} />
           <View style={styles.heroOverlay}>
             <Text style={styles.heroTitle}>{itinerary.title}</Text>
             <Text style={styles.heroDuration}>{itinerary.duration}</Text>
@@ -151,7 +152,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
 
           <View style={styles.dayPlanCard}>
             <Text style={styles.dayPlanTitle}>{selectedPlan.title}</Text>
-            {selectedPlan.activities.map((activity, index) => (
+            {(selectedPlan.activities || []).map((activity, index) => (
               <View key={index} style={styles.activityItem}>
                 <Ionicons name={activity.icon || 'ellipse-outline'} size={18} color={Colors.primary} style={styles.activityIcon} />
                 <View style={styles.activityContent}>

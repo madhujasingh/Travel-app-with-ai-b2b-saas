@@ -1,5 +1,7 @@
 package com.itinera.service;
 
+import com.itinera.model.Activity;
+import com.itinera.model.DayPlan;
 import com.itinera.model.Itinerary;
 import com.itinera.repository.ItineraryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,15 +43,34 @@ public class ItineraryService {
     }
 
     public Itinerary createItinerary(Itinerary itinerary) {
+        prepareRelationships(itinerary);
         return itineraryRepository.save(itinerary);
     }
 
     public Itinerary updateItinerary(Long id, Itinerary itinerary) {
         itinerary.setId(id);
+        prepareRelationships(itinerary);
         return itineraryRepository.save(itinerary);
     }
 
     public void deleteItinerary(Long id) {
         itineraryRepository.deleteById(id);
+    }
+
+    private void prepareRelationships(Itinerary itinerary) {
+        if (itinerary.getDayPlans() == null) {
+            return;
+        }
+
+        for (DayPlan dayPlan : itinerary.getDayPlans()) {
+            dayPlan.setItinerary(itinerary);
+            if (dayPlan.getActivities() == null) {
+                continue;
+            }
+
+            for (Activity activity : dayPlan.getActivities()) {
+                activity.setDayPlan(dayPlan);
+            }
+        }
     }
 }

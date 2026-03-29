@@ -215,6 +215,24 @@ const B2BDashboard = ({ navigation }) => {
         {/* Quick Actions */}
         <View style={styles.quickActions}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
+          {isAdmin ? (
+            <TouchableOpacity
+              style={styles.adminUploadCard}
+              onPress={() => navigation.navigate('AdminItineraryUpload')}
+              activeOpacity={0.9}
+            >
+              <View style={styles.adminUploadCopy}>
+                <Text style={styles.adminUploadEyebrow}>Admin only</Text>
+                <Text style={styles.adminUploadTitle}>Upload a new itinerary</Text>
+                <Text style={styles.adminUploadText}>
+                  Publish destination packages directly from the app with highlights, inclusions, and day-wise plans.
+                </Text>
+              </View>
+              <View style={styles.adminUploadIconWrap}>
+                <Ionicons name="cloud-upload-outline" size={28} color={Colors.secondary} />
+              </View>
+            </TouchableOpacity>
+          ) : null}
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={styles.actionButton}
@@ -419,6 +437,50 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  adminUploadCard: {
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  adminUploadCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  adminUploadEyebrow: {
+    color: Colors.secondary,
+    opacity: 0.8,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  adminUploadTitle: {
+    color: Colors.secondary,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  adminUploadText: {
+    color: Colors.secondary,
+    opacity: 0.92,
+    marginTop: 6,
+    lineHeight: 19,
+  },
+  adminUploadIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   actionButton: {
     flex: 1,

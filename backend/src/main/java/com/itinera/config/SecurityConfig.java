@@ -3,6 +3,7 @@ package com.itinera.config;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -33,7 +34,10 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Context path is already /api, so matchers should use app-relative routes.
                 .requestMatchers("/auth/**").permitAll()
-                .requestMatchers("/itineraries/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/itineraries/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/itineraries/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/itineraries/**").hasRole("ADMIN")
                 .requestMatchers("/suppliers/verified").permitAll()
                 .anyRequest().authenticated()
             )

@@ -4,6 +4,7 @@ import com.itinera.model.Itinerary;
 import com.itinera.service.ItineraryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -53,11 +54,13 @@ public class ItineraryController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Itinerary> createItinerary(@RequestBody Itinerary itinerary) {
         return ResponseEntity.ok(itineraryService.createItinerary(itinerary));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Itinerary> updateItinerary(
             @PathVariable Long id,
             @RequestBody Itinerary itinerary) {
@@ -65,6 +68,7 @@ public class ItineraryController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteItinerary(@PathVariable Long id) {
         itineraryService.deleteItinerary(id);
         return ResponseEntity.ok().build();

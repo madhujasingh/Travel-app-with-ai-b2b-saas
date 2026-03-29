@@ -22,6 +22,7 @@ import B2BDashboard from './src/screens/B2BDashboard';
 import AIRecommendationsScreen from './src/screens/AIRecommendationsScreen';
 import ChatInboxScreen from './src/screens/ChatInboxScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import AdminItineraryUploadScreen from './src/screens/AdminItineraryUploadScreen';
 import { AuthContext } from './src/context/AuthContext';
 import { Colors } from './src/constants/Colors';
 
@@ -177,6 +178,7 @@ export default function App() {
               <Stack.Screen name="AIRecommendations" component={AIRecommendationsScreen} />
               <Stack.Screen name="ChatInbox" component={ChatInboxScreen} />
               <Stack.Screen name="ChatScreen" component={ChatScreen} />
+              <Stack.Screen name="AdminItineraryUpload" component={AdminItineraryUploadScreen} />
             </>
           )}
         </Stack.Navigator>
