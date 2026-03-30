@@ -17,12 +17,23 @@ const B2BDashboard = ({ navigation }) => {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
-  const stats = [
+  const adminStats = [
     { id: 1, title: 'Total Bookings', value: '156', icon: 'clipboard-outline', color: '#FF6B35' },
     { id: 2, title: 'Revenue', value: '₹12.5L', icon: 'cash-outline', color: '#4CAF50' },
     { id: 3, title: 'Active Clients', value: '89', icon: 'people-outline', color: '#2196F3' },
     { id: 4, title: 'Pending Queries', value: '23', icon: 'help-circle-outline', color: '#FF9800' },
   ];
+
+  const supplierStats = [
+    { id: 1, title: 'Total Bookings', value: '156', icon: 'clipboard-outline', color: '#FF6B35' },
+    { id: 2, title: 'Revenue', value: '₹12.5L', icon: 'cash-outline', color: '#4CAF50' },
+    { id: 3, title: 'Active Clients', value: '89', icon: 'people-outline', color: '#2196F3' },
+    { id: 4, title: 'Pending Queries', value: '23', icon: 'help-circle-outline', color: '#FF9800' },
+    { id: 5, title: 'Avg Response Time', value: '2.5h', icon: 'time-outline', color: '#9C27B0' },
+    { id: 6, title: 'Conversion Rate', value: '68%', icon: 'trending-up-outline', color: '#00BCD4' },
+  ];
+
+  const stats = isAdmin ? adminStats : supplierStats;
 
   const recentBookings = [
     {
@@ -58,6 +69,7 @@ const B2BDashboard = ({ navigation }) => {
       request: 'Custom package for 10 pax',
       status: 'Awaiting Quote',
       deadline: '26 Mar 2026',
+      responseTime: null,
     },
     {
       id: 2,
@@ -65,6 +77,7 @@ const B2BDashboard = ({ navigation }) => {
       request: 'Houseboat booking',
       status: 'Quote Received',
       deadline: '25 Mar 2026',
+      responseTime: '2h 15m',
     },
   ];
 
@@ -165,7 +178,15 @@ const B2BDashboard = ({ navigation }) => {
         </View>
       </View>
       <Text style={styles.requestText}>{item.request}</Text>
-      <Text style={styles.deadline}>Deadline: {item.deadline}</Text>
+      <View style={styles.supplierMetaRow}>
+        <Text style={styles.deadline}>Deadline: {item.deadline}</Text>
+        {item.responseTime && (
+          <View style={styles.responseTimeBadge}>
+            <Ionicons name="time-outline" size={12} color={Colors.primary} />
+            <Text style={styles.responseTimeText}>Response: {item.responseTime}</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 
@@ -294,21 +315,7 @@ const B2BDashboard = ({ navigation }) => {
           <View style={styles.featuresGrid}>{features.map(renderFeature)}</View>
         </View>
 
-        {/* Subscription Info */}
-        <View style={styles.subscriptionSection}>
-          <View style={styles.subscriptionCard}>
-            <Text style={styles.subscriptionTitle}>Premium Plan</Text>
-            <Text style={styles.subscriptionFeatures}>
-              ✓ Unlimited bookings{'\n'}
-              ✓ Supplier network access{'\n'}
-              ✓ Advanced analytics{'\n'}
-              ✓ Priority support
-            </Text>
-            <TouchableOpacity style={styles.upgradeButton}>
-              <Text style={styles.upgradeButtonText}>Manage Subscription</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+
 
         {/* Bottom Spacing */}
         <View style={{ height: 40 }} />
@@ -607,6 +614,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
   },
+  supplierMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  responseTimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  responseTimeText: {
+    fontSize: 11,
+    color: Colors.primary,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
   featuresGrid: {
     marginTop: 10,
   },
@@ -640,42 +667,7 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     marginTop: 2,
   },
-  subscriptionSection: {
-    padding: 20,
-  },
-  subscriptionCard: {
-    backgroundColor: Colors.primary,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  subscriptionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: Colors.secondary,
-    marginBottom: 15,
-  },
-  subscriptionFeatures: {
-    fontSize: 16,
-    color: Colors.secondary,
-    lineHeight: 28,
-    marginBottom: 20,
-  },
-  upgradeButton: {
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-  },
-  upgradeButtonText: {
-    color: Colors.primary,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+
 });
 
 export default B2BDashboard;

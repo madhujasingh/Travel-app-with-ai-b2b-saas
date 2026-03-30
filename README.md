@@ -161,6 +161,8 @@ The backend will start on `http://localhost:8080/api`
 - `GET /api/suppliers` - Get all suppliers
 - `POST /api/suppliers` - Create new supplier
 - `PUT /api/suppliers/{id}/verify` - Verify supplier
+- `GET /api/suppliers/{id}/performance` - Get supplier performance metrics
+- `GET /api/suppliers/performance/all` - Get all suppliers with performance metrics
 
 ### Group Trips
 - `GET /api/group-trips` - Get user's group trips
@@ -216,6 +218,13 @@ The backend will start on `http://localhost:8080/api`
 - View real-time voting scores
 - Lock winning options for final itinerary
 - Track group members and their contributions
+
+### 8. Supplier Performance Tracking
+- Track supplier response time to admin requests
+- Calculate conversion rate (requests to bookings)
+- View average response time per supplier
+- Monitor supplier performance metrics in dashboard
+- Display response time badges on supplier request cards
 
 ## Contributing
 

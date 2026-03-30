@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/suppliers")
@@ -59,5 +60,15 @@ public class SupplierController {
     public ResponseEntity<Void> deleteSupplier(@PathVariable Long id) {
         supplierService.deleteSupplier(id);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{id}/performance")
+    public ResponseEntity<Map<String, Object>> getSupplierPerformance(@PathVariable Long id) {
+        return ResponseEntity.ok(supplierService.getSupplierPerformanceMetrics(id));
+    }
+
+    @GetMapping("/performance/all")
+    public ResponseEntity<List<Map<String, Object>>> getAllSuppliersPerformance() {
+        return ResponseEntity.ok(supplierService.getAllSuppliersWithMetrics());
     }
 }

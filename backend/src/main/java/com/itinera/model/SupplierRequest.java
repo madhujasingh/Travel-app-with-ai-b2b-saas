@@ -46,6 +46,12 @@ public class SupplierRequest {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "responded_at")
+    private LocalDateTime respondedAt;
+
+    @Column(name = "response_time_minutes")
+    private Long responseTimeMinutes;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -60,5 +66,102 @@ public class SupplierRequest {
 
     public enum RequestStatus {
         PENDING, QUOTE_RECEIVED, ACCEPTED, REJECTED, COMPLETED
+    }
+
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Supplier getSupplier() {
+        return supplier;
+    }
+
+    public void setSupplier(Supplier supplier) {
+        this.supplier = supplier;
+    }
+
+    public AgentRequest getAgentRequest() {
+        return agentRequest;
+    }
+
+    public void setAgentRequest(AgentRequest agentRequest) {
+        this.agentRequest = agentRequest;
+    }
+
+    public String getRequestDetails() {
+        return requestDetails;
+    }
+
+    public void setRequestDetails(String requestDetails) {
+        this.requestDetails = requestDetails;
+    }
+
+    public BigDecimal getQuotedPrice() {
+        return quotedPrice;
+    }
+
+    public void setQuotedPrice(BigDecimal quotedPrice) {
+        this.quotedPrice = quotedPrice;
+    }
+
+    public String getQuoteDetails() {
+        return quoteDetails;
+    }
+
+    public void setQuoteDetails(String quoteDetails) {
+        this.quoteDetails = quoteDetails;
+    }
+
+    public RequestStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(RequestStatus status) {
+        this.status = status;
+    }
+
+    public LocalDateTime getDeadline() {
+        return deadline;
+    }
+
+    public void setDeadline(LocalDateTime deadline) {
+        this.deadline = deadline;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getRespondedAt() {
+        return respondedAt;
+    }
+
+    public void setRespondedAt(LocalDateTime respondedAt) {
+        this.respondedAt = respondedAt;
+    }
+
+    public Long getResponseTimeMinutes() {
+        return responseTimeMinutes;
+    }
+
+    public void setResponseTimeMinutes(Long responseTimeMinutes) {
+        this.responseTimeMinutes = responseTimeMinutes;
     }
 }
