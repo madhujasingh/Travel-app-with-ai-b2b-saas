@@ -44,6 +44,11 @@ public class MessagingController {
         return ResponseEntity.ok(messagingService.startSupplierConversation(getCurrentUserId(), payload));
     }
 
+    @PostMapping("/conversations/supplier-to-admin/start")
+    public ResponseEntity<Conversation> startSupplierToAdminConversation(@RequestBody Map<String, Object> payload) {
+        return ResponseEntity.ok(messagingService.startSupplierToAdminConversation(getCurrentUserId(), payload));
+    }
+
     @PostMapping("/conversations/{conversationId}/messages")
     public ResponseEntity<ConversationMessage> sendMessage(
             @PathVariable Long conversationId,

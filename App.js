@@ -24,6 +24,10 @@ import ChatInboxScreen from './src/screens/ChatInboxScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AdminItineraryUploadScreen from './src/screens/AdminItineraryUploadScreen';
 import GroupTripPlannerScreen from './src/screens/GroupTripPlannerScreen';
+import RequestDetailScreen from './src/screens/RequestDetailScreen';
+import CreatePackageScreen from './src/screens/CreatePackageScreen';
+import SupplierRequestsScreen from './src/screens/SupplierRequestsScreen';
+import ReportsScreen from './src/screens/ReportsScreen';
 import { AuthContext } from './src/context/AuthContext';
 import { Colors } from './src/constants/Colors';
 
@@ -181,6 +185,10 @@ export default function App() {
               <Stack.Screen name="ChatScreen" component={ChatScreen} />
               <Stack.Screen name="AdminItineraryUpload" component={AdminItineraryUploadScreen} />
               <Stack.Screen name="GroupTripPlanner" component={GroupTripPlannerScreen} />
+              <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
+              <Stack.Screen name="CreatePackage" component={CreatePackageScreen} />
+              <Stack.Screen name="SupplierRequests" component={SupplierRequestsScreen} />
+              <Stack.Screen name="Reports" component={ReportsScreen} />
             </>
           )}
         </Stack.Navigator>

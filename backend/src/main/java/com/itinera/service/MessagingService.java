@@ -91,6 +91,31 @@ public class MessagingService {
         return saved;
     }
 
+    public Conversation startSupplierToAdminConversation(Long currentUserId, Map<String, Object> payload) {
+        User supplier = getUserById(currentUserId);
+        requireRole(supplier, User.UserRole.SUPPLIER);
+
+        User admin = getDefaultAdmin();
+
+        Conversation conversation = new Conversation();
+        conversation.setType(Conversation.ConversationType.SUPPLIER_ADMIN);
+        conversation.setAdminId(admin.getId());
+        conversation.setSupplierId(supplier.getId());
+        conversation.setItineraryId(getLong(payload, "itineraryId"));
+        conversation.setDestination(getString(payload, "destination"));
+        conversation.setNumberOfPeople(getInteger(payload, "numberOfPeople"));
+        conversation.setBudget(getString(payload, "budget"));
+        conversation.setSummary(getString(payload, "summary"));
+        Conversation saved = conversationRepository.save(conversation);
+
+        String initialMessage = getString(payload, "initialMessage");
+        if (initialMessage != null && !initialMessage.isBlank()) {
+            addMessage(saved.getId(), currentUserId, initialMessage);
+        }
+
+        return saved;
+    }
+
     public List<Conversation> getMyConversations(Long currentUserId) {
         User user = getUserById(currentUserId);
 

@@ -28,7 +28,7 @@ const B2BDashboard = ({ navigation }) => {
     { id: 1, title: 'Total Bookings', value: '156', icon: 'clipboard-outline', color: '#FF6B35' },
     { id: 2, title: 'Revenue', value: '₹12.5L', icon: 'cash-outline', color: '#4CAF50' },
     { id: 3, title: 'Active Clients', value: '89', icon: 'people-outline', color: '#2196F3' },
-    { id: 4, title: 'Pending Queries', value: '23', icon: 'help-circle-outline', color: '#FF9800' },
+    { id: 4, title: 'Pending Requests', value: '23', icon: 'help-circle-outline', color: '#FF9800' },
     { id: 5, title: 'Avg Response Time', value: '2.5h', icon: 'time-outline', color: '#9C27B0' },
     { id: 6, title: 'Conversion Rate', value: '68%', icon: 'trending-up-outline', color: '#00BCD4' },
   ];
@@ -65,23 +65,37 @@ const B2BDashboard = ({ navigation }) => {
   const supplierRequests = [
     {
       id: 1,
-      supplier: 'Rajasthan Tours',
-      request: 'Custom package for 10 pax',
-      status: 'Awaiting Quote',
+      destination: 'Rajasthan Heritage Tour',
+      customerType: 'Group (10 pax)',
+      budget: '₹1,50,000',
+      travelers: 10,
       deadline: '26 Mar 2026',
-      responseTime: null,
+      status: 'New',
+      preferences: 'Adventure, Cultural',
     },
     {
       id: 2,
-      supplier: 'Kerala Backwaters',
-      request: 'Houseboat booking',
-      status: 'Quote Received',
+      destination: 'Kerala Backwaters',
+      customerType: 'Couple',
+      budget: '₹80,000',
+      travelers: 2,
       deadline: '25 Mar 2026',
-      responseTime: '2h 15m',
+      status: 'In Progress',
+      preferences: 'Relaxation, Nature',
+    },
+    {
+      id: 3,
+      destination: 'Goa Beach Package',
+      customerType: 'Family (4 pax)',
+      budget: '₹1,20,000',
+      travelers: 4,
+      deadline: '24 Mar 2026',
+      status: 'Awaiting Quote',
+      preferences: 'Beach, Nightlife',
     },
   ];
 
-  const features = [
+  const adminFeatures = [
     {
       id: 1,
       title: 'Client Management',
@@ -126,6 +140,32 @@ const B2BDashboard = ({ navigation }) => {
     },
   ];
 
+  const supplierFeatures = [
+    {
+      id: 1,
+      title: 'Booking Management',
+      description: 'Track all bookings',
+      icon: 'clipboard-outline',
+      screen: 'BookingManagement',
+    },
+    {
+      id: 2,
+      title: 'Analytics Dashboard',
+      description: 'Business insights & reports',
+      icon: 'bar-chart-outline',
+      screen: 'Analytics',
+    },
+    {
+      id: 3,
+      title: 'Commission Tracking',
+      description: 'Track your earnings',
+      icon: 'cash-outline',
+      screen: 'CommissionTracking',
+    },
+  ];
+
+  const features = isAdmin ? adminFeatures : supplierFeatures;
+
   const renderStatCard = (stat) => (
     <View key={stat.id} style={[styles.statCard, { backgroundColor: stat.color }]}>
       <Ionicons name={stat.icon} size={28} color={Colors.secondary} style={styles.statIcon} />
@@ -162,36 +202,79 @@ const B2BDashboard = ({ navigation }) => {
   );
 
   const renderSupplierRequest = ({ item }) => (
-    <View style={styles.supplierCard}>
-      <View style={styles.supplierHeader}>
-        <Text style={styles.supplierName}>{item.supplier}</Text>
+    <TouchableOpacity
+      style={styles.requestCard}
+      onPress={() => navigation.navigate('RequestDetail', { request: item })}
+      activeOpacity={0.8}
+    >
+      <View style={styles.requestHeader}>
+        <View style={styles.requestTitleRow}>
+          <Ionicons name="location-outline" size={18} color={Colors.primary} />
+          <Text style={styles.requestDestination}>{item.destination}</Text>
+        </View>
         <View
           style={[
             styles.statusBadge,
             {
               backgroundColor:
-                item.status === 'Quote Received' ? Colors.success : Colors.warning,
+                item.status === 'New'
+                  ? '#E3F2FD'
+                  : item.status === 'In Progress'
+                  ? '#FFF3E0'
+                  : '#E8F5E9',
             },
           ]}
         >
-          <Text style={styles.statusText}>{item.status}</Text>
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color:
+                  item.status === 'New'
+                    ? '#1976D2'
+                    : item.status === 'In Progress'
+                    ? '#F57C00'
+                    : '#388E3C',
+              },
+            ]}
+          >
+            {item.status}
+          </Text>
         </View>
       </View>
-      <Text style={styles.requestText}>{item.request}</Text>
-      <View style={styles.supplierMetaRow}>
-        <Text style={styles.deadline}>Deadline: {item.deadline}</Text>
-        {item.responseTime && (
-          <View style={styles.responseTimeBadge}>
-            <Ionicons name="time-outline" size={12} color={Colors.primary} />
-            <Text style={styles.responseTimeText}>Response: {item.responseTime}</Text>
-          </View>
-        )}
+
+      <View style={styles.requestDetails}>
+        <View style={styles.requestDetailRow}>
+          <Ionicons name="people-outline" size={14} color={Colors.textLight} />
+          <Text style={styles.requestDetailText}>{item.customerType}</Text>
+        </View>
+        <View style={styles.requestDetailRow}>
+          <Ionicons name="cash-outline" size={14} color={Colors.textLight} />
+          <Text style={styles.requestDetailText}>Budget: {item.budget}</Text>
+        </View>
+        <View style={styles.requestDetailRow}>
+          <Ionicons name="person-outline" size={14} color={Colors.textLight} />
+          <Text style={styles.requestDetailText}>{item.travelers} Travelers</Text>
+        </View>
       </View>
-    </View>
+
+      <View style={styles.requestFooter}>
+        <View style={styles.deadlineRow}>
+          <Ionicons name="time-outline" size={12} color={Colors.textMuted} />
+          <Text style={styles.deadlineText}>Deadline: {item.deadline}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
+      </View>
+    </TouchableOpacity>
   );
 
   const renderFeature = (feature) => (
-    <TouchableOpacity key={feature.id} style={styles.featureCard} activeOpacity={0.8}>
+    <TouchableOpacity
+      key={feature.id}
+      style={styles.featureCard}
+      activeOpacity={0.8}
+      onPress={() => feature.screen && navigation.navigate(feature.screen)}
+    >
       <Ionicons name={feature.icon} size={26} color={Colors.primary} style={styles.featureIcon} />
       <View style={styles.featureContent}>
         <Text style={styles.featureTitle}>{feature.title}</Text>
@@ -199,6 +282,85 @@ const B2BDashboard = ({ navigation }) => {
       </View>
       <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
     </TouchableOpacity>
+  );
+
+  const renderSupplierQuickActions = () => (
+    <View style={styles.quickActions}>
+      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('SupplierRequests')}
+        >
+          <Ionicons name="list-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>View Requests</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('CreatePackage')}
+        >
+          <Ionicons name="add-circle-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Create Package</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('ChatInbox')}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Messages</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('Reports')}
+        >
+          <Ionicons name="bar-chart-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Reports</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderAdminQuickActions = () => (
+    <View style={styles.quickActions}>
+      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <TouchableOpacity
+        style={styles.adminUploadCard}
+        onPress={() => navigation.navigate('AdminItineraryUpload')}
+        activeOpacity={0.9}
+      >
+        <View style={styles.adminUploadCopy}>
+          <Text style={styles.adminUploadEyebrow}>Admin only</Text>
+          <Text style={styles.adminUploadTitle}>Upload a new itinerary</Text>
+          <Text style={styles.adminUploadText}>
+            Publish destination packages directly from the app with highlights, inclusions, and day-wise plans.
+          </Text>
+        </View>
+        <View style={styles.adminUploadIconWrap}>
+          <Ionicons name="cloud-upload-outline" size={28} color={Colors.secondary} />
+        </View>
+      </TouchableOpacity>
+      <View style={styles.actionButtons}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => navigation.navigate('ChatInbox')}
+        >
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Messages</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="add-circle-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>New Booking</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="paper-plane-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Send Quote</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <Ionicons name="bar-chart-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
+          <Text style={styles.actionText}>Reports</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 
   return (
@@ -211,12 +373,20 @@ const B2BDashboard = ({ navigation }) => {
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{isAdmin ? 'Admin AI SaaS' : 'Supplier AI SaaS'}</Text>
-        <TouchableOpacity style={styles.notificationButton}>
-          <Ionicons name="notifications-outline" size={24} color={Colors.secondary} />
-          <View style={styles.notificationBadge}>
-            <Text style={styles.notificationCount}>3</Text>
-          </View>
-        </TouchableOpacity>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity
+            style={styles.messageButton}
+            onPress={() => navigation.navigate('ChatInbox')}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={24} color={Colors.secondary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.notificationButton}>
+            <Ionicons name="notifications-outline" size={24} color={Colors.secondary} />
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationCount}>3</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -234,48 +404,7 @@ const B2BDashboard = ({ navigation }) => {
         </View>
 
         {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          {isAdmin ? (
-            <TouchableOpacity
-              style={styles.adminUploadCard}
-              onPress={() => navigation.navigate('AdminItineraryUpload')}
-              activeOpacity={0.9}
-            >
-              <View style={styles.adminUploadCopy}>
-                <Text style={styles.adminUploadEyebrow}>Admin only</Text>
-                <Text style={styles.adminUploadTitle}>Upload a new itinerary</Text>
-                <Text style={styles.adminUploadText}>
-                  Publish destination packages directly from the app with highlights, inclusions, and day-wise plans.
-                </Text>
-              </View>
-              <View style={styles.adminUploadIconWrap}>
-                <Ionicons name="cloud-upload-outline" size={28} color={Colors.secondary} />
-              </View>
-            </TouchableOpacity>
-          ) : null}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('ChatInbox')}
-            >
-              <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-              <Text style={styles.actionText}>Messages</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="add-circle-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-              <Text style={styles.actionText}>New Booking</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="paper-plane-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-              <Text style={styles.actionText}>Send Quote</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="bar-chart-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-              <Text style={styles.actionText}>Reports</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {isAdmin ? renderAdminQuickActions() : renderSupplierQuickActions()}
 
         {/* Recent Bookings */}
         <View style={styles.section}>
@@ -293,21 +422,23 @@ const B2BDashboard = ({ navigation }) => {
           />
         </View>
 
-        {/* Supplier Requests */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Supplier Requests</Text>
-            <TouchableOpacity>
-              <Text style={styles.viewAll}>View All</Text>
-            </TouchableOpacity>
+        {/* Supplier Requests - Only for Supplier */}
+        {!isAdmin && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Incoming Requests</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('SupplierRequests')}>
+                <Text style={styles.viewAll}>View All</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={supplierRequests}
+              renderItem={renderSupplierRequest}
+              keyExtractor={(item) => item.id.toString()}
+              scrollEnabled={false}
+            />
           </View>
-          <FlatList
-            data={supplierRequests}
-            renderItem={renderSupplierRequest}
-            keyExtractor={(item) => item.id.toString()}
-            scrollEnabled={false}
-          />
-        </View>
+        )}
 
         {/* Features */}
         <View style={styles.section}>
@@ -352,6 +483,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: Colors.secondary,
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  messageButton: {
+    position: 'relative',
   },
   notificationButton: {
     position: 'relative',
@@ -583,7 +722,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
   },
-  supplierCard: {
+  requestCard: {
     backgroundColor: Colors.card,
     borderRadius: 12,
     padding: 15,
@@ -594,44 +733,52 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  supplierHeader: {
+  requestHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  supplierName: {
+  requestTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  requestDestination: {
     fontSize: 16,
     fontWeight: 'bold',
     color: Colors.text,
+    marginLeft: 8,
+    flex: 1,
   },
-  requestText: {
-    fontSize: 14,
+  requestDetails: {
+    marginBottom: 12,
+  },
+  requestDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  requestDetailText: {
+    fontSize: 13,
     color: Colors.textLight,
-    marginBottom: 8,
+    marginLeft: 8,
   },
-  deadline: {
-    fontSize: 12,
-    color: Colors.textMuted,
-  },
-  supplierMetaRow: {
+  requestFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    paddingTop: 12,
   },
-  responseTimeBadge: {
+  deadlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
   },
-  responseTimeText: {
-    fontSize: 11,
-    color: Colors.primary,
-    fontWeight: '600',
+  deadlineText: {
+    fontSize: 12,
+    color: Colors.textMuted,
     marginLeft: 4,
   },
   featuresGrid: {
