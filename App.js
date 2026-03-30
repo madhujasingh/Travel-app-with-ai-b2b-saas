@@ -23,6 +23,7 @@ import AIRecommendationsScreen from './src/screens/AIRecommendationsScreen';
 import ChatInboxScreen from './src/screens/ChatInboxScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AdminItineraryUploadScreen from './src/screens/AdminItineraryUploadScreen';
+import GroupTripPlannerScreen from './src/screens/GroupTripPlannerScreen';
 import { AuthContext } from './src/context/AuthContext';
 import { Colors } from './src/constants/Colors';
 
@@ -179,6 +180,7 @@ export default function App() {
               <Stack.Screen name="ChatInbox" component={ChatInboxScreen} />
               <Stack.Screen name="ChatScreen" component={ChatScreen} />
               <Stack.Screen name="AdminItineraryUpload" component={AdminItineraryUploadScreen} />
+              <Stack.Screen name="GroupTripPlanner" component={GroupTripPlannerScreen} />
             </>
           )}
         </Stack.Navigator>

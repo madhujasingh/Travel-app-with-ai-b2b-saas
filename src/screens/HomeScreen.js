@@ -63,6 +63,13 @@ const HomeScreen = ({ navigation }) => {
       screen: 'Flights',
       color: '#D64E13',
     },
+    {
+      id: 4,
+      title: 'Group Planner',
+      icon: 'account-group',
+      screen: 'GroupTripPlanner',
+      color: '#C95A24',
+    },
   ];
 
   const handleSearch = () => {
@@ -417,9 +424,10 @@ const styles = StyleSheet.create({
   servicesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
   },
   serviceCard: {
-    width: '30%',
+    width: '48%',
     aspectRatio: 1,
     borderRadius: 18,
     justifyContent: 'center',
@@ -429,6 +437,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 10,
     elevation: 7,
+    marginBottom: 12,
   },
   serviceIcon: {
     fontSize: 36,
