@@ -13,6 +13,7 @@ A comprehensive travel application built with React Native (Frontend) and Spring
 - **Customization**: Customize trips by adding/removing places and activities
 - **Cart & Checkout**: Add to cart and secure payment options
 - **Talk to Agent**: Connect with travel agents via phone, WhatsApp, or email
+- **Group Planner**: Collaborative trip planning with invite codes, option voting, and winner locking
 
 ### B2B SaaS Features
 - **Dashboard**: Business analytics and overview
@@ -60,7 +61,8 @@ travelApp2/
 │   │   ├── TalkToAgentScreen.js
 │   │   ├── HotelsScreen.js
 │   │   ├── FlightsScreen.js
-│   │   └── B2BDashboard.js
+│   │   ├── B2BDashboard.js
+│   │   └── GroupTripPlannerScreen.js
 │   ├── constants/
 │   │   └── Colors.js             # Theme colors
 │   └── App.js                    # Main navigation setup
@@ -160,6 +162,15 @@ The backend will start on `http://localhost:8080/api`
 - `POST /api/suppliers` - Create new supplier
 - `PUT /api/suppliers/{id}/verify` - Verify supplier
 
+### Group Trips
+- `GET /api/group-trips` - Get user's group trips
+- `POST /api/group-trips` - Create new group trip
+- `POST /api/group-trips/join` - Join trip with invite code
+- `GET /api/group-trips/{tripId}` - Get trip details
+- `POST /api/group-trips/{tripId}/options` - Add option to trip
+- `POST /api/group-trips/{tripId}/options/{optionId}/vote` - Vote on option
+- `POST /api/group-trips/{tripId}/options/{optionId}/lock` - Lock winning option
+
 ## Key Features Implementation
 
 ### 1. Splash Screen
@@ -196,6 +207,15 @@ The backend will start on `http://localhost:8080/api`
 - Supplier requests
 - Quick actions
 - Feature modules
+
+### 7. Group Trip Planner
+- Create group trips with invite codes
+- Join trips using invite codes
+- Add options for restaurants, activities, and stays
+- Upvote/downvote options as a group
+- View real-time voting scores
+- Lock winning options for final itinerary
+- Track group members and their contributions
 
 ## Contributing
 
