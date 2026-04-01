@@ -134,9 +134,17 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.appName}>Itinera</Text>
               <Text style={styles.subtitle}>Plan your perfect trip</Text>
             </View>
-            <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-              <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.messageButton}
+                onPress={() => navigation.navigate('ChatInbox')}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.secondary} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+                <Text style={styles.logoutText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={styles.roleBadge}>Signed in as: {user?.role || 'CUSTOMER'}</Text>
         </View>
@@ -385,6 +393,18 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     opacity: 0.9,
     marginTop: 6,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  messageButton: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 999,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   logoutButton: {
     backgroundColor: 'rgba(255,255,255,0.22)',

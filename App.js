@@ -28,6 +28,7 @@ import RequestDetailScreen from './src/screens/RequestDetailScreen';
 import CreatePackageScreen from './src/screens/CreatePackageScreen';
 import SupplierRequestsScreen from './src/screens/SupplierRequestsScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
+import CustomerProfileScreen from './src/screens/CustomerProfileScreen';
 import { AuthContext } from './src/context/AuthContext';
 import { Colors } from './src/constants/Colors';
 
@@ -88,14 +89,6 @@ function CustomerTabs() {
         }}
       />
       <Tab.Screen
-        name="MessagesTab"
-        component={ChatInboxScreen}
-        options={{
-          title: 'Messages',
-          tabBarIcon: ({ color, focused }) => tabIcon('chatbubble-ellipses', color, focused),
-        }}
-      />
-      <Tab.Screen
         name="AITab"
         component={AIRecommendationsScreen}
         options={{
@@ -117,6 +110,14 @@ function CustomerTabs() {
         options={{
           title: 'Cart',
           tabBarIcon: ({ color, focused }) => tabIcon('cart', color, focused),
+        }}
+      />
+      <Tab.Screen
+        name="ProfileTab"
+        component={CustomerProfileScreen}
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, focused }) => tabIcon('person', color, focused),
         }}
       />
     </Tab.Navigator>
