@@ -1,11 +1,12 @@
 """
 Data Loader Utility
-Handles data loading and preprocessing for the AI service
+Handles data loading and preprocessing for the AI service.
 """
 
-import pandas as pd
 import json
-from typing import Dict, List
+from pathlib import Path
+
+import pandas as pd
 
 
 class DataLoader:
@@ -147,3 +148,6 @@ class DataLoader:
         df['rating_normalized'] = df['rating'] / 5.0
 
         return df
+
+    def artifact_exists(self, artifact_path: str) -> bool:
+        return Path(artifact_path).exists()

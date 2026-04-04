@@ -1,22 +1,42 @@
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 
-// API Configuration
+const LOCALHOSTS = new Set(['localhost', '127.0.0.1']);
+
+const extractHostFromScriptUrl = () => {
+  const scriptURL = NativeModules?.SourceCode?.scriptURL;
+  if (!scriptURL) {
+    return null;
+  }
+
+  const match = scriptURL.match(/^[a-zA-Z]+:\/\/([^/:]+)/);
+  return match?.[1] || null;
+};
+
+const resolveHost = () => {
+  const scriptHost = extractHostFromScriptUrl();
+
+  if (Platform.OS === 'android' && (!scriptHost || LOCALHOSTS.has(scriptHost))) {
+    return '10.0.2.2';
+  }
+
+  if (scriptHost && !LOCALHOSTS.has(scriptHost)) {
+    return scriptHost;
+  }
+
+  return 'localhost';
+};
+
+const host = resolveHost();
+
 const API_CONFIG = {
-  // Use environment variable or fallback to default
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL ||
-            process.env.REACT_APP_API_URL || 
-            (Platform.OS === 'android' 
-              ? 'http://10.0.2.2:8080/api'  // Android emulator
-              : 'http://localhost:8080/api'), // iOS simulator
-  
-  // AI Service URL
-  AI_SERVICE_URL: process.env.EXPO_PUBLIC_AI_SERVICE_URL ||
-                  process.env.REACT_APP_AI_SERVICE_URL || 
-                  (Platform.OS === 'android'
-                    ? 'http://10.0.2.2:8000'
-                    : 'http://localhost:8000'),
-  
-  // Timeout in milliseconds
+  BASE_URL:
+    process.env.EXPO_PUBLIC_API_URL ||
+    process.env.REACT_APP_API_URL ||
+    `http://${host}:8080/api`,
+  AI_SERVICE_URL:
+    process.env.EXPO_PUBLIC_AI_SERVICE_URL ||
+    process.env.REACT_APP_AI_SERVICE_URL ||
+    `http://${host}:8000`,
   TIMEOUT: 10000,
 };
 

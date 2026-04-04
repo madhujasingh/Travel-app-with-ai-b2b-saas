@@ -71,4 +71,12 @@ public class GroupTripController {
     ) {
         return ResponseEntity.ok(groupTripService.lockWinner(tripId, optionId, userId));
     }
+
+    @PostMapping("/{tripId}/finalize")
+    public ResponseEntity<GroupTripService.GroupTripDetailResponse> finalizeTrip(
+            @PathVariable Long tripId,
+            @RequestAttribute Long userId
+    ) {
+        return ResponseEntity.ok(groupTripService.finalizeTrip(tripId, userId));
+    }
 }

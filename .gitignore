@@ -55,4 +55,5 @@ backend/target/
 __pycache__/
 *.py[cod]
 .venv/
+.venv-ai/
 venv/

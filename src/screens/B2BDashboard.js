@@ -339,6 +339,22 @@ const B2BDashboard = ({ navigation }) => {
           <Ionicons name="cloud-upload-outline" size={28} color={Colors.secondary} />
         </View>
       </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.posterStudioCard}
+        onPress={() => navigation.navigate('AdminPosterStudio')}
+        activeOpacity={0.9}
+      >
+        <View style={styles.posterStudioCopy}>
+          <Text style={styles.posterStudioEyebrow}>Marketing studio</Text>
+          <Text style={styles.posterStudioTitle}>Auto-create flyers and posters</Text>
+          <Text style={styles.posterStudioText}>
+            Pick an itinerary, apply a saved campaign template, and generate polished promo drafts inside the dashboard.
+          </Text>
+        </View>
+        <View style={styles.posterStudioIconWrap}>
+          <Ionicons name="image-outline" size={28} color={Colors.primary} />
+        </View>
+      </TouchableOpacity>
       <View style={styles.actionButtons}>
         <TouchableOpacity
           style={styles.actionButton}
@@ -627,6 +643,45 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  posterStudioCard: {
+    backgroundColor: '#FFF4EC',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFDCC8',
+  },
+  posterStudioCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  posterStudioEyebrow: {
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  posterStudioTitle: {
+    color: Colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  posterStudioText: {
+    color: Colors.textLight,
+    marginTop: 6,
+    lineHeight: 19,
+  },
+  posterStudioIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.secondary,
   },
   actionButton: {
     flex: 1,

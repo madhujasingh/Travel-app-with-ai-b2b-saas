@@ -36,6 +36,9 @@ public class GroupTrip {
     @Column(nullable = false)
     private String status = "PLANNING";
 
+    @Column(name = "finalized_itinerary_id")
+    private Long finalizedItineraryId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

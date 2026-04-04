@@ -22,12 +22,95 @@ const categoryMeta = {
   LODGING: { title: 'Stays', icon: 'bed-outline' },
 };
 
-const GroupTripPlannerScreen = ({ navigation }) => {
+const plannerSections = [
+  { key: 'NEW', label: 'New' },
+  { key: 'CURRENT', label: 'Current' },
+  { key: 'PREVIOUS', label: 'Previous' },
+];
+
+const getFriendlyErrorMessage = (error, fallback) => {
+  if (error?.message?.includes('Network request failed')) {
+    return 'Cannot reach the backend right now. Make sure your phone and computer are on the same Wi-Fi and the backend is running.';
+  }
+
+  if (error?.message?.includes('Unexpected token')) {
+    return 'The server returned an invalid response. Please restart the backend and try again.';
+  }
+
+  return error?.message || fallback;
+};
+
+const uniqueTexts = (items) => {
+  const seen = new Set();
+  return items.filter((item) => {
+    const normalized = (item || '').trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) {
+      return false;
+    }
+    seen.add(normalized);
+    return true;
+  });
+};
+
+const buildSeedOptionsFromItinerary = (itinerary) => {
+  if (!itinerary) {
+    return [];
+  }
+
+  const inclusions = itinerary.inclusions || [];
+  const highlights = itinerary.highlights || [];
+  const activities = (itinerary.dayPlans || [])
+    .flatMap((dayPlan) => dayPlan.activities || [])
+    .map((activity) => activity.activity);
+
+  const lodgingSource =
+    inclusions.find((item) => /(hotel|stay|resort|villa|accommodation)/i.test(item)) ||
+    `${itinerary.destination} stay from ${itinerary.title}`;
+
+  const diningSource =
+    uniqueTexts([
+      ...activities.filter((item) => /(breakfast|lunch|dinner|restaurant|cafe|food|meal)/i.test(item)),
+      ...inclusions.filter((item) => /(breakfast|lunch|dinner|restaurant|cafe|food|meal)/i.test(item)),
+    ])[0] || `Shared dinner experience in ${itinerary.destination}`;
+
+  const experienceSources = uniqueTexts([
+    ...highlights,
+    ...activities,
+  ]).slice(0, 3);
+
+  const seededOptions = [
+    {
+      category: 'LODGING',
+      title: lodgingSource,
+      description: `Imported from ${itinerary.title} as the stay baseline for the group.`,
+      location: itinerary.destination,
+    },
+    {
+      category: 'RESTAURANT',
+      title: diningSource,
+      description: `Dining idea inspired by ${itinerary.title}.`,
+      location: itinerary.destination,
+    },
+    ...experienceSources.map((item) => ({
+      category: 'ACTIVITY',
+      title: item,
+      description: `Imported from ${itinerary.title} so the group can vote on this package experience.`,
+      location: itinerary.destination,
+    })),
+  ];
+
+  return seededOptions.slice(0, 5);
+};
+
+const GroupTripPlannerScreen = ({ navigation, route }) => {
   const { token } = useAuth();
+  const seedItinerary = route?.params?.seedItinerary || null;
+  const [activeSection, setActiveSection] = useState(seedItinerary ? 'NEW' : 'CURRENT');
   const [loading, setLoading] = useState(true);
   const [creatingTrip, setCreatingTrip] = useState(false);
   const [joiningTrip, setJoiningTrip] = useState(false);
   const [addingOption, setAddingOption] = useState(false);
+  const [finalizingTrip, setFinalizingTrip] = useState(false);
   const [selectedTripId, setSelectedTripId] = useState(null);
   const [trips, setTrips] = useState([]);
   const [tripDetail, setTripDetail] = useState(null);
@@ -44,10 +127,48 @@ const GroupTripPlannerScreen = ({ navigation }) => {
     location: '',
   });
 
+  useEffect(() => {
+    if (!seedItinerary) {
+      return;
+    }
+
+    setCreateForm((prev) => {
+      if (prev.title || prev.destination || prev.description) {
+        return prev;
+      }
+
+      return {
+        title: `${seedItinerary.title} Crew Plan`,
+        destination: seedItinerary.destination || '',
+        description: seedItinerary.description || 'Start from this selected package and let the group vote on the best version of it.',
+      };
+    });
+  }, [seedItinerary]);
+
   const activeTrip = useMemo(
     () => trips.find((trip) => trip.id === selectedTripId) || trips[0] || null,
     [selectedTripId, trips]
   );
+
+  const currentTrips = useMemo(
+    () => trips.filter((trip) => !trip.finalizedItineraryId),
+    [trips]
+  );
+
+  const previousTrips = useMemo(
+    () => trips.filter((trip) => Boolean(trip.finalizedItineraryId)),
+    [trips]
+  );
+
+  const visibleTrips = useMemo(() => {
+    if (activeSection === 'PREVIOUS') {
+      return previousTrips;
+    }
+    if (activeSection === 'CURRENT') {
+      return currentTrips;
+    }
+    return [];
+  }, [activeSection, currentTrips, previousTrips]);
 
   const loadTrips = useCallback(async () => {
     if (!token) {
@@ -72,7 +193,7 @@ const GroupTripPlannerScreen = ({ navigation }) => {
         setTripDetail(null);
       }
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to load group planner');
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to load group planner'));
     } finally {
       setLoading(false);
     }
@@ -93,7 +214,7 @@ const GroupTripPlannerScreen = ({ navigation }) => {
       }
       setTripDetail(data);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to load group trip details');
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to load group trip details'));
     }
   }, [token]);
 
@@ -106,6 +227,24 @@ const GroupTripPlannerScreen = ({ navigation }) => {
       loadTripDetail(activeTrip.id);
     }
   }, [activeTrip?.id, loadTripDetail]);
+
+  useEffect(() => {
+    if (activeSection === 'NEW') {
+      setTripDetail(null);
+      return;
+    }
+
+    if (!visibleTrips.length) {
+      setSelectedTripId(null);
+      setTripDetail(null);
+      return;
+    }
+
+    const hasSelectedTrip = visibleTrips.some((trip) => trip.id === selectedTripId);
+    if (!hasSelectedTrip) {
+      setSelectedTripId(visibleTrips[0].id);
+    }
+  }, [activeSection, selectedTripId, visibleTrips]);
 
   const createTrip = async () => {
     if (!createForm.title.trim() || !createForm.destination.trim()) {
@@ -128,13 +267,32 @@ const GroupTripPlannerScreen = ({ navigation }) => {
         throw new Error(data?.message || 'Unable to create trip');
       }
 
+      if (seedItinerary) {
+        const seededOptions = buildSeedOptionsFromItinerary(seedItinerary);
+        for (const option of seededOptions) {
+          await fetch(`${API_CONFIG.BASE_URL}/group-trips/${data.id}/options`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(option),
+          });
+        }
+      }
+
       setCreateForm({ title: '', destination: '', description: '' });
       await loadTrips();
       setSelectedTripId(data.id);
-      setTripDetail(data);
-      Alert.alert('Group trip created', 'Invite friends and start voting on options.');
+      await loadTripDetail(data.id);
+      Alert.alert(
+        'Group trip created',
+        seedItinerary
+          ? 'Your selected land package was imported as the starting point for group voting.'
+          : 'Invite friends and start voting on options.'
+      );
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to create group trip');
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to create group trip'));
     } finally {
       setCreatingTrip(false);
     }
@@ -166,7 +324,7 @@ const GroupTripPlannerScreen = ({ navigation }) => {
       setSelectedTripId(data.id);
       setTripDetail(data);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to join trip');
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to join trip'));
     } finally {
       setJoiningTrip(false);
     }
@@ -204,7 +362,7 @@ const GroupTripPlannerScreen = ({ navigation }) => {
       });
       await loadTripDetail(tripDetail.id);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to add option');
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to add option'));
     } finally {
       setAddingOption(false);
     }
@@ -230,7 +388,7 @@ const GroupTripPlannerScreen = ({ navigation }) => {
       }
       await loadTripDetail(tripDetail.id);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to save vote');
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to save vote'));
     }
   };
 
@@ -253,7 +411,57 @@ const GroupTripPlannerScreen = ({ navigation }) => {
       setTripDetail(data);
       await loadTrips();
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to lock winner');
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to lock winner'));
+    }
+  };
+
+  const openGeneratedItinerary = async () => {
+    if (!tripDetail?.finalizedItinerary?.id) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/${tripDetail.finalizedItinerary.id}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to open itinerary');
+      }
+
+      navigation.navigate('ItineraryDetail', {
+        itinerary: data,
+        destination: data.destination,
+        people: String(tripDetail.members.length || 1),
+      });
+    } catch (error) {
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to open itinerary'));
+    }
+  };
+
+  const finalizeTrip = async () => {
+    if (!tripDetail?.id) {
+      return;
+    }
+
+    setFinalizingTrip(true);
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/group-trips/${tripDetail.id}/finalize`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to generate itinerary');
+      }
+
+      setTripDetail(data);
+      await loadTrips();
+      Alert.alert('Itinerary ready', 'Your group winners have been turned into a trip itinerary draft.');
+    } catch (error) {
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to generate itinerary'));
+    } finally {
+      setFinalizingTrip(false);
     }
   };
 
@@ -313,18 +521,22 @@ const GroupTripPlannerScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      <View style={styles.backdropGlowTop} />
+      <View style={styles.backdropGlowMid} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Group Planner</Text>
-        <TouchableOpacity onPress={loadTrips}>
+        <TouchableOpacity onPress={loadTrips} style={styles.refreshButton}>
           <Text style={styles.refreshText}>Refresh</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heroCard}>
+          <View style={styles.heroOrbLarge} />
+          <View style={styles.heroOrbSmall} />
           <Text style={styles.heroEyebrow}>Test the concept live</Text>
           <Text style={styles.heroTitle}>Plan together, vote together.</Text>
           <Text style={styles.heroText}>
@@ -332,8 +544,44 @@ const GroupTripPlannerScreen = ({ navigation }) => {
           </Text>
         </View>
 
+        <View style={styles.sectionSwitcher}>
+          {plannerSections.map((section) => (
+            <TouchableOpacity
+              key={section.key}
+              style={[styles.sectionTab, activeSection === section.key && styles.sectionTabActive]}
+              onPress={() => setActiveSection(section.key)}
+            >
+              <Text style={[styles.sectionTabText, activeSection === section.key && styles.sectionTabTextActive]}>
+                {section.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {activeSection === 'NEW' && seedItinerary ? (
+          <View style={styles.panel}>
+            <Text style={styles.panelTitle}>Starting from selected package</Text>
+            <View style={styles.seedCard}>
+              <View style={styles.seedHeader}>
+                <View style={styles.seedIconWrap}>
+                  <Ionicons name="sparkles-outline" size={18} color={Colors.secondary} />
+                </View>
+                <View style={styles.seedCopy}>
+                  <Text style={styles.seedTitle}>{seedItinerary.title}</Text>
+                  <Text style={styles.seedMeta}>{seedItinerary.destination} • {seedItinerary.duration}</Text>
+                </View>
+              </View>
+              <Text style={styles.seedText}>
+                We&apos;ll use this land package as the base plan, then import core stays, activities, and dining ideas for your group to vote on.
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {activeSection === 'NEW' ? (
+        <>
         <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Start a new group trip</Text>
+          <Text style={styles.panelTitle}>{seedItinerary ? 'Create a group plan from this package' : 'Start a new group trip'}</Text>
           <TextInput
             style={styles.input}
             placeholder="Trip title"
@@ -373,32 +621,51 @@ const GroupTripPlannerScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
+        </>
+        ) : null}
 
+        {activeSection !== 'NEW' ? (
         <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Your group trips</Text>
-          {trips.length === 0 ? (
-            <Text style={styles.emptyText}>No group trips yet. Create one above to start testing the feature.</Text>
+          <Text style={styles.panelTitle}>
+            {activeSection === 'CURRENT' ? 'Current group trips' : 'Previous group trips'}
+          </Text>
+          <Text style={styles.panelSubtext}>
+            {activeSection === 'CURRENT'
+              ? 'Keep momentum high by jumping back into the trips that are still being decided.'
+              : 'Revisit completed group plans and the itineraries they produced.'}
+          </Text>
+          {visibleTrips.length === 0 ? (
+            <Text style={styles.emptyText}>
+              {activeSection === 'CURRENT'
+                ? 'No active group trips yet. Create one in the New section to start collaborating.'
+                : 'No previous group trips yet. Finalized itineraries will appear here.'}
+            </Text>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {trips.map((trip) => (
+              {visibleTrips.map((trip) => (
                 <TouchableOpacity
                   key={trip.id}
                   style={[styles.tripChip, selectedTripId === trip.id && styles.tripChipActive]}
                   onPress={() => setSelectedTripId(trip.id)}
                 >
+                  <View style={styles.tripChipAccent} />
                   <Text style={[styles.tripChipTitle, selectedTripId === trip.id && styles.tripChipTitleActive]}>
                     {trip.title}
                   </Text>
                   <Text style={[styles.tripChipMeta, selectedTripId === trip.id && styles.tripChipMetaActive]}>
                     {trip.memberCount} members
                   </Text>
+                  <Text style={[styles.tripChipMeta, selectedTripId === trip.id && styles.tripChipMetaActive]}>
+                    {trip.finalizedItineraryId ? 'Itinerary ready' : `${trip.winnerCount} winners locked`}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
           )}
         </View>
+        ) : null}
 
-        {tripDetail ? (
+        {activeSection !== 'NEW' && tripDetail ? (
           <>
             <View style={styles.tripSummaryCard}>
               <View style={styles.summaryHeader}>
@@ -415,6 +682,18 @@ const GroupTripPlannerScreen = ({ navigation }) => {
               <Text style={styles.memberLine}>
                 {tripDetail.members.length} members: {tripDetail.members.map((member) => member.userName).join(', ')}
               </Text>
+              <View style={styles.statusRow}>
+                <View style={styles.statusBadge}>
+                  <Ionicons name="layers-outline" size={14} color={Colors.primary} />
+                  <Text style={styles.statusBadgeText}>{tripDetail.status}</Text>
+                </View>
+                {tripDetail.finalizedItinerary ? (
+                  <View style={styles.statusBadge}>
+                    <Ionicons name="checkmark-circle-outline" size={14} color={Colors.primary} />
+                    <Text style={styles.statusBadgeText}>Itinerary Ready</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
 
             <View style={styles.panel}>
@@ -430,6 +709,46 @@ const GroupTripPlannerScreen = ({ navigation }) => {
                   </View>
                 ))
               )}
+              {tripDetail.organizer ? (
+                <TouchableOpacity
+                  style={[styles.primaryButton, styles.finalizeButton]}
+                  onPress={finalizeTrip}
+                  disabled={finalizingTrip}
+                >
+                  <Ionicons name="sparkles-outline" size={16} color={Colors.secondary} style={styles.finalizeIcon} />
+                  <Text style={styles.primaryButtonText}>
+                    {finalizingTrip ? 'Generating itinerary...' : 'Turn Winners Into Itinerary'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {tripDetail.finalizedItinerary ? (
+              <View style={styles.panel}>
+                <Text style={styles.panelTitle}>Generated itinerary</Text>
+                <View style={styles.generatedCard}>
+                  <View style={styles.generatedCopy}>
+                    <Text style={styles.generatedTitle}>{tripDetail.finalizedItinerary.title}</Text>
+                    <Text style={styles.generatedMeta}>{tripDetail.finalizedItinerary.destination}</Text>
+                    <Text style={styles.generatedText}>
+                      Built from your group&apos;s leading picks and ready to review in the itinerary flow.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.generatedButton}
+                    onPress={openGeneratedItinerary}
+                  >
+                    <Text style={styles.generatedButtonText}>Open Itinerary</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>How this works</Text>
+              <Text style={styles.emptyText}>
+                Add options, let everyone vote, lock the strongest picks, then generate a draft itinerary the group can review together.
+              </Text>
             </View>
 
             <View style={styles.panel}>
@@ -501,6 +820,24 @@ const GroupTripPlannerScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background },
+  backdropGlowTop: {
+    position: 'absolute',
+    top: -120,
+    right: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 999,
+    backgroundColor: 'rgba(246,106,42,0.14)',
+  },
+  backdropGlowMid: {
+    position: 'absolute',
+    top: 180,
+    left: -90,
+    width: 220,
+    height: 220,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,155,106,0.12)',
+  },
   header: {
     backgroundColor: Colors.primary,
     flexDirection: 'row',
@@ -510,13 +847,43 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   headerTitle: { color: Colors.secondary, fontSize: 20, fontWeight: '700' },
-  refreshText: { color: Colors.secondary, fontWeight: '600' },
+  refreshButton: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  refreshText: { color: Colors.secondary, fontWeight: '700', fontSize: 12 },
   content: { padding: 16, paddingBottom: 40 },
   heroCard: {
     backgroundColor: Colors.primary,
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
+    overflow: 'hidden',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  heroOrbLarge: {
+    position: 'absolute',
+    top: -30,
+    right: -10,
+    width: 120,
+    height: 120,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  heroOrbSmall: {
+    position: 'absolute',
+    bottom: -20,
+    right: 60,
+    width: 64,
+    height: 64,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   heroEyebrow: {
     color: Colors.secondary,
@@ -528,21 +895,84 @@ const styles = StyleSheet.create({
   },
   heroTitle: { color: Colors.secondary, fontSize: 28, fontWeight: '800', marginTop: 6 },
   heroText: { color: Colors.secondary, opacity: 0.92, marginTop: 8, lineHeight: 20 },
+  sectionSwitcher: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 18,
+    padding: 6,
+    marginBottom: 16,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#F3D6C6',
+  },
+  sectionTab: {
+    flex: 1,
+    borderRadius: 14,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  sectionTabActive: {
+    backgroundColor: Colors.primary,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    elevation: 4,
+  },
+  sectionTabText: {
+    color: Colors.textLight,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  sectionTabTextActive: {
+    color: Colors.secondary,
+  },
+  seedCard: {
+    backgroundColor: '#FFF2E8',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#F1D2BF',
+    padding: 14,
+  },
+  seedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  seedIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  seedCopy: { flex: 1 },
+  seedTitle: { color: Colors.text, fontSize: 16, fontWeight: '800' },
+  seedMeta: { color: Colors.primary, marginTop: 4, fontWeight: '600' },
+  seedText: { color: Colors.textLight, marginTop: 12, lineHeight: 20 },
   panel: {
-    backgroundColor: Colors.card,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 4,
+    shadowRadius: 16,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#F4D8CA',
   },
   panelTitle: { color: Colors.text, fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  panelSubtext: { color: Colors.textLight, lineHeight: 20, marginTop: -4, marginBottom: 12 },
   panelTitleInline: { color: Colors.text, fontSize: 18, fontWeight: '700', marginLeft: 8 },
   input: {
-    backgroundColor: Colors.background,
+    backgroundColor: '#FFFDFB',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -571,29 +1001,66 @@ const styles = StyleSheet.create({
   joinInput: { flex: 1, marginBottom: 0, marginRight: 10 },
   emptyText: { color: Colors.textLight, lineHeight: 20 },
   tripChip: {
-    backgroundColor: Colors.primarySoft,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    backgroundColor: '#FFF4ED',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginRight: 10,
     minWidth: 150,
+    borderWidth: 1,
+    borderColor: '#F5D7C8',
+    overflow: 'hidden',
   },
-  tripChipActive: { backgroundColor: Colors.primary },
-  tripChipTitle: { color: Colors.primary, fontWeight: '700' },
+  tripChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  tripChipAccent: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 60,
+    height: 60,
+    borderBottomLeftRadius: 22,
+    backgroundColor: 'rgba(246,106,42,0.08)',
+  },
+  tripChipTitle: { color: Colors.primary, fontWeight: '800' },
   tripChipTitleActive: { color: Colors.secondary },
   tripChipMeta: { color: Colors.textLight, marginTop: 4, fontSize: 12 },
   tripChipMetaActive: { color: 'rgba(255,255,255,0.85)' },
   tripSummaryCard: {
-    backgroundColor: '#FFF1E8',
+    backgroundColor: '#FFF2E8',
     borderRadius: 22,
     padding: 18,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#F2D5C6',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 5,
   },
   summaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   summaryTitle: { color: Colors.text, fontSize: 22, fontWeight: '800' },
   summarySubtitle: { color: Colors.primary, marginTop: 4, fontWeight: '600' },
   summaryDescription: { color: Colors.textLight, marginTop: 10, lineHeight: 20 },
   memberLine: { color: Colors.text, marginTop: 12, fontWeight: '500' },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.secondary,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  statusBadgeText: { color: Colors.primary, fontSize: 12, fontWeight: '700', marginLeft: 6 },
   inviteBadge: {
     backgroundColor: Colors.secondary,
     borderRadius: 16,
@@ -604,14 +1071,36 @@ const styles = StyleSheet.create({
   inviteLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
   inviteCode: { color: Colors.primary, fontWeight: '800', marginTop: 2, letterSpacing: 1 },
   winnerCard: {
-    backgroundColor: Colors.primarySoft,
+    backgroundColor: '#FFF3EA',
     borderRadius: 16,
     padding: 14,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F1D2BF',
   },
   winnerCategory: { color: Colors.primary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
   winnerTitle: { color: Colors.text, fontSize: 17, fontWeight: '700', marginTop: 4 },
   winnerMeta: { color: Colors.textLight, marginTop: 4 },
+  finalizeButton: { marginTop: 10, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  finalizeIcon: { marginRight: 8 },
+  generatedCard: {
+    backgroundColor: '#FFF2E8',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F0D4C1',
+  },
+  generatedCopy: { marginBottom: 14 },
+  generatedTitle: { color: Colors.text, fontSize: 18, fontWeight: '800' },
+  generatedMeta: { color: Colors.primary, marginTop: 4, fontWeight: '700' },
+  generatedText: { color: Colors.textLight, marginTop: 8, lineHeight: 20 },
+  generatedButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 14,
+    alignItems: 'center',
+    paddingVertical: 13,
+  },
+  generatedButtonText: { color: Colors.secondary, fontWeight: '700' },
   categorySelector: { marginBottom: 10 },
   categoryChip: {
     flexDirection: 'row',
@@ -630,9 +1119,10 @@ const styles = StyleSheet.create({
   optionCard: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#F1D8CB',
     padding: 14,
     marginBottom: 12,
+    backgroundColor: '#FFFCFA',
   },
   optionHeader: { flexDirection: 'row', justifyContent: 'space-between' },
   optionTitleBlock: { flex: 1, paddingRight: 12 },
@@ -641,7 +1131,7 @@ const styles = StyleSheet.create({
   optionDescription: { color: Colors.textLight, marginTop: 6, lineHeight: 19 },
   optionByline: { color: Colors.textMuted, marginTop: 8, fontSize: 12 },
   scorePill: {
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.backgroundAlt,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 8,

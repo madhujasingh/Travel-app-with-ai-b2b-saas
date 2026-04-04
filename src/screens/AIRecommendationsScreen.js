@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,15 +33,13 @@ const WEATHER_OPTIONS = [
   { label: 'Rainy', icon: 'rainy-outline' },
 ];
 
-const ALGO_OPTIONS = ['hybrid', 'collaborative', 'content'];
-
 const toLower = (v) => (v || '').toLowerCase();
 
 const AIRecommendationsScreen = ({ route, navigation }) => {
   const { budget, destination, people } = route.params || {};
   const canGoBack = navigation.canGoBack();
 
-  const [algorithm, setAlgorithm] = useState('hybrid');
+  const algorithm = 'hybrid';
   const [budgetInput, setBudgetInput] = useState(String(budget || '25000'));
   const [destinationInput, setDestinationInput] = useState(destination || '');
   const [peopleInput, setPeopleInput] = useState(String(people || '2'));
@@ -56,6 +54,7 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
   });
 
   const ctaScale = useRef(new Animated.Value(1)).current;
+  const hasAutoRequested = useRef(false);
 
   const parsedBudget = useMemo(() => Number(budgetInput || 0), [budgetInput]);
   const parsedPeople = useMemo(() => Number(peopleInput || 1), [peopleInput]);
@@ -194,10 +193,25 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
 
   const bestId = recommendations.length ? recommendations[0].id : null;
 
+  useEffect(() => {
+    if (hasAutoRequested.current) {
+      return;
+    }
+
+    const hasEnoughContext = Number(budget || budgetInput) > 0 || (destination || '').trim();
+    if (!hasEnoughContext) {
+      return;
+    }
+
+    hasAutoRequested.current = true;
+    fetchRecommendations();
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
       <View style={styles.heroBackGlow} />
+      <View style={styles.heroBackGlowSecondary} />
 
       <View style={styles.header}>
         {canGoBack ? (
@@ -217,6 +231,33 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroOrbLarge} />
+          <View style={styles.heroOrbSmall} />
+          <View style={styles.heroBadge}>
+            <Ionicons name="sparkles-outline" size={13} color={Colors.secondary} />
+            <Text style={styles.heroBadgeText}>Trained hybrid engine</Text>
+          </View>
+          <Text style={styles.heroHeadline}>Design a trip that feels like you.</Text>
+          <Text style={styles.heroDescription}>
+            Tell us your vibe, budget, and travel mood. We’ll surface the most relevant escapes instantly.
+          </Text>
+          <View style={styles.heroMetrics}>
+            <View style={styles.heroMetricPill}>
+              <Text style={styles.heroMetricValue}>AI</Text>
+              <Text style={styles.heroMetricLabel}>Ranked Picks</Text>
+            </View>
+            <View style={styles.heroMetricPill}>
+              <Text style={styles.heroMetricValue}>{parsedPeople || 1}</Text>
+              <Text style={styles.heroMetricLabel}>Travelers</Text>
+            </View>
+            <View style={styles.heroMetricPill}>
+              <Text style={styles.heroMetricValue}>₹{Math.max(parsedBudget || 0, 5000).toLocaleString()}</Text>
+              <Text style={styles.heroMetricLabel}>Budget Lens</Text>
+            </View>
+          </View>
+        </View>
+
         <View style={styles.formCard}>
           <Text style={styles.formHeading}>Plan Your Perfect Escape</Text>
           <Text style={styles.formHint}>Tell us mood, weather, and budget. We’ll do the rest.</Text>
@@ -228,13 +269,23 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
           {renderChips(WEATHER_OPTIONS, weather, setWeather)}
 
           <Text style={styles.label}>Destination (optional)</Text>
-          <TextInput
-            style={styles.input}
-            value={destinationInput}
-            onChangeText={setDestinationInput}
-            placeholder="Not sure? Leave blank and discover"
-            placeholderTextColor={Colors.textMuted}
-          />
+          <View style={styles.searchInputRow}>
+            <View style={styles.searchInputWrap}>
+              <Ionicons name="search-outline" size={16} color={Colors.textMuted} style={styles.searchInputIcon} />
+              <TextInput
+                style={styles.searchInput}
+                value={destinationInput}
+                onChangeText={setDestinationInput}
+                placeholder="Search destination or leave blank to discover"
+                placeholderTextColor={Colors.textMuted}
+                returnKeyType="search"
+                onSubmitEditing={fetchRecommendations}
+              />
+            </View>
+            <TouchableOpacity style={styles.searchActionButton} onPress={fetchRecommendations} activeOpacity={0.88}>
+              <Ionicons name="arrow-forward" size={16} color={Colors.secondary} />
+            </TouchableOpacity>
+          </View>
 
           <View style={styles.row}>
             <View style={styles.stepperBlock}>
@@ -284,22 +335,21 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          <Text style={styles.label}>Engine</Text>
-          <View style={styles.algoRow}>
-            {ALGO_OPTIONS.map((algo) => {
-              const active = algo === algorithm;
-              return (
-                <TouchableOpacity
-                  key={algo}
-                  style={[styles.algoChip, active && styles.algoChipActive]}
-                  onPress={() => setAlgorithm(algo)}
-                >
-                  <Text style={[styles.algoText, active && styles.algoTextActive]}>
-                    {algo.charAt(0).toUpperCase() + algo.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <Text style={styles.label}>Recommendation Engine</Text>
+          <View style={styles.engineCard}>
+            <View style={styles.engineIconWrap}>
+              <Ionicons name="hardware-chip-outline" size={18} color={Colors.secondary} />
+            </View>
+            <View style={styles.engineCopy}>
+              <Text style={styles.engineTitle}>Trained Hybrid Recommender</Text>
+              <Text style={styles.engineText}>
+                Uses your dataset-backed model plus rule-based ranking for stronger matches and fallback stability.
+              </Text>
+            </View>
+          </View>
+          <View style={styles.engineFootnote}>
+            <Ionicons name="sparkles-outline" size={14} color={Colors.primaryDark} />
+            <Text style={styles.engineFootnoteText}>Powered by a trained model using real travel interaction data.</Text>
           </View>
         </View>
 
@@ -309,6 +359,11 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {insights.destination_discovery?.map((item) => (
                 <View key={`discovery-${item.destination}`} style={styles.smartCard}>
+                  <View style={styles.smartCardTop}>
+                    <View style={styles.smartIconWrap}>
+                      <Ionicons name="compass-outline" size={15} color={Colors.secondary} />
+                    </View>
+                  </View>
                   <Text style={styles.smartCardTitle}>Try {item.destination}</Text>
                   <Text style={styles.smartCardSub}>{item.sample_itinerary}</Text>
                   <Text style={styles.smartCardPrice}>From INR {Number(item.starting_price).toLocaleString()}</Text>
@@ -316,6 +371,11 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
               ))}
               {insights.budget_upgrade_suggestions?.map((item) => (
                 <View key={`upgrade-${item.id}`} style={styles.smartCard}>
+                  <View style={styles.smartCardTop}>
+                    <View style={styles.smartIconWrap}>
+                      <Ionicons name="trending-up-outline" size={15} color={Colors.secondary} />
+                    </View>
+                  </View>
                   <Text style={styles.smartCardTitle}>Budget Upgrade Pick</Text>
                   <Text style={styles.smartCardSub}>{item.destination}</Text>
                   <Text style={styles.smartCardPrice}>+INR {Number(item.extra_budget_required || 0).toLocaleString()}</Text>
@@ -331,6 +391,12 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
             <Text style={styles.loadingTitle}>Designing your next trip...</Text>
             <Text style={styles.loadingSub}>Matching mood, weather, budget, and destination style.</Text>
           </View>
+        ) : recommendations.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <Ionicons name="sparkles-outline" size={26} color={Colors.primary} />
+            <Text style={styles.emptyTitle}>Ready when you are</Text>
+            <Text style={styles.emptySub}>Choose your preferences and we’ll rank the best trips for you instantly.</Text>
+          </View>
         ) : (
           recommendations.map((item, index) => (
             <Pressable
@@ -340,13 +406,15 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
             >
               <View style={styles.recBanner}>
                 <Ionicons name={item.image || 'compass-outline'} size={34} color={Colors.secondary} />
-                {item.id === bestId && (
-                  <View style={styles.bestPickBadge}>
-                    <Text style={styles.bestPickText}>Best Pick</Text>
+                <View style={styles.recBannerRight}>
+                  {item.id === bestId && (
+                    <View style={styles.bestPickBadge}>
+                      <Text style={styles.bestPickText}>Best Pick</Text>
+                    </View>
+                  )}
+                  <View style={styles.matchPill}>
+                    <Text style={styles.matchPillText}>{item.match_score}% match</Text>
                   </View>
-                )}
-                <View style={styles.matchPill}>
-                  <Text style={styles.matchPillText}>{item.match_score}%</Text>
                 </View>
               </View>
 
@@ -420,6 +488,15 @@ const styles = StyleSheet.create({
     borderRadius: 150,
     backgroundColor: 'rgba(246,106,42,0.16)',
   },
+  heroBackGlowSecondary: {
+    position: 'absolute',
+    top: 220,
+    left: -80,
+    width: 220,
+    height: 220,
+    borderRadius: 150,
+    backgroundColor: 'rgba(255,155,106,0.12)',
+  },
   header: {
     backgroundColor: Colors.primary,
     paddingHorizontal: 14,
@@ -455,16 +532,99 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 14,
   },
+  heroCard: {
+    backgroundColor: Colors.primary,
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 14,
+    overflow: 'hidden',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  heroOrbLarge: {
+    position: 'absolute',
+    top: -24,
+    right: -10,
+    width: 118,
+    height: 118,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  heroOrbSmall: {
+    position: 'absolute',
+    bottom: -18,
+    right: 72,
+    width: 64,
+    height: 64,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  heroBadgeText: {
+    color: Colors.secondary,
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  heroHeadline: {
+    color: Colors.secondary,
+    fontSize: 26,
+    fontWeight: '800',
+    lineHeight: 32,
+    marginTop: 14,
+    maxWidth: '88%',
+  },
+  heroDescription: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 8,
+    maxWidth: '88%',
+  },
+  heroMetrics: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 18,
+  },
+  heroMetricPill: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  heroMetricValue: {
+    color: Colors.secondary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  heroMetricLabel: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '600',
+  },
   formCard: {
-    backgroundColor: 'rgba(255,255,255,0.84)',
-    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: '#F3D6C6',
-    padding: 14,
+    padding: 16,
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.08,
-    shadowRadius: 18,
+    shadowRadius: 20,
     elevation: 7,
   },
   formHeading: {
@@ -494,6 +654,42 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     color: Colors.text,
   },
+  searchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+  },
+  searchInputIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 11,
+    color: Colors.text,
+  },
+  searchActionButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 4,
+  },
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -505,7 +701,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#F2CDB8',
-    backgroundColor: '#FFF0E6',
+    backgroundColor: '#FFF6F0',
     paddingHorizontal: 11,
     paddingVertical: 8,
   },
@@ -536,7 +732,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepper: {
-    backgroundColor: '#FFFDFB',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: Colors.border,
     borderRadius: 12,
@@ -567,30 +763,50 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: -1,
   },
-  algoRow: {
+  engineCard: {
+    marginTop: 6,
     flexDirection: 'row',
-    gap: 8,
-  },
-  algoChip: {
-    flex: 1,
-    borderRadius: 10,
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF6F1',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: '#FFF1E8',
-    paddingVertical: 10,
-    alignItems: 'center',
+    borderColor: '#F1D0BC',
+    padding: 12,
   },
-  algoChipActive: {
+  engineIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
-  algoText: {
+  engineCopy: {
+    flex: 1,
+  },
+  engineTitle: {
     color: Colors.text,
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
   },
-  algoTextActive: {
-    color: Colors.secondary,
+  engineText: {
+    marginTop: 3,
+    color: Colors.textLight,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  engineFootnote: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  engineFootnoteText: {
+    flex: 1,
+    color: Colors.primaryDark,
+    fontSize: 11,
+    fontWeight: '600',
   },
   smartSection: {
     marginTop: 16,
@@ -601,14 +817,32 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 10,
   },
+  smartCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 12,
+  },
+  smartIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   smartCard: {
     width: 220,
     marginRight: 10,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderWidth: 1,
     borderColor: '#F2D6C6',
-    padding: 12,
+    padding: 14,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 4,
   },
   smartCardTitle: {
     fontSize: 14,
@@ -625,6 +859,28 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
     fontWeight: '700',
     fontSize: 13,
+  },
+  emptyWrap: {
+    marginTop: 20,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderWidth: 1,
+    borderColor: '#F0D6C7',
+    borderRadius: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 18,
+  },
+  emptyTitle: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  emptySub: {
+    marginTop: 4,
+    fontSize: 12,
+    color: Colors.textLight,
+    textAlign: 'center',
   },
   loadingWrap: {
     marginTop: 20,
@@ -650,24 +906,27 @@ const styles = StyleSheet.create({
   },
   recCard: {
     marginTop: 14,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#F1D4C5',
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     overflow: 'hidden',
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 5,
+    shadowRadius: 18,
+    elevation: 6,
   },
   recBanner: {
     backgroundColor: Colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  recBannerRight: {
+    alignItems: 'flex-end',
   },
   bestPickBadge: {
     backgroundColor: 'rgba(0,0,0,0.2)',
@@ -681,6 +940,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   matchPill: {
+    marginTop: 6,
     backgroundColor: 'rgba(255,255,255,0.22)',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -718,7 +978,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 999,
-    backgroundColor: '#FFF0E6',
+    backgroundColor: '#FFF5EF',
     borderWidth: 1,
     borderColor: '#F4D5C4',
     paddingHorizontal: 8,
@@ -745,8 +1005,8 @@ const styles = StyleSheet.create({
     bottom: 14,
   },
   ctaButton: {
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 18,
     backgroundColor: Colors.primaryDark,
     borderWidth: 1,
     borderColor: '#C9460E',

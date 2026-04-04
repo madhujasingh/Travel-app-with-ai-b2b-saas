@@ -1,20 +1,27 @@
 package com.itinera.service;
 
 import com.itinera.exception.ResourceNotFoundException;
+import com.itinera.model.Activity;
+import com.itinera.model.DayPlan;
 import com.itinera.model.GroupTrip;
 import com.itinera.model.GroupTripMember;
 import com.itinera.model.GroupTripOption;
 import com.itinera.model.GroupTripVote;
+import com.itinera.model.Itinerary;
 import com.itinera.model.User;
 import com.itinera.repository.GroupTripMemberRepository;
 import com.itinera.repository.GroupTripOptionRepository;
 import com.itinera.repository.GroupTripRepository;
 import com.itinera.repository.GroupTripVoteRepository;
+import com.itinera.repository.ItineraryRepository;
 import com.itinera.repository.UserRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +36,7 @@ public class GroupTripService {
     private final GroupTripMemberRepository groupTripMemberRepository;
     private final GroupTripOptionRepository groupTripOptionRepository;
     private final GroupTripVoteRepository groupTripVoteRepository;
+    private final ItineraryRepository itineraryRepository;
     private final UserRepository userRepository;
 
     public GroupTripService(
@@ -36,12 +44,14 @@ public class GroupTripService {
             GroupTripMemberRepository groupTripMemberRepository,
             GroupTripOptionRepository groupTripOptionRepository,
             GroupTripVoteRepository groupTripVoteRepository,
+            ItineraryRepository itineraryRepository,
             UserRepository userRepository
     ) {
         this.groupTripRepository = groupTripRepository;
         this.groupTripMemberRepository = groupTripMemberRepository;
         this.groupTripOptionRepository = groupTripOptionRepository;
         this.groupTripVoteRepository = groupTripVoteRepository;
+        this.itineraryRepository = itineraryRepository;
         this.userRepository = userRepository;
     }
 
@@ -133,7 +143,8 @@ public class GroupTripService {
                         ))
                         .collect(Collectors.toList()),
                 optionsByCategory,
-                winners
+                winners,
+                toLinkedItineraryResponse(trip.getFinalizedItineraryId())
         );
     }
 
@@ -206,6 +217,30 @@ public class GroupTripService {
         return getTrip(tripId, userId);
     }
 
+    public GroupTripDetailResponse finalizeTrip(Long tripId, Long userId) {
+        GroupTrip trip = getTripEntity(tripId);
+        requireOrganizer(trip, userId);
+
+        List<GroupTripOption> options = groupTripOptionRepository.findByGroupTripIdOrderByLockedWinnerDescScoreDescCreatedAtAsc(tripId);
+        Map<GroupTripOption.OptionCategory, GroupTripOption> winners = pickWinningOptions(options);
+        if (winners.isEmpty()) {
+            throw new IllegalArgumentException("Add and vote on at least one option before generating an itinerary");
+        }
+
+        Itinerary itinerary = trip.getFinalizedItineraryId() == null
+                ? new Itinerary()
+                : itineraryRepository.findById(trip.getFinalizedItineraryId()).orElseGet(Itinerary::new);
+
+        populateItineraryFromGroupTrip(itinerary, trip, winners);
+        Itinerary savedItinerary = itineraryRepository.save(itinerary);
+
+        trip.setFinalizedItineraryId(savedItinerary.getId());
+        trip.setStatus("ITINERARY_READY");
+        groupTripRepository.save(trip);
+
+        return getTrip(tripId, userId);
+    }
+
     private GroupTrip getTripEntity(Long tripId) {
         return groupTripRepository.findById(tripId)
                 .orElseThrow(() -> new ResourceNotFoundException("Group trip", "id", tripId));
@@ -228,7 +263,7 @@ public class GroupTripService {
 
     private void requireOrganizer(GroupTrip trip, Long userId) {
         if (!trip.getCreatedByUserId().equals(userId)) {
-            throw new AccessDeniedException("Only the trip organizer can lock winners");
+            throw new AccessDeniedException("Only the trip organizer can manage winners");
         }
     }
 
@@ -252,6 +287,211 @@ public class GroupTripService {
                 .reduce(0, Integer::sum);
     }
 
+    private Map<GroupTripOption.OptionCategory, GroupTripOption> pickWinningOptions(List<GroupTripOption> options) {
+        Map<GroupTripOption.OptionCategory, GroupTripOption> winners = new LinkedHashMap<>();
+
+        for (GroupTripOption.OptionCategory category : GroupTripOption.OptionCategory.values()) {
+            options.stream()
+                    .filter(option -> option.getCategory() == category)
+                    .sorted(Comparator.comparing(GroupTripOption::getLockedWinner).reversed()
+                            .thenComparing(GroupTripOption::getScore, Comparator.reverseOrder())
+                            .thenComparing(GroupTripOption::getCreatedAt))
+                    .findFirst()
+                    .ifPresent(option -> winners.put(category, option));
+        }
+
+        return winners;
+    }
+
+    private void populateItineraryFromGroupTrip(
+            Itinerary itinerary,
+            GroupTrip trip,
+            Map<GroupTripOption.OptionCategory, GroupTripOption> winners
+    ) {
+        GroupTripOption stay = winners.get(GroupTripOption.OptionCategory.LODGING);
+        GroupTripOption activity = winners.get(GroupTripOption.OptionCategory.ACTIVITY);
+        GroupTripOption restaurant = winners.get(GroupTripOption.OptionCategory.RESTAURANT);
+
+        itinerary.setTitle(trip.getTitle() + " Group Itinerary");
+        itinerary.setDestination(trip.getDestination());
+        itinerary.setDuration(resolveDuration(winners.size()));
+        itinerary.setPrice(BigDecimal.valueOf(estimatePrice(winners.size())));
+        itinerary.setRating(5);
+        itinerary.setReviewCount(0);
+        itinerary.setDescription(buildDescription(trip, stay, activity, restaurant));
+        itinerary.setImageUrl(null);
+        itinerary.setType(resolveType(activity, stay));
+        itinerary.setCategory(resolveCategory(trip.getDestination()));
+        itinerary.setIsActive(true);
+        itinerary.setUpdatedAt(LocalDateTime.now());
+        itinerary.setHighlights(buildHighlights(winners));
+        itinerary.setInclusions(buildInclusions(stay, activity, restaurant));
+        itinerary.setExclusions(List.of("Flights", "Personal expenses", "Anything not selected by the group"));
+        itinerary.setDayPlans(buildDayPlans(itinerary, trip, stay, activity, restaurant));
+    }
+
+    private String resolveDuration(int winnerCount) {
+        int days = Math.max(3, winnerCount + 1);
+        return days + " Days / " + Math.max(2, days - 1) + " Nights";
+    }
+
+    private long estimatePrice(int winnerCount) {
+        return 18000L + (winnerCount * 4500L);
+    }
+
+    private String buildDescription(
+            GroupTrip trip,
+            GroupTripOption stay,
+            GroupTripOption activity,
+            GroupTripOption restaurant
+    ) {
+        List<String> sections = new ArrayList<>();
+        sections.add("Auto-generated from your group's highest-ranked picks for " + trip.getDestination() + ".");
+
+        if (stay != null) {
+            sections.add("Stay shortlist winner: " + stay.getTitle() + ".");
+        }
+        if (activity != null) {
+            sections.add("Core experience: " + activity.getTitle() + ".");
+        }
+        if (restaurant != null) {
+            sections.add("Dining pick: " + restaurant.getTitle() + ".");
+        }
+        if (trip.getDescription() != null && !trip.getDescription().isBlank()) {
+            sections.add("Group notes: " + trip.getDescription());
+        }
+
+        return String.join(" ", sections);
+    }
+
+    private Itinerary.ItineraryType resolveType(GroupTripOption activity, GroupTripOption stay) {
+        String source = ((activity == null ? "" : activity.getTitle()) + " " + (stay == null ? "" : stay.getTitle())).toLowerCase();
+        if (source.contains("adventure") || source.contains("trek") || source.contains("raft")) {
+            return Itinerary.ItineraryType.ADVENTURE;
+        }
+        if (source.contains("romantic") || source.contains("honeymoon")) {
+            return Itinerary.ItineraryType.ROMANTIC;
+        }
+        if (source.contains("luxury") || source.contains("resort") || source.contains("villa")) {
+            return Itinerary.ItineraryType.PREMIUM;
+        }
+        if (source.contains("family")) {
+            return Itinerary.ItineraryType.FAMILY;
+        }
+        return Itinerary.ItineraryType.PREMIUM;
+    }
+
+    private Itinerary.Category resolveCategory(String destination) {
+        List<String> internationalKeywords = Arrays.asList(
+                "paris", "tokyo", "dubai", "bali", "maldives", "switzerland", "singapore", "thailand", "phuket", "krabi"
+        );
+        String lower = destination == null ? "" : destination.toLowerCase();
+        return internationalKeywords.stream().anyMatch(lower::contains)
+                ? Itinerary.Category.INTERNATIONAL
+                : Itinerary.Category.INDIA;
+    }
+
+    private List<String> buildHighlights(Map<GroupTripOption.OptionCategory, GroupTripOption> winners) {
+        return winners.values().stream()
+                .map(GroupTripOption::getTitle)
+                .limit(4)
+                .collect(Collectors.toList());
+    }
+
+    private List<String> buildInclusions(
+            GroupTripOption stay,
+            GroupTripOption activity,
+            GroupTripOption restaurant
+    ) {
+        List<String> inclusions = new ArrayList<>();
+        if (stay != null) {
+            inclusions.add("Stay at " + stay.getTitle());
+        }
+        if (activity != null) {
+            inclusions.add("Experience access for " + activity.getTitle());
+        }
+        if (restaurant != null) {
+            inclusions.add("Dining plan featuring " + restaurant.getTitle());
+        }
+        inclusions.add("Group-coordinated itinerary draft");
+        return inclusions;
+    }
+
+    private List<DayPlan> buildDayPlans(
+            Itinerary itinerary,
+            GroupTrip trip,
+            GroupTripOption stay,
+            GroupTripOption activity,
+            GroupTripOption restaurant
+    ) {
+        List<DayPlan> dayPlans = new ArrayList<>();
+
+        dayPlans.add(createDayPlan(
+                itinerary,
+                1,
+                "Arrival and group check-in",
+                List.of(
+                        createActivity("Morning", "Arrive in " + trip.getDestination(), "airplane-outline"),
+                        createActivity("Afternoon", stay == null ? "Check into selected stay" : "Check into " + stay.getTitle(), "bed-outline"),
+                        createActivity("Evening", "Settle in and review the group-picked plan", "people-outline")
+                )
+        ));
+
+        if (activity != null) {
+            dayPlans.add(createDayPlan(
+                    itinerary,
+                    2,
+                    "Group experience day",
+                    List.of(
+                            createActivity("Morning", "Head out for " + activity.getTitle(), "trail-sign-outline"),
+                            createActivity("Afternoon", activity.getDescription() == null || activity.getDescription().isBlank()
+                                    ? "Enjoy the group's top-voted activity"
+                                    : activity.getDescription(), "sparkles-outline"),
+                            createActivity("Evening", restaurant == null
+                                    ? "Free evening for the group"
+                                    : "Dinner at " + restaurant.getTitle(), "restaurant-outline")
+                    )
+            ));
+        }
+
+        if (restaurant != null || stay != null) {
+            dayPlans.add(createDayPlan(
+                    itinerary,
+                    dayPlans.size() + 1,
+                    "Wind down and wrap up",
+                    List.of(
+                            createActivity("Morning", stay == null ? "Leisure morning" : "Enjoy amenities at " + stay.getTitle(), "cafe-outline"),
+                            createActivity("Afternoon", restaurant == null ? "Explore at your own pace" : "Final meal at " + restaurant.getTitle(), "restaurant-outline"),
+                            createActivity("Evening", "Departure or onward travel", "car-outline")
+                    )
+            ));
+        }
+
+        return dayPlans;
+    }
+
+    private DayPlan createDayPlan(Itinerary itinerary, int dayNumber, String title, List<Activity> activities) {
+        DayPlan dayPlan = new DayPlan();
+        dayPlan.setItinerary(itinerary);
+        dayPlan.setDayNumber(dayNumber);
+        dayPlan.setTitle(title);
+        dayPlan.setActivities(activities);
+
+        for (Activity activity : activities) {
+            activity.setDayPlan(dayPlan);
+        }
+
+        return dayPlan;
+    }
+
+    private Activity createActivity(String time, String activityText, String icon) {
+        Activity activity = new Activity();
+        activity.setTime(time);
+        activity.setActivity(activityText);
+        activity.setIcon(icon);
+        return activity;
+    }
+
     private GroupTripSummaryResponse toSummary(GroupTrip trip) {
         List<GroupTripMember> members = groupTripMemberRepository.findByGroupTripIdOrderByJoinedAtAsc(trip.getId());
         List<GroupTripOption> options = groupTripOptionRepository.findByGroupTripIdOrderByLockedWinnerDescScoreDescCreatedAtAsc(trip.getId());
@@ -265,7 +505,8 @@ public class GroupTripService {
                 trip.getStatus(),
                 members.size(),
                 options.size(),
-                (int) winnerCount
+                (int) winnerCount,
+                trip.getFinalizedItineraryId()
         );
     }
 
@@ -309,6 +550,20 @@ public class GroupTripService {
                 .orElse(null);
     }
 
+    private LinkedItineraryResponse toLinkedItineraryResponse(Long itineraryId) {
+        if (itineraryId == null) {
+            return null;
+        }
+
+        return itineraryRepository.findById(itineraryId)
+                .map(itinerary -> new LinkedItineraryResponse(
+                        itinerary.getId(),
+                        itinerary.getTitle(),
+                        itinerary.getDestination()
+                ))
+                .orElse(null);
+    }
+
     public record CreateGroupTripRequest(String title, String destination, String description) {}
 
     public record JoinGroupTripRequest(String inviteCode) {}
@@ -325,7 +580,8 @@ public class GroupTripService {
             String status,
             int memberCount,
             int optionCount,
-            int winnerCount
+            int winnerCount,
+            Long finalizedItineraryId
     ) {}
 
     public record GroupTripMemberResponse(
@@ -359,6 +615,13 @@ public class GroupTripService {
             boolean organizer,
             List<GroupTripMemberResponse> members,
             Map<String, List<GroupTripOptionResponse>> optionsByCategory,
-            List<GroupTripOptionResponse> winners
+            List<GroupTripOptionResponse> winners,
+            LinkedItineraryResponse finalizedItinerary
+    ) {}
+
+    public record LinkedItineraryResponse(
+            Long id,
+            String title,
+            String destination
     ) {}
 }

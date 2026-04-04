@@ -3,18 +3,18 @@ Itinera AI Recommendation Service
 Provides intelligent travel recommendations using ML algorithms
 """
 
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import pandas as pd
-import numpy as np
 from datetime import datetime
-import json
 
 from models.recommendation_engine import RecommendationEngine
 from models.collaborative_filter import CollaborativeFilter
 from models.content_based_filter import ContentBasedFilter
+from models.trained_recommender import TrainedDestinationRecommender
 from utils.data_loader import DataLoader
 
 app = FastAPI(
@@ -37,6 +37,12 @@ data_loader = DataLoader()
 recommendation_engine = RecommendationEngine()
 collaborative_filter = CollaborativeFilter()
 content_based_filter = ContentBasedFilter()
+trained_recommender = TrainedDestinationRecommender(
+    os.getenv(
+        "TRAINED_RECOMMENDER_ARTIFACT",
+        os.path.join(os.path.dirname(__file__), "artifacts", "destination_recommender.joblib"),
+    )
+)
 
 
 # Request/Response Models
@@ -55,7 +61,7 @@ class UserPreferences(BaseModel):
 class RecommendationRequest(BaseModel):
     user_preferences: UserPreferences
     num_recommendations: int = 5
-    recommendation_type: str = "hybrid"  # collaborative, content, hybrid
+    recommendation_type: str = "hybrid"  # collaborative, content, hybrid, trained
 
 
 class ItineraryRecommendation(BaseModel):
@@ -199,7 +205,8 @@ async def root():
     return {
         "service": "Itinera AI Recommendation Engine",
         "version": "1.0.0",
-        "status": "active"
+        "status": "active",
+        "trained_model_loaded": trained_recommender.is_ready,
     }
 
 
@@ -211,37 +218,77 @@ async def get_recommendations(request: RecommendationRequest):
     start_time = datetime.now()
 
     try:
-        # Load itineraries data
+        recommendation_type = (request.recommendation_type or "hybrid").lower()
         itineraries_df = pd.DataFrame(SAMPLE_ITINERARIES)
 
-        # Get recommendations based on type
-        if request.recommendation_type == "collaborative":
+        if recommendation_type == "trained":
+            if not trained_recommender.is_ready:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Trained model artifact not loaded. Run train_model.py first.",
+                )
+            recommendations = trained_recommender.recommend(
+                request.user_preferences,
+                request.num_recommendations
+            )
+            insights = trained_recommender.generate_insights(
+                request.user_preferences,
+                num_suggestions=3
+            )
+            algorithm = "Trained Hybrid Ranker"
+        elif recommendation_type == "collaborative":
             recommendations = collaborative_filter.recommend(
                 request.user_preferences,
                 itineraries_df,
                 request.num_recommendations
             )
+            insights = recommendation_engine.generate_insights(
+                request.user_preferences,
+                itineraries_df,
+                recommendations
+            )
             algorithm = "Collaborative Filtering"
-        elif request.recommendation_type == "content":
+        elif recommendation_type == "content":
             recommendations = content_based_filter.recommend(
                 request.user_preferences,
                 itineraries_df,
                 request.num_recommendations
             )
-            algorithm = "Content-Based Filtering"
-        else:  # hybrid
-            recommendations = recommendation_engine.hybrid_recommend(
+            insights = recommendation_engine.generate_insights(
                 request.user_preferences,
                 itineraries_df,
-                request.num_recommendations
+                recommendations
             )
-            algorithm = "Hybrid (Collaborative + Content-Based)"
-
-        insights = recommendation_engine.generate_insights(
-            request.user_preferences,
-            itineraries_df,
-            recommendations
-        )
+            algorithm = "Content-Based Filtering"
+        else:  # hybrid
+            if trained_recommender.is_ready:
+                trained = trained_recommender.recommend(
+                    request.user_preferences,
+                    max(request.num_recommendations * 2, 8)
+                )
+                heuristic = recommendation_engine.hybrid_recommend(
+                    request.user_preferences,
+                    itineraries_df,
+                    max(request.num_recommendations * 2, 8)
+                )
+                recommendations = blend_recommendations(trained, heuristic, request.num_recommendations)
+                insights = trained_recommender.generate_insights(
+                    request.user_preferences,
+                    num_suggestions=3
+                )
+                algorithm = "Hybrid (Trained + Heuristic)"
+            else:
+                recommendations = recommendation_engine.hybrid_recommend(
+                    request.user_preferences,
+                    itineraries_df,
+                    request.num_recommendations
+                )
+                insights = recommendation_engine.generate_insights(
+                    request.user_preferences,
+                    itineraries_df,
+                    recommendations
+                )
+                algorithm = "Hybrid (Collaborative + Content-Based)"
 
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds() * 1000
@@ -254,8 +301,54 @@ async def get_recommendations(request: RecommendationRequest):
             insights=insights
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def blend_recommendations(
+    trained: List[Dict[str, Any]],
+    heuristic: List[Dict[str, Any]],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+
+    for item in trained:
+        key = str(item["destination"]).lower()
+        merged[key] = {
+            **item,
+            "match_score": float(item.get("match_score", 0)) * 0.7,
+            "reasons": list(item.get("reasons", [])),
+        }
+
+    for item in heuristic:
+        key = str(item["destination"]).lower()
+        if key in merged:
+            merged[key]["match_score"] += float(item.get("match_score", 0)) * 0.3
+            merged[key]["reasons"] = dedupe_reasons(
+                merged[key]["reasons"] + list(item.get("reasons", []))
+            )
+            merged[key]["rating"] = max(float(merged[key].get("rating", 0)), float(item.get("rating", 0)))
+        else:
+            merged[key] = {
+                **item,
+                "match_score": float(item.get("match_score", 0)) * 0.3,
+                "reasons": dedupe_reasons(list(item.get("reasons", []))),
+            }
+
+    ranked = sorted(merged.values(), key=lambda item: item.get("match_score", 0), reverse=True)
+    for item in ranked:
+        item["match_score"] = round(float(item.get("match_score", 0)), 1)
+    return ranked[:limit]
+
+
+def dedupe_reasons(reasons: List[str]) -> List[str]:
+    seen = []
+    for reason in reasons:
+        if reason not in seen:
+            seen.append(reason)
+    return seen[:3]
 
 
 @app.get("/trending")
