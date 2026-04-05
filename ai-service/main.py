@@ -271,7 +271,12 @@ async def get_recommendations(request: RecommendationRequest):
                     itineraries_df,
                     max(request.num_recommendations * 2, 8)
                 )
-                recommendations = blend_recommendations(trained, heuristic, request.num_recommendations)
+                recommendations = blend_recommendations(
+                    trained,
+                    heuristic,
+                    request.num_recommendations,
+                    getattr(request.user_preferences, "destination", None),
+                )
                 insights = trained_recommender.generate_insights(
                     request.user_preferences,
                     num_suggestions=3
@@ -311,6 +316,7 @@ def blend_recommendations(
     trained: List[Dict[str, Any]],
     heuristic: List[Dict[str, Any]],
     limit: int,
+    destination_preference: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     merged: Dict[str, Dict[str, Any]] = {}
 
@@ -338,6 +344,7 @@ def blend_recommendations(
             }
 
     ranked = sorted(merged.values(), key=lambda item: item.get("match_score", 0), reverse=True)
+    ranked = prioritize_recommendations_for_destination(ranked, destination_preference)
     for item in ranked:
         item["match_score"] = round(float(item.get("match_score", 0)), 1)
     return ranked[:limit]
@@ -349,6 +356,27 @@ def dedupe_reasons(reasons: List[str]) -> List[str]:
         if reason not in seen:
             seen.append(reason)
     return seen[:3]
+
+
+def prioritize_recommendations_for_destination(
+    ranked: List[Dict[str, Any]],
+    destination_preference: Optional[str],
+) -> List[Dict[str, Any]]:
+    destination = str(destination_preference or "").strip().lower()
+    if not destination:
+        return ranked
+
+    exact = [item for item in ranked if str(item.get("destination", "")).strip().lower() == destination]
+    partial = [
+        item for item in ranked
+        if destination in str(item.get("destination", "")).strip().lower()
+        and str(item.get("destination", "")).strip().lower() != destination
+    ]
+    remainder = [
+        item for item in ranked
+        if item not in exact and item not in partial
+    ]
+    return exact + partial + remainder
 
 
 @app.get("/trending")

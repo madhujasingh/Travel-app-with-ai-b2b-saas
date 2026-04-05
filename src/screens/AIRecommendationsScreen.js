@@ -12,10 +12,12 @@ import {
   Alert,
   Animated,
   Pressable,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
+import { destinationMediaFor } from '../utils/destinationMedia';
 
 const MOOD_OPTIONS = [
   { label: 'Relaxed', icon: 'leaf-outline' },
@@ -33,7 +35,120 @@ const WEATHER_OPTIONS = [
   { label: 'Rainy', icon: 'rainy-outline' },
 ];
 
+const MARKET_OPTIONS = [
+  { label: 'All', icon: 'globe-outline' },
+  { label: 'India', icon: 'business-outline' },
+  { label: 'International', icon: 'airplane-outline' },
+];
+
+const FALLBACK_DESTINATION_GROUPS = {
+  goa: ['Goa', 'Kerala', 'Bali'],
+  jaipur: ['Jaipur', 'Udaipur', 'Agra'],
+  kerala: ['Kerala', 'Goa', 'Bali'],
+  manali: ['Manali', 'Shimla', 'Switzerland'],
+  varanasi: ['Varanasi', 'Jaipur', 'Agra'],
+  udaipur: ['Udaipur', 'Jaipur', 'Paris'],
+  shimla: ['Shimla', 'Manali', 'Switzerland'],
+  agra: ['Agra', 'Jaipur', 'Varanasi'],
+  paris: ['Paris', 'Udaipur', 'Maldives'],
+  tokyo: ['Tokyo', 'Kyoto', 'Singapore'],
+  dubai: ['Dubai', 'Singapore', 'Maldives'],
+  bali: ['Bali', 'Goa', 'Thailand'],
+  maldives: ['Maldives', 'Bali', 'Goa'],
+  singapore: ['Singapore', 'Tokyo', 'Dubai'],
+  thailand: ['Thailand', 'Bali', 'Goa'],
+  switzerland: ['Switzerland', 'Shimla', 'Manali'],
+};
+
+const INDIA_DESTINATIONS = new Set(['goa', 'jaipur', 'kerala', 'manali', 'varanasi', 'udaipur', 'shimla', 'agra']);
+const INTERNATIONAL_DESTINATIONS = new Set([
+  'paris',
+  'tokyo',
+  'dubai',
+  'bali',
+  'maldives',
+  'singapore',
+  'thailand',
+  'switzerland',
+  'kyoto',
+  'phuket',
+  'krabi',
+]);
+
 const toLower = (v) => (v || '').toLowerCase();
+
+const marketForDestination = (destination, title) => {
+  const media = destinationMediaFor(destination, title);
+  if (media.market && media.market !== 'UNKNOWN') {
+    return media.market;
+  }
+
+  const normalized = toLower(destination).trim();
+  if (INDIA_DESTINATIONS.has(normalized)) {
+    return 'INDIA';
+  }
+  if (INTERNATIONAL_DESTINATIONS.has(normalized)) {
+    return 'INTERNATIONAL';
+  }
+  return 'UNKNOWN';
+};
+
+const applyMarketFilter = (items, selectedMarket) => {
+  if (selectedMarket === 'All') {
+    return items;
+  }
+
+  const marketKey = selectedMarket.toUpperCase();
+  return items.filter((item) => marketForDestination(item.destination, item.title) === marketKey);
+};
+
+const buildFallbackRecommendations = ({ destinationInput, parsedBudget, mood, weather }) => {
+  const normalizedDestination = toLower(destinationInput).trim();
+  const destinations = FALLBACK_DESTINATION_GROUPS[normalizedDestination] || ['Jaipur', 'Goa', 'Kerala'];
+
+  return destinations.map((place, index) => ({
+    id: `fallback-${place.toLowerCase()}-${index}`,
+    title: index === 0 ? `${place} Match Escape` : `${place} Discovery Escape`,
+    destination: place,
+    price: Math.max(parsedBudget - 2000 + (index * 4500), 12000),
+    duration: `${4 + index} Days / ${3 + index} Nights`,
+    rating: 4.4 + (index * 0.1),
+    match_score: 89 - (index * 4.5),
+    reasons: [
+      normalizedDestination && place.toLowerCase() === normalizedDestination
+        ? `Matches destination: ${place}`
+        : `Works well for ${mood.toLowerCase()} travel`,
+      `Weather fit: ${weather}`,
+      'Offline smart fallback',
+    ],
+    image: index === 0 ? 'sparkles-outline' : index === 1 ? 'compass-outline' : 'airplane-outline',
+    ...destinationMediaFor(place, `${place} Escape`),
+  }));
+};
+
+const buildFallbackInsights = ({ destinationInput, parsedBudget }) => {
+  const normalizedDestination = toLower(destinationInput).trim();
+  const destinations = FALLBACK_DESTINATION_GROUPS[normalizedDestination] || ['Goa', 'Kerala', 'Manali'];
+  const discoveryTargets = destinations.slice(1).length ? destinations.slice(1) : ['Kerala', 'Manali'];
+
+  return {
+    budget_upgrade_suggestions: [
+      {
+        id: 'fallback-stretch',
+        title: `${destinations[0]} Premium Escape`,
+        destination: destinations[0],
+        price: parsedBudget + 10000,
+        extra_budget_required: 10000,
+      },
+    ],
+    destination_discovery: discoveryTargets.map((place, index) => ({
+      destination: place,
+      sample_itinerary: `${place} Curated Journey`,
+      starting_price: parsedBudget * (0.9 + index * 0.05),
+      rating: 4.5 + index * 0.1,
+    })),
+  };
+};
 
 const AIRecommendationsScreen = ({ route, navigation }) => {
   const { budget, destination, people } = route.params || {};
@@ -45,6 +160,7 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
   const [peopleInput, setPeopleInput] = useState(String(people || '2'));
   const [mood, setMood] = useState('Relaxed');
   const [weather, setWeather] = useState('Temperate');
+  const [market, setMarket] = useState('All');
   const [loading, setLoading] = useState(false);
 
   const [recommendations, setRecommendations] = useState([]);
@@ -117,49 +233,30 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
         throw new Error(data?.detail || 'Failed to generate recommendations');
       }
 
-      const sorted = [...(data?.recommendations || [])].sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
-      setRecommendations(sorted);
-      setInsights(data?.insights || { budget_upgrade_suggestions: [], destination_discovery: [] });
+      const enriched = [...(data?.recommendations || [])]
+        .sort((a, b) => (b.match_score || 0) - (a.match_score || 0))
+        .map((item) => ({ ...item, ...destinationMediaFor(item.destination, item.title) }));
+      const filteredRecommendations = applyMarketFilter(enriched, market);
+      const filteredDiscovery = applyMarketFilter(data?.insights?.destination_discovery || [], market);
+
+      setRecommendations(filteredRecommendations);
+      setInsights({
+        budget_upgrade_suggestions: data?.insights?.budget_upgrade_suggestions || [],
+        destination_discovery: filteredDiscovery,
+      });
     } catch (error) {
       Alert.alert('AI Service', 'Using curated fallback recommendations.');
-      const fallback = [
-        {
-          id: 'fallback-1',
-          title: 'Jaipur Heritage Escape',
-          destination: 'Jaipur',
-          price: Math.max(parsedBudget - 2000, 12000),
-          duration: '3 Days / 2 Nights',
-          rating: 4.5,
-          match_score: 87.4,
-          reasons: [`Mood fit: ${mood}`, `Weather fit: ${weather}`, 'Great value for this budget'],
-          image: 'business',
-        },
-      ];
+      const fallback = applyMarketFilter(buildFallbackRecommendations({
+        destinationInput,
+        parsedBudget,
+        mood,
+        weather,
+      }), market);
       setRecommendations(fallback);
+      const fallbackInsights = buildFallbackInsights({ destinationInput, parsedBudget });
       setInsights({
-        budget_upgrade_suggestions: [
-          {
-            id: 'fallback-stretch',
-            title: 'Goa Premium Beach Escape',
-            destination: 'Goa',
-            price: parsedBudget + 10000,
-            extra_budget_required: 10000,
-          },
-        ],
-        destination_discovery: [
-          {
-            destination: 'Kerala',
-            sample_itinerary: 'Backwaters and Wellness',
-            starting_price: parsedBudget * 0.9,
-            rating: 4.6,
-          },
-          {
-            destination: 'Manali',
-            sample_itinerary: 'Mountain Adventure Circuit',
-            starting_price: parsedBudget * 0.85,
-            rating: 4.5,
-          },
-        ],
+        ...fallbackInsights,
+        destination_discovery: applyMarketFilter(fallbackInsights.destination_discovery || [], market),
       });
       console.log(error);
     } finally {
@@ -206,6 +303,13 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
     hasAutoRequested.current = true;
     fetchRecommendations();
   }, []);
+
+  useEffect(() => {
+    if (!hasAutoRequested.current) {
+      return;
+    }
+    fetchRecommendations();
+  }, [market]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -267,6 +371,9 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
 
           <Text style={styles.label}>Preferred Weather</Text>
           {renderChips(WEATHER_OPTIONS, weather, setWeather)}
+
+          <Text style={styles.label}>Trip Lane</Text>
+          {renderChips(MARKET_OPTIONS, market, setMarket)}
 
           <Text style={styles.label}>Destination (optional)</Text>
           <View style={styles.searchInputRow}>
@@ -349,7 +456,9 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
           </View>
           <View style={styles.engineFootnote}>
             <Ionicons name="sparkles-outline" size={14} color={Colors.primaryDark} />
-            <Text style={styles.engineFootnoteText}>Powered by a trained model using real travel interaction data.</Text>
+            <Text style={styles.engineFootnoteText}>
+              Powered by a trained model using real travel interaction data and filtered by your India or International choice.
+            </Text>
           </View>
         </View>
 
@@ -394,8 +503,10 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
         ) : recommendations.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Ionicons name="sparkles-outline" size={26} color={Colors.primary} />
-            <Text style={styles.emptyTitle}>Ready when you are</Text>
-            <Text style={styles.emptySub}>Choose your preferences and we’ll rank the best trips for you instantly.</Text>
+            <Text style={styles.emptyTitle}>No matches in this trip lane yet</Text>
+            <Text style={styles.emptySub}>
+              Try switching between India and International, or loosen the destination to discover more options.
+            </Text>
           </View>
         ) : (
           recommendations.map((item, index) => (
@@ -404,6 +515,7 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
               onPress={() => navigation.navigate('ItineraryDetail', { itinerary: item, destination: item.destination, people: String(parsedPeople) })}
               style={({ pressed }) => [styles.recCard, pressed && { opacity: 0.9 }]}
             >
+              <Image source={{ uri: item.imageUrl }} style={styles.recImage} />
               <View style={styles.recBanner}>
                 <Ionicons name={item.image || 'compass-outline'} size={34} color={Colors.secondary} />
                 <View style={styles.recBannerRight}>
@@ -421,6 +533,7 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
               <View style={styles.recBody}>
                 <Text style={styles.recTitle}>{item.title}</Text>
                 <Text style={styles.recSub}>{item.destination} • {item.duration}</Text>
+                <Text style={styles.recBlurb}>{item.blurb}</Text>
                 <Text style={styles.recPrice}>INR {Number(item.price).toLocaleString()}</Text>
 
                 <View style={styles.tagRow}>
@@ -437,6 +550,19 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
                     <Text style={styles.tagText}>{weather}</Text>
                   </View>
                 </View>
+
+                <View style={styles.quickFactCard}>
+                  <Ionicons name="information-circle-outline" size={14} color={Colors.primary} />
+                  <Text style={styles.quickFactText}>{item.quickFact}</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.placeStoryButton}
+                  onPress={() => navigation.navigate('AIPlaceInsight', { recommendation: item })}
+                >
+                  <Text style={styles.placeStoryButtonText}>View Place Details</Text>
+                  <Ionicons name="arrow-forward" size={14} color={Colors.primaryDark} />
+                </TouchableOpacity>
 
                 <View style={styles.reasonWrap}>
                   {(item.reasons || []).slice(0, 2).map((reason, idx) => (
@@ -807,6 +933,7 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
     fontSize: 11,
     fontWeight: '600',
+    lineHeight: 16,
   },
   smartSection: {
     marginTop: 16,
@@ -917,6 +1044,11 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 6,
   },
+  recImage: {
+    width: '100%',
+    height: 168,
+    backgroundColor: '#F3D9CB',
+  },
   recBanner: {
     backgroundColor: Colors.primary,
     paddingHorizontal: 14,
@@ -962,6 +1094,12 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     fontSize: 12,
   },
+  recBlurb: {
+    marginTop: 8,
+    color: Colors.text,
+    fontSize: 13,
+    lineHeight: 19,
+  },
   recPrice: {
     marginTop: 7,
     color: Colors.primaryDark,
@@ -983,6 +1121,42 @@ const styles = StyleSheet.create({
     borderColor: '#F4D5C4',
     paddingHorizontal: 8,
     paddingVertical: 5,
+  },
+  quickFactCard: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF4EC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F2D8C8',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  quickFactText: {
+    marginLeft: 6,
+    flex: 1,
+    color: Colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  placeStoryButton: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF9F5',
+    borderWidth: 1,
+    borderColor: '#F3D9CB',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  placeStoryButtonText: {
+    color: Colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '700',
   },
   tagText: {
     marginLeft: 4,

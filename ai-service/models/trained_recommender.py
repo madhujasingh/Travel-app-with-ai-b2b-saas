@@ -66,7 +66,12 @@ class TrainedDestinationRecommender:
             candidate_features["predicted_score"] += candidate_features["destination_name"].str.lower().eq(destination_pref) * 0.08
             candidate_features["predicted_score"] += candidate_features["destination_name"].str.lower().str.contains(destination_pref, regex=False) * 0.04
 
-        ranked = candidate_features.sort_values("predicted_score", ascending=False).head(num_recommendations)
+        ranked = candidate_features.sort_values("predicted_score", ascending=False)
+        ranked = prioritize_destination_matches(
+            ranked,
+            getattr(user_preferences, "destination", None),
+            limit=num_recommendations,
+        )
 
         recommendations = []
         for _, row in ranked.iterrows():
@@ -462,3 +467,26 @@ def classify_peak(month: str, best_months: str) -> str:
     if month and month in str(best_months):
         return "Peak"
     return "Shoulder"
+
+
+def prioritize_destination_matches(
+    ranked_df: pd.DataFrame,
+    destination_preference: Optional[str],
+    limit: int,
+) -> pd.DataFrame:
+    destination = str(destination_preference or "").strip().lower()
+    if not destination or ranked_df.empty:
+        return ranked_df.head(limit)
+
+    exact = ranked_df[ranked_df["destination_name"].str.lower() == destination]
+    partial = ranked_df[
+        ranked_df["destination_name"].str.lower().str.contains(destination, regex=False)
+        & (ranked_df["destination_name"].str.lower() != destination)
+    ]
+    remainder = ranked_df[
+        ~ranked_df.index.isin(exact.index)
+        & ~ranked_df.index.isin(partial.index)
+    ]
+
+    prioritized = pd.concat([exact, partial, remainder], axis=0)
+    return prioritized.head(limit)
