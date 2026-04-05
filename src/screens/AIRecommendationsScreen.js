@@ -20,19 +20,21 @@ import API_CONFIG from '../config/api';
 import { destinationMediaFor } from '../utils/destinationMedia';
 
 const MOOD_OPTIONS = [
-  { label: 'Relaxed', icon: 'leaf-outline' },
-  { label: 'Adventurous', icon: 'trail-sign-outline' },
-  { label: 'Romantic', icon: 'heart-outline' },
-  { label: 'Party', icon: 'musical-notes-outline' },
-  { label: 'Spiritual', icon: 'sparkles-outline' },
+  { label: 'Relaxed', value: 'relaxed', icon: 'leaf-outline' },
+  { label: 'Balanced', value: 'balanced', icon: 'ellipse-outline' },
+  { label: 'Adventurous', value: 'adventurous', icon: 'trail-sign-outline' },
+  { label: 'Couple', value: 'cultural', icon: 'people-outline' },
+  { label: 'Party', value: 'party', icon: 'musical-notes-outline' },
+  { label: 'Spiritual', value: 'spiritual', icon: 'sparkles-outline' },
 ];
 
 const WEATHER_OPTIONS = [
-  { label: 'Warm', icon: 'sunny-outline' },
-  { label: 'Cool', icon: 'partly-sunny-outline' },
-  { label: 'Cold', icon: 'snow-outline' },
-  { label: 'Temperate', icon: 'cloud-outline' },
-  { label: 'Rainy', icon: 'rainy-outline' },
+  { label: 'Any', value: '', icon: 'apps-outline' },
+  { label: 'Warm', value: 'warm', icon: 'sunny-outline' },
+  { label: 'Mild', value: 'temperate', icon: 'partly-sunny-outline' },
+  { label: 'Cool', value: 'cool', icon: 'cloud-outline' },
+  { label: 'Cold', value: 'cold', icon: 'snow-outline' },
+  { label: 'Rainy', value: 'rainy', icon: 'rainy-outline' },
 ];
 
 const MARKET_OPTIONS = [
@@ -77,6 +79,8 @@ const INTERNATIONAL_DESTINATIONS = new Set([
 
 const toLower = (v) => (v || '').toLowerCase();
 
+const labelForValue = (items, value) => items.find((item) => item.value === value)?.label || value;
+
 const marketForDestination = (destination, title) => {
   const media = destinationMediaFor(destination, title);
   if (media.market && media.market !== 'UNKNOWN') {
@@ -102,7 +106,7 @@ const applyMarketFilter = (items, selectedMarket) => {
   return items.filter((item) => marketForDestination(item.destination, item.title) === marketKey);
 };
 
-const buildFallbackRecommendations = ({ destinationInput, parsedBudget, mood, weather }) => {
+const buildFallbackRecommendations = ({ destinationInput, parsedBudget, moodLabel, weatherLabel }) => {
   const normalizedDestination = toLower(destinationInput).trim();
   const destinations = FALLBACK_DESTINATION_GROUPS[normalizedDestination] || ['Jaipur', 'Goa', 'Kerala'];
 
@@ -117,8 +121,8 @@ const buildFallbackRecommendations = ({ destinationInput, parsedBudget, mood, we
     reasons: [
       normalizedDestination && place.toLowerCase() === normalizedDestination
         ? `Matches destination: ${place}`
-        : `Works well for ${mood.toLowerCase()} travel`,
-      `Weather fit: ${weather}`,
+        : `Works well for ${moodLabel.toLowerCase()} travel`,
+      `Weather fit: ${weatherLabel || 'Any'}`,
       'Offline smart fallback',
     ],
     image: index === 0 ? 'sparkles-outline' : index === 1 ? 'compass-outline' : 'airplane-outline',
@@ -154,12 +158,12 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
   const { budget, destination, people } = route.params || {};
   const canGoBack = navigation.canGoBack();
 
-  const algorithm = 'hybrid';
+  const algorithm = 'trained';
   const [budgetInput, setBudgetInput] = useState(String(budget || '25000'));
   const [destinationInput, setDestinationInput] = useState(destination || '');
   const [peopleInput, setPeopleInput] = useState(String(people || '2'));
-  const [mood, setMood] = useState('Relaxed');
-  const [weather, setWeather] = useState('Temperate');
+  const [mood, setMood] = useState('relaxed');
+  const [weather, setWeather] = useState('temperate');
   const [market, setMarket] = useState('All');
   const [loading, setLoading] = useState(false);
 
@@ -174,6 +178,8 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
 
   const parsedBudget = useMemo(() => Number(budgetInput || 0), [budgetInput]);
   const parsedPeople = useMemo(() => Number(peopleInput || 1), [peopleInput]);
+  const selectedMoodLabel = useMemo(() => labelForValue(MOOD_OPTIONS, mood), [mood]);
+  const selectedWeatherLabel = useMemo(() => labelForValue(WEATHER_OPTIONS, weather), [weather]);
 
   const animateCta = (toValue) => {
     Animated.spring(ctaScale, {
@@ -212,9 +218,10 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
         user_preferences: {
           budget: parsedBudget,
           destination: destinationInput.trim() ? destinationInput.trim() : null,
+          market_preference: market === 'All' ? null : market.toLowerCase(),
           num_people: parsedPeople,
           travel_style: 'balanced',
-          mood: toLower(mood),
+          mood: toLower(mood === 'balanced' ? 'relaxed' : mood),
           weather_preference: toLower(weather),
           interests: [],
         },
@@ -249,8 +256,8 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
       const fallback = applyMarketFilter(buildFallbackRecommendations({
         destinationInput,
         parsedBudget,
-        mood,
-        weather,
+        moodLabel: selectedMoodLabel,
+        weatherLabel: selectedWeatherLabel,
       }), market);
       setRecommendations(fallback);
       const fallbackInsights = buildFallbackInsights({ destinationInput, parsedBudget });
@@ -267,13 +274,14 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
   const renderChips = (items, selectedValue, onSelect) => (
     <View style={styles.chipWrap}>
       {items.map((item) => {
-        const active = selectedValue === item.label;
+        const chipValue = item.value ?? item.label;
+        const active = selectedValue === chipValue;
         return (
           <TouchableOpacity
             key={item.label}
             activeOpacity={0.86}
             style={[styles.chip, active && styles.chipActive]}
-            onPress={() => onSelect(item.label)}
+            onPress={() => onSelect(chipValue)}
           >
             <Ionicons
               name={item.icon}
@@ -338,10 +346,6 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
         <View style={styles.heroCard}>
           <View style={styles.heroOrbLarge} />
           <View style={styles.heroOrbSmall} />
-          <View style={styles.heroBadge}>
-            <Ionicons name="sparkles-outline" size={13} color={Colors.secondary} />
-            <Text style={styles.heroBadgeText}>Trained hybrid engine</Text>
-          </View>
           <Text style={styles.heroHeadline}>Design a trip that feels like you.</Text>
           <Text style={styles.heroDescription}>
             Tell us your vibe, budget, and travel mood. We’ll surface the most relevant escapes instantly.
@@ -442,32 +446,14 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          <Text style={styles.label}>Recommendation Engine</Text>
-          <View style={styles.engineCard}>
-            <View style={styles.engineIconWrap}>
-              <Ionicons name="hardware-chip-outline" size={18} color={Colors.secondary} />
-            </View>
-            <View style={styles.engineCopy}>
-              <Text style={styles.engineTitle}>Trained Hybrid Recommender</Text>
-              <Text style={styles.engineText}>
-                Uses your dataset-backed model plus rule-based ranking for stronger matches and fallback stability.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.engineFootnote}>
-            <Ionicons name="sparkles-outline" size={14} color={Colors.primaryDark} />
-            <Text style={styles.engineFootnoteText}>
-              Powered by a trained model using real travel interaction data and filtered by your India or International choice.
-            </Text>
-          </View>
         </View>
 
         {(insights.destination_discovery?.length > 0 || insights.budget_upgrade_suggestions?.length > 0) && (
           <View style={styles.smartSection}>
             <Text style={styles.smartTitle}>Smart Suggestions</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {insights.destination_discovery?.map((item) => (
-                <View key={`discovery-${item.destination}`} style={styles.smartCard}>
+              {insights.destination_discovery?.map((item, index) => (
+                <View key={`discovery-${item.destination}-${item.sample_itinerary || 'suggestion'}-${index}`} style={styles.smartCard}>
                   <View style={styles.smartCardTop}>
                     <View style={styles.smartIconWrap}>
                       <Ionicons name="compass-outline" size={15} color={Colors.secondary} />
@@ -478,16 +464,16 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
                   <Text style={styles.smartCardPrice}>From INR {Number(item.starting_price).toLocaleString()}</Text>
                 </View>
               ))}
-              {insights.budget_upgrade_suggestions?.map((item) => (
-                <View key={`upgrade-${item.id}`} style={styles.smartCard}>
+              {insights.budget_upgrade_suggestions?.map((item, index) => (
+                <View key={`upgrade-${item.id || item.destination}-${index}`} style={styles.smartCard}>
                   <View style={styles.smartCardTop}>
                     <View style={styles.smartIconWrap}>
                       <Ionicons name="trending-up-outline" size={15} color={Colors.secondary} />
                     </View>
                   </View>
-                  <Text style={styles.smartCardTitle}>Budget Upgrade Pick</Text>
-                  <Text style={styles.smartCardSub}>{item.destination}</Text>
-                  <Text style={styles.smartCardPrice}>+INR {Number(item.extra_budget_required || 0).toLocaleString()}</Text>
+                  <Text style={styles.smartCardTitle}>Stretch for {item.destination}</Text>
+                  <Text style={styles.smartCardSub}>Increase by INR {Number(item.extra_budget_required || 0).toLocaleString()} to unlock this trip.</Text>
+                  <Text style={styles.smartCardPrice}>From INR {Number(item.price || 0).toLocaleString()}</Text>
                 </View>
               ))}
             </ScrollView>
@@ -543,11 +529,11 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
                   </View>
                   <View style={styles.tag}>
                     <Ionicons name="leaf-outline" size={12} color={Colors.primaryDark} />
-                    <Text style={styles.tagText}>{mood}</Text>
+                    <Text style={styles.tagText}>{selectedMoodLabel}</Text>
                   </View>
                   <View style={styles.tag}>
                     <Ionicons name="sunny-outline" size={12} color={Colors.primaryDark} />
-                    <Text style={styles.tagText}>{weather}</Text>
+                    <Text style={styles.tagText}>{selectedWeatherLabel || 'Any'}</Text>
                   </View>
                 </View>
 
@@ -687,21 +673,6 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  heroBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  heroBadgeText: {
-    color: Colors.secondary,
-    fontSize: 11,
-    fontWeight: '700',
-    marginLeft: 6,
   },
   heroHeadline: {
     color: Colors.secondary,
@@ -888,52 +859,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.textMuted,
     marginTop: -1,
-  },
-  engineCard: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FFF6F1',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#F1D0BC',
-    padding: 12,
-  },
-  engineIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  engineCopy: {
-    flex: 1,
-  },
-  engineTitle: {
-    color: Colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  engineText: {
-    marginTop: 3,
-    color: Colors.textLight,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  engineFootnote: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  engineFootnoteText: {
-    flex: 1,
-    color: Colors.primaryDark,
-    fontSize: 11,
-    fontWeight: '600',
-    lineHeight: 16,
   },
   smartSection: {
     marginTop: 16,

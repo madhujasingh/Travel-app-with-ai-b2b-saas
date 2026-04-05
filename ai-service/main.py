@@ -14,7 +14,7 @@ from datetime import datetime
 from models.recommendation_engine import RecommendationEngine
 from models.collaborative_filter import CollaborativeFilter
 from models.content_based_filter import ContentBasedFilter
-from models.trained_recommender import TrainedDestinationRecommender
+from models.exported_gbr_recommender import ExportedGBRRecommender
 from utils.data_loader import DataLoader
 
 app = FastAPI(
@@ -37,10 +37,10 @@ data_loader = DataLoader()
 recommendation_engine = RecommendationEngine()
 collaborative_filter = CollaborativeFilter()
 content_based_filter = ContentBasedFilter()
-trained_recommender = TrainedDestinationRecommender(
+trained_recommender = ExportedGBRRecommender(
     os.getenv(
         "TRAINED_RECOMMENDER_ARTIFACT",
-        os.path.join(os.path.dirname(__file__), "artifacts", "destination_recommender.joblib"),
+        os.path.join(os.path.dirname(__file__), "artifacts", "travel_model_app.json"),
     )
 )
 
@@ -50,6 +50,7 @@ class UserPreferences(BaseModel):
     user_id: Optional[str] = None
     budget: float
     destination: Optional[str] = None
+    market_preference: Optional[str] = None
     num_people: int
     travel_style: Optional[str] = "balanced"  # budget, balanced, luxury
     mood: Optional[str] = None
@@ -235,7 +236,7 @@ async def get_recommendations(request: RecommendationRequest):
                 request.user_preferences,
                 num_suggestions=3
             )
-            algorithm = "Trained Hybrid Ranker"
+            algorithm = f"Exported GBR ({trained_recommender.metadata.get('model', 'GradientBoosting')})"
         elif recommendation_type == "collaborative":
             recommendations = collaborative_filter.recommend(
                 request.user_preferences,
@@ -281,7 +282,7 @@ async def get_recommendations(request: RecommendationRequest):
                     request.user_preferences,
                     num_suggestions=3
                 )
-                algorithm = "Hybrid (Trained + Heuristic)"
+                algorithm = f"Hybrid (Exported GBR + Heuristic)"
             else:
                 recommendations = recommendation_engine.hybrid_recommend(
                     request.user_preferences,
@@ -324,24 +325,25 @@ def blend_recommendations(
         key = str(item["destination"]).lower()
         merged[key] = {
             **item,
-            "match_score": float(item.get("match_score", 0)) * 0.7,
+            "match_score": float(item.get("match_score", 0)) * 0.88,
             "reasons": list(item.get("reasons", [])),
         }
 
     for item in heuristic:
         key = str(item["destination"]).lower()
         if key in merged:
-            merged[key]["match_score"] += float(item.get("match_score", 0)) * 0.3
+            merged[key]["match_score"] += float(item.get("match_score", 0)) * 0.12
             merged[key]["reasons"] = dedupe_reasons(
                 merged[key]["reasons"] + list(item.get("reasons", []))
             )
             merged[key]["rating"] = max(float(merged[key].get("rating", 0)), float(item.get("rating", 0)))
         else:
-            merged[key] = {
-                **item,
-                "match_score": float(item.get("match_score", 0)) * 0.3,
-                "reasons": dedupe_reasons(list(item.get("reasons", []))),
-            }
+            if len(merged) < limit:
+                merged[key] = {
+                    **item,
+                    "match_score": float(item.get("match_score", 0)) * 0.08,
+                    "reasons": dedupe_reasons(list(item.get("reasons", []))),
+                }
 
     ranked = sorted(merged.values(), key=lambda item: item.get("match_score", 0), reverse=True)
     ranked = prioritize_recommendations_for_destination(ranked, destination_preference)
