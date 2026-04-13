@@ -254,7 +254,6 @@ The API starts at `http://localhost:8080/api`.
 **On first startup**, `DataSeederConfig` automatically seeds:
 - Three demo users (customer, supplier, admin)
 - 48 destination packages (16 destinations × 3 package tiers)
-- A sample Phuket–Krabi itinerary
 
 ---
 
