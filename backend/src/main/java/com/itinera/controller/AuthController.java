@@ -56,20 +56,32 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
-        if (request.getEmail() == null || request.getPassword() == null || request.getName() == null || request.getPhone() == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Name, email, phone and password are required"));
+        if (request.getEmail() == null || request.getEmail().isBlank()
+                || request.getPassword() == null || request.getPassword().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email and password are required"));
         }
 
         String email = request.getEmail().trim().toLowerCase();
+        String name = request.getName() == null || request.getName().isBlank()
+                ? deriveDisplayNameFromEmail(email)
+                : request.getName().trim();
+        String phone = request.getPhone() == null || request.getPhone().isBlank()
+                ? "0000000000"
+                : request.getPhone().trim();
 
         // Check if email already exists
         if (userRepository.findByEmail(email).isPresent()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Email already registered"));
         }
 
-        User.UserRole requestedRole = request.getRole() == null
-                ? User.UserRole.CUSTOMER
-                : User.UserRole.valueOf(request.getRole().toUpperCase());
+        User.UserRole requestedRole;
+        try {
+            requestedRole = request.getRole() == null || request.getRole().isBlank()
+                    ? User.UserRole.CUSTOMER
+                    : User.UserRole.valueOf(request.getRole().trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid role"));
+        }
 
         // Public users can always sign up as CUSTOMER
         if (requestedRole == User.UserRole.CUSTOMER) {
@@ -113,9 +125,9 @@ public class AuthController {
         }
 
         User user = new User();
-        user.setName(request.getName().trim());
+        user.setName(name);
         user.setEmail(email);
-        user.setPhone(request.getPhone().trim());
+        user.setPhone(phone);
         user.setRole(requestedRole);
         user.setPassword(request.getPassword());
 
@@ -264,6 +276,24 @@ public class AuthController {
                 .filter(v -> !v.isBlank())
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    private String deriveDisplayNameFromEmail(String email) {
+        String localPart = email.contains("@") ? email.substring(0, email.indexOf('@')) : email;
+        if (localPart.isBlank()) {
+            return "Traveler";
+        }
+
+        String normalized = localPart.replaceAll("[._-]+", " ").trim();
+        if (normalized.isBlank()) {
+            return "Traveler";
+        }
+
+        String[] parts = normalized.split("\\s+");
+        return Arrays.stream(parts)
+                .filter(part -> !part.isBlank())
+                .map(part -> Character.toUpperCase(part.charAt(0)) + part.substring(1).toLowerCase())
+                .collect(Collectors.joining(" "));
     }
 
     private Map<String, Object> buildAuthResponse(User user, String token) {

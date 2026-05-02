@@ -47,7 +47,7 @@ class RecommendationEngine:
                 'weather': 0.07,
             }
         else:
-            # "I don't know where to go" mode emphasizes discovery + vibe fit.
+            # "I don't know where to go" mode emphasizes discovery.
             weights = {
                 'budget': 0.24,
                 'interest': 0.26,

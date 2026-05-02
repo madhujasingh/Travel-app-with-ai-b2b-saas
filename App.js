@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 
 // Import Screens
 import SplashScreen from './src/screens/SplashScreen';
@@ -36,6 +37,7 @@ import { Colors } from './src/constants/Colors';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+const AUTH_STORAGE_KEY = 'itinera.auth';
 
 function CustomerTabs() {
   const tabIcon = (name, color, focused) => (
@@ -131,6 +133,50 @@ export default function App() {
     token: null,
     user: null,
   });
+  const [isHydratingAuth, setIsHydratingAuth] = useState(true);
+
+  useEffect(() => {
+    const restoreAuthState = async () => {
+      try {
+        const savedAuth = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+        if (!savedAuth) {
+          return;
+        }
+
+        const parsedAuth = JSON.parse(savedAuth);
+        if (parsedAuth?.token && parsedAuth?.user) {
+          setAuthState({
+            token: parsedAuth.token,
+            user: parsedAuth.user,
+          });
+        } else {
+          await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+        }
+      } catch (error) {
+        await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+      } finally {
+        setIsHydratingAuth(false);
+      }
+    };
+
+    restoreAuthState();
+  }, []);
+
+  const persistAuthState = async (nextAuthState) => {
+    try {
+      await SecureStore.setItemAsync(AUTH_STORAGE_KEY, JSON.stringify(nextAuthState));
+    } catch (error) {
+      console.warn('Unable to persist auth state', error);
+    }
+  };
+
+  const clearPersistedAuthState = async () => {
+    try {
+      await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+    } catch (error) {
+      console.warn('Unable to clear persisted auth state', error);
+    }
+  };
 
   const authContextValue = useMemo(
     () => ({
@@ -138,16 +184,47 @@ export default function App() {
       user: authState.user,
       isAuthenticated: Boolean(authState.token && authState.user),
       login: ({ token, user }) => {
-        setAuthState({ token, user });
+        const nextAuthState = { token, user };
+        setAuthState(nextAuthState);
+        void persistAuthState(nextAuthState);
       },
       logout: () => {
         setAuthState({ token: null, user: null });
+        void clearPersistedAuthState();
       },
     }),
     [authState]
   );
 
   const isCustomer = authState.user?.role === 'CUSTOMER';
+
+  if (isHydratingAuth) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: Colors.primary,
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: 24,
+        }}
+      >
+        <Ionicons name="airplane" size={68} color={Colors.secondary} />
+        <Text
+          style={{
+            marginTop: 16,
+            fontSize: 36,
+            fontWeight: '800',
+            color: Colors.secondary,
+            letterSpacing: 2,
+          }}
+        >
+          Itinera
+        </Text>
+        <ActivityIndicator color={Colors.secondary} style={{ marginTop: 18 }} />
+      </View>
+    );
+  }
 
   return (
     <AuthContext.Provider value={authContextValue}>
