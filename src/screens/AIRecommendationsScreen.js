@@ -62,6 +62,22 @@ const FALLBACK_DESTINATION_GROUPS = {
   switzerland: ['Switzerland', 'Shimla', 'Manali'],
 };
 
+const MOOD_DESTINATION_MATCHES = {
+  relaxed: ['Kerala', 'Goa', 'Bali', 'Maldives'],
+  adventurous: ['Manali', 'Shimla', 'Switzerland', 'Goa', 'Thailand', 'Bali'],
+  cultural: ['Jaipur', 'Udaipur', 'Agra', 'Varanasi', 'Paris', 'Tokyo'],
+  party: ['Goa', 'Dubai', 'Bali', 'Thailand'],
+  spiritual: ['Varanasi', 'Agra', 'Jaipur'],
+};
+
+const MINIMUM_MOOD_BUDGET = {
+  relaxed: 20000,
+  adventurous: 18000,
+  cultural: 15000,
+  party: 25000,
+  spiritual: 12000,
+};
+
 const INDIA_DESTINATIONS = new Set(['goa', 'jaipur', 'kerala', 'manali', 'varanasi', 'udaipur', 'shimla', 'agra']);
 const INTERNATIONAL_DESTINATIONS = new Set([
   'paris',
@@ -106,11 +122,42 @@ const applyMarketFilter = (items, selectedMarket) => {
   return items.filter((item) => marketForDestination(item.destination, item.title) === marketKey);
 };
 
-const buildFallbackRecommendations = ({ destinationInput, parsedBudget, moodLabel, weatherLabel }) => {
+const normalizeMoodForFallback = (mood) => {
+  if (mood === 'balanced') {
+    return 'relaxed';
+  }
+  return mood;
+};
+
+const buildPreferenceWarning = ({ mood, moodLabel, parsedBudget, matchingDestinations }) => {
+  const normalizedMood = normalizeMoodForFallback(mood);
+  const minimumBudget = MINIMUM_MOOD_BUDGET[normalizedMood] || parsedBudget;
+  const extraBudgetRequired = Math.max(0, minimumBudget - parsedBudget);
+  const suggestedDestination = matchingDestinations[0];
+
+  return {
+    type: 'budget_mismatch',
+    title: 'Your selected trip style needs a bit more budget',
+    message: `We kept the search focused on ${moodLabel.toLowerCase()} trips instead of showing unrelated options.`,
+    extra_budget_required: extraBudgetRequired,
+    recommended_budget: minimumBudget,
+    destination: suggestedDestination,
+  };
+};
+
+const buildFallbackRecommendations = ({ destinationInput, parsedBudget, mood, moodLabel, weatherLabel }) => {
   const normalizedDestination = toLower(destinationInput).trim();
   const destinations = FALLBACK_DESTINATION_GROUPS[normalizedDestination] || ['Jaipur', 'Goa', 'Kerala'];
+  const moodMatches = MOOD_DESTINATION_MATCHES[normalizeMoodForFallback(mood)] || destinations;
+  const strictDestinations = destinations.filter((place) => moodMatches.includes(place));
+  const selectedDestinations = strictDestinations.length ? strictDestinations : moodMatches;
 
-  return destinations.map((place, index) => ({
+  const minimumBudget = MINIMUM_MOOD_BUDGET[normalizeMoodForFallback(mood)] || 0;
+  if (selectedDestinations.length === 0 || (minimumBudget > 0 && parsedBudget < minimumBudget)) {
+    return [];
+  }
+
+  return selectedDestinations.slice(0, 3).map((place, index) => ({
     id: `fallback-${place.toLowerCase()}-${index}`,
     title: index === 0 ? `${place} Match Escape` : `${place} Discovery Escape`,
     destination: place,
@@ -130,27 +177,40 @@ const buildFallbackRecommendations = ({ destinationInput, parsedBudget, moodLabe
   }));
 };
 
-const buildFallbackInsights = ({ destinationInput, parsedBudget }) => {
+const buildFallbackInsights = ({ destinationInput, parsedBudget, mood, moodLabel }) => {
   const normalizedDestination = toLower(destinationInput).trim();
   const destinations = FALLBACK_DESTINATION_GROUPS[normalizedDestination] || ['Goa', 'Kerala', 'Manali'];
-  const discoveryTargets = destinations.slice(1).length ? destinations.slice(1) : ['Kerala', 'Manali'];
+  const moodMatches = MOOD_DESTINATION_MATCHES[normalizeMoodForFallback(mood)] || destinations;
+  const strictDestinations = destinations.filter((place) => moodMatches.includes(place));
+  const selectedDestinations = strictDestinations.length ? strictDestinations : moodMatches;
+  const discoveryTargets = selectedDestinations.slice(1).length ? selectedDestinations.slice(1) : selectedDestinations.slice(0, 2);
+  const minimumBudget = MINIMUM_MOOD_BUDGET[normalizeMoodForFallback(mood)] || 0;
+  const preferenceWarning = minimumBudget > 0 && parsedBudget < minimumBudget
+    ? buildPreferenceWarning({
+      mood,
+      moodLabel,
+      parsedBudget,
+      matchingDestinations: selectedDestinations,
+    })
+    : null;
 
   return {
-    budget_upgrade_suggestions: [
+    budget_upgrade_suggestions: preferenceWarning ? [
       {
         id: 'fallback-stretch',
-        title: `${destinations[0]} Premium Escape`,
-        destination: destinations[0],
-        price: parsedBudget + 10000,
-        extra_budget_required: 10000,
+        title: `${(selectedDestinations[0] || destinations[0])} Better Match`,
+        destination: selectedDestinations[0] || destinations[0],
+        price: minimumBudget,
+        extra_budget_required: preferenceWarning.extra_budget_required,
       },
-    ],
+    ] : [],
     destination_discovery: discoveryTargets.map((place, index) => ({
       destination: place,
       sample_itinerary: `${place} Curated Journey`,
       starting_price: parsedBudget * (0.9 + index * 0.05),
       rating: 4.5 + index * 0.1,
     })),
+    preference_warning: preferenceWarning,
   };
 };
 
@@ -171,6 +231,7 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
   const [insights, setInsights] = useState({
     budget_upgrade_suggestions: [],
     destination_discovery: [],
+    preference_warning: null,
   });
 
   const ctaScale = useRef(new Animated.Value(1)).current;
@@ -250,17 +311,19 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
       setInsights({
         budget_upgrade_suggestions: data?.insights?.budget_upgrade_suggestions || [],
         destination_discovery: filteredDiscovery,
+        preference_warning: data?.insights?.preference_warning || null,
       });
     } catch (error) {
       Alert.alert('AI Service', 'Using curated fallback recommendations.');
       const fallback = applyMarketFilter(buildFallbackRecommendations({
         destinationInput,
         parsedBudget,
+        mood,
         moodLabel: selectedMoodLabel,
         weatherLabel: selectedWeatherLabel,
       }), market);
       setRecommendations(fallback);
-      const fallbackInsights = buildFallbackInsights({ destinationInput, parsedBudget });
+      const fallbackInsights = buildFallbackInsights({ destinationInput, parsedBudget, mood, moodLabel: selectedMoodLabel });
       setInsights({
         ...fallbackInsights,
         destination_discovery: applyMarketFilter(fallbackInsights.destination_discovery || [], market),
@@ -448,6 +511,23 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
 
         </View>
 
+        {insights.preference_warning && (
+          <View style={styles.warningCard}>
+            <View style={styles.warningIconWrap}>
+              <Ionicons name="alert-circle-outline" size={18} color={Colors.primary} />
+            </View>
+            <View style={styles.warningCopy}>
+              <Text style={styles.warningTitle}>{insights.preference_warning.title}</Text>
+              <Text style={styles.warningText}>{insights.preference_warning.message}</Text>
+              {Number(insights.preference_warning.extra_budget_required || 0) > 0 && (
+                <Text style={styles.warningHint}>
+                  Increase by INR {Number(insights.preference_warning.extra_budget_required || 0).toLocaleString()} to unlock better {selectedMoodLabel.toLowerCase()} options.
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
         {(insights.destination_discovery?.length > 0 || insights.budget_upgrade_suggestions?.length > 0) && (
           <View style={styles.smartSection}>
             <Text style={styles.smartTitle}>Smart Suggestions</Text>
@@ -489,9 +569,13 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
         ) : recommendations.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Ionicons name="sparkles-outline" size={26} color={Colors.primary} />
-            <Text style={styles.emptyTitle}>No matches in this trip lane yet</Text>
+            <Text style={styles.emptyTitle}>
+              {insights.preference_warning ? 'No strong matches in this budget yet' : 'No matches in this trip lane yet'}
+            </Text>
             <Text style={styles.emptySub}>
-              Try switching between India and International, or loosen the destination to discover more options.
+              {insights.preference_warning
+                ? 'Increase the budget or try another mood to unlock better-fit recommendations.'
+                : 'Try switching between India and International, or loosen the destination to discover more options.'}
             </Text>
           </View>
         ) : (
@@ -859,6 +943,45 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.textMuted,
     marginTop: -1,
+  },
+  warningCard: {
+    marginTop: 16,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: '#FFF1E7',
+    borderWidth: 1,
+    borderColor: '#F4C7A7',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  warningIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: 'rgba(246,106,42,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  warningCopy: {
+    flex: 1,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.primaryDark,
+  },
+  warningText: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Colors.text,
+  },
+  warningHint: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primaryDark,
   },
   smartSection: {
     marginTop: 16,

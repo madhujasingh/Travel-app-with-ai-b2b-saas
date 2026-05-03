@@ -34,6 +34,7 @@ import ReportsScreen from './src/screens/ReportsScreen';
 import CustomerProfileScreen from './src/screens/CustomerProfileScreen';
 import { AuthContext } from './src/context/AuthContext';
 import { Colors } from './src/constants/Colors';
+import API_CONFIG from './src/config/api';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -145,10 +146,25 @@ export default function App() {
 
         const parsedAuth = JSON.parse(savedAuth);
         if (parsedAuth?.token && parsedAuth?.user) {
-          setAuthState({
-            token: parsedAuth.token,
-            user: parsedAuth.user,
+          const response = await fetch(`${API_CONFIG.BASE_URL}/auth/me`, {
+            headers: {
+              Authorization: `Bearer ${parsedAuth.token}`,
+            },
           });
+
+          if (!response.ok) {
+            await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+            return;
+          }
+
+          const verifiedUser = await response.json();
+          const nextAuthState = {
+            token: parsedAuth.token,
+            user: verifiedUser,
+          };
+
+          setAuthState(nextAuthState);
+          await SecureStore.setItemAsync(AUTH_STORAGE_KEY, JSON.stringify(nextAuthState));
         } else {
           await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
         }

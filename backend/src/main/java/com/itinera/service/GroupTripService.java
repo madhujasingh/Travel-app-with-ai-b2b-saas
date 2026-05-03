@@ -56,21 +56,24 @@ public class GroupTripService {
     }
 
     public List<GroupTripSummaryResponse> getMyTrips(Long userId) {
-        return groupTripMemberRepository.findByUserIdOrderByJoinedAtDesc(userId)
+        Map<Long, GroupTrip> uniqueTrips = new LinkedHashMap<>();
+        groupTripMemberRepository.findByUserIdOrderByJoinedAtDesc(userId)
+                .forEach(member -> uniqueTrips.putIfAbsent(member.getGroupTrip().getId(), member.getGroupTrip()));
+
+        return uniqueTrips.values()
                 .stream()
-                .map(GroupTripMember::getGroupTrip)
-                .distinct()
                 .map(this::toSummary)
                 .collect(Collectors.toList());
     }
 
     public GroupTripDetailResponse createTrip(Long userId, CreateGroupTripRequest request) {
         User creator = getUser(userId);
+        validateCreateTripRequest(request);
 
         GroupTrip trip = new GroupTrip();
         trip.setTitle(request.title().trim());
         trip.setDestination(request.destination().trim());
-        trip.setDescription(request.description() == null ? null : request.description().trim());
+        trip.setDescription(normalizeOptionalText(request.description()));
         trip.setCreatedByUserId(userId);
         trip.setInviteCode(generateInviteCode());
         trip.setStatus("PLANNING");
@@ -86,6 +89,10 @@ public class GroupTripService {
     }
 
     public GroupTripDetailResponse joinTrip(Long userId, JoinGroupTripRequest request) {
+        if (request == null || request.inviteCode() == null || request.inviteCode().trim().isBlank()) {
+            throw new IllegalArgumentException("Invite code is required");
+        }
+
         GroupTrip trip = groupTripRepository.findByInviteCodeIgnoreCase(request.inviteCode().trim())
                 .orElseThrow(() -> new ResourceNotFoundException("Group trip invite code not found"));
 
@@ -152,13 +159,14 @@ public class GroupTripService {
         GroupTrip trip = getTripEntity(tripId);
         User user = getUser(userId);
         requireMembership(tripId, userId);
+        validateAddOptionRequest(request);
 
         GroupTripOption option = new GroupTripOption();
         option.setGroupTrip(trip);
         option.setCategory(GroupTripOption.OptionCategory.valueOf(request.category().trim().toUpperCase()));
         option.setTitle(request.title().trim());
-        option.setDescription(request.description() == null ? null : request.description().trim());
-        option.setLocation(request.location() == null ? null : request.location().trim());
+        option.setDescription(normalizeOptionalText(request.description()));
+        option.setLocation(normalizeOptionalText(request.location()));
         option.setAddedByUserId(userId);
         option.setAddedByName(user.getName());
         option.setScore(0);
@@ -270,6 +278,39 @@ public class GroupTripService {
     private User getUser(Long userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+    }
+
+    private void validateCreateTripRequest(CreateGroupTripRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Trip details are required");
+        }
+        if (request.title() == null || request.title().trim().isBlank()) {
+            throw new IllegalArgumentException("Trip title is required");
+        }
+        if (request.destination() == null || request.destination().trim().isBlank()) {
+            throw new IllegalArgumentException("Trip destination is required");
+        }
+    }
+
+    private void validateAddOptionRequest(AddGroupTripOptionRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Option details are required");
+        }
+        if (request.category() == null || request.category().trim().isBlank()) {
+            throw new IllegalArgumentException("Option category is required");
+        }
+        if (request.title() == null || request.title().trim().isBlank()) {
+            throw new IllegalArgumentException("Option title is required");
+        }
+    }
+
+    private String normalizeOptionalText(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String generateInviteCode() {

@@ -107,6 +107,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
   const seedItinerary = route?.params?.seedItinerary || null;
   const [activeSection, setActiveSection] = useState(seedItinerary ? 'NEW' : 'CURRENT');
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [creatingTrip, setCreatingTrip] = useState(false);
   const [joiningTrip, setJoiningTrip] = useState(false);
   const [addingOption, setAddingOption] = useState(false);
@@ -126,6 +127,19 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
     description: '',
     location: '',
   });
+
+  const getResponsePayload = async (response) => {
+    const text = await response.text();
+    if (!text) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new Error('Unexpected token in server response');
+    }
+  };
 
   useEffect(() => {
     if (!seedItinerary) {
@@ -204,17 +218,20 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       return;
     }
 
+    setDetailLoading(true);
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/group-trips/${tripId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to load trip');
       }
       setTripDetail(data);
     } catch (error) {
       Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to load group trip details'));
+    } finally {
+      setDetailLoading(false);
     }
   }, [token]);
 
@@ -262,7 +279,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
         },
         body: JSON.stringify(createForm),
       });
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to create trip');
       }
@@ -270,7 +287,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       if (seedItinerary) {
         const seededOptions = buildSeedOptionsFromItinerary(seedItinerary);
         for (const option of seededOptions) {
-          await fetch(`${API_CONFIG.BASE_URL}/group-trips/${data.id}/options`, {
+          const optionResponse = await fetch(`${API_CONFIG.BASE_URL}/group-trips/${data.id}/options`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -278,10 +295,15 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
             },
             body: JSON.stringify(option),
           });
+          const optionData = await getResponsePayload(optionResponse);
+          if (!optionResponse.ok) {
+            throw new Error(optionData?.message || 'Unable to import package options into the group planner');
+          }
         }
       }
 
       setCreateForm({ title: '', destination: '', description: '' });
+      setActiveSection('CURRENT');
       await loadTrips();
       setSelectedTripId(data.id);
       await loadTripDetail(data.id);
@@ -314,15 +336,17 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
         },
         body: JSON.stringify({ inviteCode: joinCode.trim().toUpperCase() }),
       });
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to join trip');
       }
 
       setJoinCode('');
+      setActiveSection('CURRENT');
       await loadTrips();
       setSelectedTripId(data.id);
       setTripDetail(data);
+      Alert.alert('Joined group trip', 'You can now vote on options with the rest of the group.');
     } catch (error) {
       Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to join trip'));
     } finally {
@@ -349,7 +373,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
         },
         body: JSON.stringify(optionForm),
       });
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to add option');
       }
@@ -382,7 +406,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
         },
         body: JSON.stringify({ voteValue }),
       });
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to vote');
       }
@@ -404,7 +428,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
           Authorization: `Bearer ${token}`,
         },
       });
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to lock winner');
       }
@@ -422,7 +446,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
 
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/${tripDetail.finalizedItinerary.id}`);
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to open itinerary');
       }
@@ -450,11 +474,12 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
           Authorization: `Bearer ${token}`,
         },
       });
-      const data = await response.json();
+      const data = await getResponsePayload(response);
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to generate itinerary');
       }
 
+      setActiveSection('PREVIOUS');
       setTripDetail(data);
       await loadTrips();
       Alert.alert('Itinerary ready', 'Your group winners have been turned into a trip itinerary draft.');
@@ -665,7 +690,23 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
         </View>
         ) : null}
 
-        {activeSection !== 'NEW' && tripDetail ? (
+        {activeSection !== 'NEW' && detailLoading ? (
+          <View style={styles.panel}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+            <Text style={styles.loadingInlineText}>Loading group trip details...</Text>
+          </View>
+        ) : null}
+
+        {activeSection !== 'NEW' && !detailLoading && !tripDetail && visibleTrips.length > 0 ? (
+          <View style={styles.panel}>
+            <Text style={styles.emptyText}>We couldn&apos;t load this trip yet.</Text>
+            <TouchableOpacity style={styles.secondaryButtonStandalone} onPress={() => activeTrip?.id && loadTripDetail(activeTrip.id)}>
+              <Text style={styles.secondaryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {activeSection !== 'NEW' && !detailLoading && tripDetail ? (
           <>
             <View style={styles.tripSummaryCard}>
               <View style={styles.summaryHeader}>
@@ -997,9 +1038,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   secondaryButtonText: { color: Colors.primary, fontWeight: '700' },
+  secondaryButtonStandalone: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
   joinRow: { flexDirection: 'row', alignItems: 'center' },
   joinInput: { flex: 1, marginBottom: 0, marginRight: 10 },
   emptyText: { color: Colors.textLight, lineHeight: 20 },
+  loadingInlineText: {
+    marginTop: 10,
+    color: Colors.textLight,
+    textAlign: 'center',
+  },
   tripChip: {
     backgroundColor: '#FFF4ED',
     borderRadius: 20,

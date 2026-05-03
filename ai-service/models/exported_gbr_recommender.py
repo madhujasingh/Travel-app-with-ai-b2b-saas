@@ -55,10 +55,21 @@ class ExportedGBRRecommender:
         scored_results = self._score_packages(user_preferences)
         budget = float(getattr(user_preferences, "budget", 0) or 0)
         weather_pref = normalize_weather_pref(getattr(user_preferences, "weather_preference", None))
+        strict_preferences = normalize_strict_preferences(getattr(user_preferences, "mood", None), getattr(user_preferences, "interests", []) or [])
 
         affordable = [item for item in scored_results if item["_within_budget_display"] or budget <= 0]
         if not affordable:
             affordable = scored_results
+
+        if strict_preferences:
+            affordable_strict = [item for item in affordable if item["_strict_preference_match"]]
+            if affordable_strict:
+                affordable = affordable_strict
+            else:
+                strict_matches = [item for item in scored_results if item["_strict_preference_match"]]
+                if strict_matches:
+                    return []
+                return []
 
         if weather_pref:
             exact_weather = [item for item in affordable if item["_weather_fit"] == "exact"]
@@ -98,6 +109,7 @@ class ExportedGBRRecommender:
         trip_lane = normalize_trip_lane(getattr(user_preferences, "market_preference", None))
         travel_month = infer_month_label()
         destination_filter = str(getattr(user_preferences, "destination", "") or "").strip().lower()
+        strict_preferences = normalize_strict_preferences(getattr(user_preferences, "mood", None), getattr(user_preferences, "interests", []) or [])
 
         results = []
         for package in self.bundle.artifact["catalog"]:
@@ -130,10 +142,17 @@ class ExportedGBRRecommender:
                 score -= 25
 
             mood_hits = [mood for mood in moods if mood in package["moods"]]
+            strict_match = package_matches_strict_preferences(package, strict_preferences)
             if moods and not mood_hits:
                 score -= 12
             elif mood_hits:
                 score += min(8, len(mood_hits) * 4)
+
+            if strict_preferences:
+                if strict_match:
+                    score += 14
+                else:
+                    score -= 40
 
             weather_fit = determine_weather_fit(weather_pref, package["weathers"])
             if weather_pref:
@@ -164,6 +183,8 @@ class ExportedGBRRecommender:
                     "_total_cost": total_cost,
                     "_within_budget_display": package["price"] <= budget if budget > 0 else True,
                     "_weather_fit": weather_fit,
+                    "_strict_preference_match": strict_match,
+                    "_strict_preferences": strict_preferences,
                 }
             )
 
@@ -175,12 +196,51 @@ class ExportedGBRRecommender:
         recommendations = self._score_packages(user_preferences)
         budget = float(getattr(user_preferences, "budget", 0) or 0)
         destination_pref = str(getattr(user_preferences, "destination", "") or "").strip().lower()
+        strict_preferences = normalize_strict_preferences(getattr(user_preferences, "mood", None), getattr(user_preferences, "interests", []) or [])
 
         upgrade = []
         discovery = []
         seen_discovery = set()
+        preference_warning = None
 
-        for item in recommendations:
+        strict_recommendations = (
+            [item for item in recommendations if item["_strict_preference_match"]]
+            if strict_preferences
+            else recommendations
+        )
+
+        affordable_strict_recommendations = (
+            [item for item in strict_recommendations if item["_within_budget_display"]]
+            if budget > 0
+            else strict_recommendations
+        )
+
+        if strict_preferences and not affordable_strict_recommendations:
+            if strict_recommendations:
+                cheapest_match = min(strict_recommendations, key=lambda item: item["price"])
+                extra_budget_required = max(0.0, float(cheapest_match["price"]) - budget)
+                preference_warning = {
+                    "type": "budget_mismatch",
+                    "title": "Your selected trip style needs a bit more budget",
+                    "message": (
+                        f"We kept your preferences strict for {format_preferences(strict_preferences)} "
+                        f"instead of showing mismatched options."
+                    ),
+                    "recommended_budget": float(cheapest_match["price"]),
+                    "extra_budget_required": round(extra_budget_required, 0),
+                    "destination": cheapest_match["destination"],
+                }
+            else:
+                preference_warning = {
+                    "type": "preference_unavailable",
+                    "title": "No close matches for this trip style yet",
+                    "message": (
+                        f"We could not find strong {format_preferences(strict_preferences)} packages, "
+                        "so we skipped unrelated recommendations."
+                    ),
+                }
+
+        for item in strict_recommendations:
             if budget > 0 and item["price"] > budget:
                 upgrade.append(
                     {
@@ -212,6 +272,7 @@ class ExportedGBRRecommender:
         return {
             "budget_upgrade_suggestions": upgrade[:num_suggestions],
             "destination_discovery": discovery[:num_suggestions],
+            "preference_warning": preference_warning,
         }
 
     @property
@@ -351,6 +412,67 @@ def normalize_moods(primary_mood: Optional[str], interests: List[str]) -> List[s
         if cleaned and cleaned not in moods:
             moods.append(cleaned)
     return moods[:3]
+
+
+def normalize_strict_preferences(primary_mood: Optional[str], interests: List[str]) -> List[str]:
+    preferences = []
+    seed_values = [primary_mood, *(interests or [])]
+    for value in seed_values:
+        cleaned = normalize_preference_token(value)
+        if cleaned and cleaned not in preferences:
+            preferences.append(cleaned)
+    return preferences[:3]
+
+
+def normalize_preference_token(value: Optional[str]) -> str:
+    token = str(value or "").strip().lower()
+    mapping = {
+        "adventure": "adventurous",
+        "adventurous": "adventurous",
+        "trekking": "adventurous",
+        "spiritual": "spiritual",
+        "party": "party",
+        "romantic": "romantic",
+        "relaxed": "relaxed",
+        "cultural": "curious",
+        "culture": "curious",
+        "couple": "romantic",
+        "balanced": "",
+    }
+    return mapping.get(token, token)
+
+
+def package_matches_strict_preferences(package: Dict[str, Any], strict_preferences: List[str]) -> bool:
+    if not strict_preferences:
+        return True
+
+    mood_tokens = {str(mood).strip().lower() for mood in package.get("moods", [])}
+    activity_tokens = {
+        token
+        for activity in package.get("activities", [])
+        for token in str(activity).strip().lower().replace("&", " ").replace("/", " ").split()
+    }
+
+    synonym_map = {
+        "adventurous": {"adventurous", "adventure", "trekking", "trek", "hiking", "outdoors", "ski", "sports"},
+        "spiritual": {"spiritual", "soulful", "reflective", "temple", "heritage"},
+        "party": {"party", "nightlife", "lively", "beach"},
+        "romantic": {"romantic", "honeymoon", "luxury", "calm"},
+        "relaxed": {"relaxed", "calm", "healing", "scenic"},
+        "curious": {"curious", "culture", "history", "heritage", "classic", "royal", "immersive", "modern"},
+    }
+
+    package_tokens = mood_tokens.union(activity_tokens)
+    for preference in strict_preferences:
+        if package_tokens.intersection(synonym_map.get(preference, {preference})):
+            return True
+    return False
+
+
+def format_preferences(preferences: List[str]) -> str:
+    if not preferences:
+        return "your selected style"
+    return ", ".join(item.replace("_", " ") for item in preferences)
 
 
 def normalize_weather_pref(value: Optional[str]) -> str:

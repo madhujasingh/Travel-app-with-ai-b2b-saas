@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   StyleSheet,
@@ -13,10 +14,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
+import API_CONFIG from '../config/api';
 
 const CustomerProfileScreen = ({ navigation }) => {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('preferences');
+  const [groupTrips, setGroupTrips] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
 
   // Mock data for demonstration
   const travelPreferences = {
@@ -44,11 +48,6 @@ const CustomerProfileScreen = ({ navigation }) => {
     { id: 3, destination: 'Tokyo Adventure', price: '₹1,80,000', image: '🗼' },
   ];
 
-  const groupTrips = [
-    { id: 1, title: 'College Friends Goa Trip', inviteCode: 'ABC123', members: 8, status: 'Active' },
-    { id: 2, title: 'Family Kerala Tour', inviteCode: 'XYZ789', members: 5, status: 'Planning' },
-  ];
-
   const transactions = [
     { id: 1, description: 'Goa Beach Package', amount: '₹45,000', date: '15 Mar 2026', status: 'Paid' },
     { id: 2, description: 'Kerala Backwaters', amount: '₹62,000', date: '20 Mar 2026', status: 'Pending' },
@@ -60,6 +59,43 @@ const CustomerProfileScreen = ({ navigation }) => {
     { id: 2, title: 'Group Trip Update', message: 'New member joined your Goa trip', time: '5h ago', read: true },
     { id: 3, title: 'Price Drop Alert', message: 'Maldives package now 20% off!', time: '1d ago', read: true },
   ];
+
+  useEffect(() => {
+    if (activeTab !== 'groups' || !token) {
+      return;
+    }
+
+    let active = true;
+
+    const loadGroupTrips = async () => {
+      setGroupsLoading(true);
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/group-trips`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || 'Unable to load group trips');
+        }
+        if (active) {
+          setGroupTrips(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (active) {
+          setGroupTrips([]);
+        }
+      } finally {
+        if (active) {
+          setGroupsLoading(false);
+        }
+      }
+    };
+
+    loadGroupTrips();
+    return () => {
+      active = false;
+    };
+  }, [activeTab, token]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -171,12 +207,41 @@ const CustomerProfileScreen = ({ navigation }) => {
       case 'groups':
         return (
           <View style={styles.tabContent}>
-            {groupTrips.map((trip) => (
-              <View key={trip.id} style={styles.groupTripCard}>
+            <TouchableOpacity
+              style={styles.groupPlannerLaunchCard}
+              onPress={() => navigation.navigate('GroupTripPlanner')}
+            >
+              <View style={styles.groupPlannerLaunchIcon}>
+                <Ionicons name="people-outline" size={20} color={Colors.secondary} />
+              </View>
+              <View style={styles.groupPlannerLaunchCopy}>
+                <Text style={styles.groupPlannerLaunchTitle}>Open Group Planner</Text>
+                <Text style={styles.groupPlannerLaunchText}>Create trips, join with invite codes, and vote together.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.primary} />
+            </TouchableOpacity>
+
+            {groupsLoading ? (
+              <View style={styles.groupsLoadingWrap}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.groupsLoadingText}>Loading your group trips...</Text>
+              </View>
+            ) : groupTrips.length === 0 ? (
+              <View style={styles.groupTripEmptyCard}>
+                <Text style={styles.groupTripEmptyText}>No group trips yet. Start one in the Group Planner.</Text>
+              </View>
+            ) : groupTrips.map((trip) => (
+              <TouchableOpacity
+                key={trip.id}
+                style={styles.groupTripCard}
+                onPress={() => navigation.navigate('GroupTripPlanner')}
+              >
                 <View style={styles.groupTripHeader}>
                   <Text style={styles.groupTripTitle}>{trip.title}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(trip.status) + '20' }]}>
-                    <Text style={[styles.statusText, { color: getStatusColor(trip.status) }]}>{trip.status}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(trip.finalizedItineraryId ? 'Completed' : 'Planning') + '20' }]}>
+                    <Text style={[styles.statusText, { color: getStatusColor(trip.finalizedItineraryId ? 'Completed' : 'Planning') }]}>
+                      {trip.finalizedItineraryId ? 'Completed' : trip.status}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.groupTripDetails}>
@@ -186,10 +251,10 @@ const CustomerProfileScreen = ({ navigation }) => {
                   </View>
                   <View style={styles.groupTripDetailItem}>
                     <Ionicons name="people-outline" size={14} color="#666" />
-                    <Text style={styles.groupTripDetailText}>{trip.members} members</Text>
+                    <Text style={styles.groupTripDetailText}>{trip.memberCount} members</Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
         );
@@ -534,6 +599,60 @@ const styles = StyleSheet.create({
   savedTripPrice: {
     fontSize: 14,
     color: '#666',
+  },
+  groupPlannerLaunchCard: {
+    backgroundColor: '#FFF3EA',
+    borderRadius: 14,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F2D4C2',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  groupPlannerLaunchIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  groupPlannerLaunchCopy: {
+    flex: 1,
+  },
+  groupPlannerLaunchTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+  },
+  groupPlannerLaunchText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#666',
+    lineHeight: 18,
+  },
+  groupsLoadingWrap: {
+    backgroundColor: Colors.secondary,
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+  },
+  groupsLoadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: '#666',
+  },
+  groupTripEmptyCard: {
+    backgroundColor: Colors.secondary,
+    borderRadius: 12,
+    padding: 16,
+  },
+  groupTripEmptyText: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 19,
   },
   groupTripCard: {
     backgroundColor: Colors.secondary,
