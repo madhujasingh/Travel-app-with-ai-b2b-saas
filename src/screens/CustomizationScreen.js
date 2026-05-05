@@ -12,64 +12,126 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { getDestinationActivities } from '../data/destinationActivities';
+import { useCart } from '../context/CartContext';
 
 const CustomizationScreen = ({ route, navigation }) => {
   const { itinerary, destination, people } = route.params;
+  const { addItemToCart } = useCart();
 
-  const [selectedPlaces, setSelectedPlaces] = useState([]);
-  const [excludedPlaces, setExcludedPlaces] = useState([]);
+  const [customizedDays, setCustomizedDays] = useState({});
   const [additionalNotes, setAdditionalNotes] = useState('');
-  const [selectedActivities, setSelectedActivities] = useState([]);
+  const [showActivitySelector, setShowActivitySelector] = useState(false);
+  const [selectedDayForAdding, setSelectedDayForAdding] = useState(null);
+  const [availableActivities, setAvailableActivities] = useState([]);
 
-  const popularPlaces = [
-    { id: 1, name: 'Historical Fort', icon: 'business-outline' },
-    { id: 2, name: 'Beach Resort', icon: 'sunny-outline' },
-    { id: 3, name: 'Mountain Trek', icon: 'trail-sign-outline' },
-    { id: 4, name: 'Local Market', icon: 'cart-outline' },
-    { id: 5, name: 'Temple Visit', icon: 'flower-outline' },
-    { id: 6, name: 'Wildlife Safari', icon: 'paw-outline' },
-    { id: 7, name: 'Boat Ride', icon: 'boat-outline' },
-    { id: 8, name: 'Museum Tour', icon: 'library-outline' },
-  ];
-
-  const activities = [
-    { id: 1, name: 'Photography', icon: 'camera-outline' },
-    { id: 2, name: 'Food Tasting', icon: 'restaurant-outline' },
-    { id: 3, name: 'Shopping', icon: 'cart-outline' },
-    { id: 4, name: 'Adventure Sports', icon: 'bicycle-outline' },
-    { id: 5, name: 'Spa & Wellness', icon: 'fitness-outline' },
-    { id: 6, name: 'Nightlife', icon: 'moon-outline' },
-    { id: 7, name: 'Cultural Shows', icon: 'musical-notes-outline' },
-    { id: 8, name: 'Yoga & Meditation', icon: 'body-outline' },
-  ];
-
-  const togglePlace = (placeId) => {
-    if (selectedPlaces.includes(placeId)) {
-      setSelectedPlaces(selectedPlaces.filter((id) => id !== placeId));
-    } else if (!excludedPlaces.includes(placeId)) {
-      setSelectedPlaces([...selectedPlaces, placeId]);
+  // Initialize customized days with the itinerary's day plans
+  React.useEffect(() => {
+    if (itinerary?.dayPlans) {
+      const initialCustomizedDays = {};
+      itinerary.dayPlans.forEach((dayPlan) => {
+        initialCustomizedDays[dayPlan.dayNumber] = {
+          title: dayPlan.title,
+          activities: dayPlan.activities.map(activity => ({
+            ...activity,
+            selected: activity.customizable !== false // Default to selected for customizable activities
+          }))
+        };
+      });
+      setCustomizedDays(initialCustomizedDays);
     }
+  }, [itinerary]);
+
+  // Load available activities for the destination
+  React.useEffect(() => {
+    const activities = getDestinationActivities(destination);
+    setAvailableActivities(activities);
+  }, [destination]);
+
+  const toggleActivity = (dayNumber, activityId) => {
+    setCustomizedDays(prev => ({
+      ...prev,
+      [dayNumber]: {
+        ...prev[dayNumber],
+        activities: prev[dayNumber].activities.map(activity =>
+          activity.id === activityId
+            ? { ...activity, selected: !activity.selected }
+            : activity
+        )
+      }
+    }));
   };
 
-  const toggleExclude = (placeId) => {
-    if (excludedPlaces.includes(placeId)) {
-      setExcludedPlaces(excludedPlaces.filter((id) => id !== placeId));
-    } else if (!selectedPlaces.includes(placeId)) {
-      setExcludedPlaces([...excludedPlaces, placeId]);
-    }
-  };
+  const addActivityToDay = (activity, dayNumber) => {
+    // Check if activity already exists in this day
+    const dayActivities = customizedDays[dayNumber]?.activities || [];
+    const activityExists = dayActivities.some(existing => existing.id === activity.id);
 
-  const toggleActivity = (activityId) => {
-    if (selectedActivities.includes(activityId)) {
-      setSelectedActivities(selectedActivities.filter((id) => id !== activityId));
+    if (activityExists) {
+      Alert.alert(
+        'Activity Already Added',
+        `"${activity.name}" is already included in Day ${dayNumber}. Would you like to add it again?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add Anyway',
+            onPress: () => {
+              const newActivity = {
+                ...activity,
+                selected: true,
+                time: activity.time,
+                activity: activity.name,
+                icon: activity.icon,
+                id: `${activity.id}-duplicate-${Date.now()}`, // Make ID unique
+              };
+
+              setCustomizedDays(prev => ({
+                ...prev,
+                [dayNumber]: {
+                  ...prev[dayNumber],
+                  activities: [...prev[dayNumber].activities, newActivity]
+                }
+              }));
+            }
+          }
+        ]
+      );
     } else {
-      setSelectedActivities([...selectedActivities, activityId]);
+      const newActivity = {
+        ...activity,
+        selected: true,
+        time: activity.time,
+        activity: activity.name,
+        icon: activity.icon,
+      };
+
+      setCustomizedDays(prev => ({
+        ...prev,
+        [dayNumber]: {
+          ...prev[dayNumber],
+          activities: [...prev[dayNumber].activities, newActivity]
+        }
+      }));
     }
   };
+
+  const openActivitySelector = (dayNumber) => {
+    setSelectedDayForAdding(dayNumber);
+    setShowActivitySelector(true);
+  };
+
+
+
+
 
   const handleSubmit = () => {
-    if (selectedPlaces.length === 0 && selectedActivities.length === 0) {
-      Alert.alert('Error', 'Please select at least one place or activity');
+    // Check if at least some activities are selected
+    const hasSelectedActivities = Object.values(customizedDays).some(day =>
+      day.activities.some(activity => activity.selected)
+    );
+
+    if (!hasSelectedActivities) {
+      Alert.alert('Error', 'Please keep at least one activity selected for your trip');
       return;
     }
 
@@ -77,15 +139,13 @@ const CustomizationScreen = ({ route, navigation }) => {
       itinerary,
       destination,
       people,
-      selectedPlaces: popularPlaces.filter((p) => selectedPlaces.includes(p.id)),
-      excludedPlaces: popularPlaces.filter((p) => excludedPlaces.includes(p.id)),
-      selectedActivities: activities.filter((a) => selectedActivities.includes(a.id)),
+      customizedDays,
       additionalNotes,
     };
 
     Alert.alert(
       'Customization Saved!',
-      'Your customized itinerary has been saved. A travel agent will contact you shortly.',
+      'Your day-wise customized itinerary has been saved. A travel agent will contact you shortly.',
       [
         {
           text: 'Talk to Agent',
@@ -94,8 +154,44 @@ const CustomizationScreen = ({ route, navigation }) => {
         },
         {
           text: 'Add to Cart',
-          onPress: () =>
-            navigation.navigate('Cart', { customization }),
+          onPress: () => {
+            // Create cart item from customization
+            const cartItem = {
+              id: itinerary.id || `customized-${Date.now()}`,
+              title: `${itinerary.title} (Customized)`,
+              destination: destination,
+              duration: itinerary.duration,
+              price: itinerary.price,
+              people: people || 1,
+              adults: people || 0,
+              children: 0,
+              image: itinerary.image,
+              addedAt: new Date().toISOString(),
+              customization: {
+                customizedDays,
+                additionalNotes,
+                originalItinerary: itinerary
+              },
+              isCustomized: true
+            };
+
+            addItemToCart(cartItem);
+
+            Alert.alert(
+              'Added to Cart!',
+              'Your customized itinerary has been added to cart.',
+              [
+                {
+                  text: 'View Cart',
+                  onPress: () => navigation.navigate('CustomerTabs', { screen: 'CartTab' }),
+                },
+                {
+                  text: 'Continue',
+                  style: 'cancel',
+                },
+              ]
+            );
+          },
         },
         {
           text: 'OK',
@@ -115,7 +211,9 @@ const CustomizationScreen = ({ route, navigation }) => {
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Customize Trip</Text>
-        <View style={{ width: 30 }} />
+        <TouchableOpacity onPress={() => navigation.navigate('CustomerTabs', { screen: 'CartTab' })}>
+          <Ionicons name="cart" size={24} color={Colors.secondary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -127,107 +225,72 @@ const CustomizationScreen = ({ route, navigation }) => {
           </Text>
         </View>
 
-        {/* Select Places */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Select Places to Visit</Text>
-          <Text style={styles.sectionSubtitle}>
-            Tap to add to your itinerary
-          </Text>
-          <View style={styles.placesGrid}>
-            {popularPlaces.map((place) => (
-              <TouchableOpacity
-                key={place.id}
-                style={[
-                  styles.placeCard,
-                  selectedPlaces.includes(place.id) && styles.placeCardSelected,
-                  excludedPlaces.includes(place.id) && styles.placeCardExcluded,
-                ]}
-                onPress={() => togglePlace(place.id)}
-                disabled={excludedPlaces.includes(place.id)}
-              >
-                <Ionicons name={place.icon} size={20} color={Colors.primary} style={styles.placeIcon} />
-                <Text
-                  style={[
-                    styles.placeName,
-                    selectedPlaces.includes(place.id) && styles.placeNameSelected,
-                  ]}
-                >
-                  {place.name}
-                </Text>
-                {selectedPlaces.includes(place.id) && (
-                  <Text style={styles.checkmark}>✓</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        {/* Day-wise Customization */}
+        {Object.entries(customizedDays).map(([dayNumber, dayData]) => (
+          <View key={dayNumber} style={styles.daySection}>
+            <View style={styles.dayHeader}>
+              <Text style={styles.dayTitle}>Day {dayNumber}: {dayData.title}</Text>
+              <Text style={styles.dayActivityCount}>
+                {dayData.activities.filter(a => a.selected).length} of {dayData.activities.length} activities
+              </Text>
+            </View>
 
-        {/* Exclude Places */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Places to Exclude</Text>
-          <Text style={styles.sectionSubtitle}>
-            Tap to remove from your itinerary
-          </Text>
-          <View style={styles.placesGrid}>
-            {popularPlaces.map((place) => (
-              <TouchableOpacity
-                key={place.id}
-                style={[
-                  styles.placeCard,
-                  excludedPlaces.includes(place.id) && styles.placeCardExcluded,
-                  selectedPlaces.includes(place.id) && styles.placeCardSelected,
-                ]}
-                onPress={() => toggleExclude(place.id)}
-                disabled={selectedPlaces.includes(place.id)}
-              >
-                <Ionicons name={place.icon} size={20} color={Colors.primary} style={styles.placeIcon} />
-                <Text
+            <View style={styles.activitiesList}>
+              {dayData.activities.map((activity) => (
+                <TouchableOpacity
+                  key={activity.id}
                   style={[
-                    styles.placeName,
-                    excludedPlaces.includes(place.id) && styles.placeNameExcluded,
+                    styles.activityItem,
+                    activity.selected && styles.activityItemSelected,
+                    !activity.customizable && styles.activityItemFixed,
                   ]}
+                  onPress={() => activity.customizable !== false && toggleActivity(dayNumber, activity.id)}
+                  disabled={activity.customizable === false}
                 >
-                  {place.name}
-                </Text>
-                {excludedPlaces.includes(place.id) && (
-                  <Text style={styles.crossmark}>✗</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+                  <View style={styles.activityLeft}>
+                    <Ionicons
+                      name={activity.icon}
+                      size={20}
+                      color={activity.selected ? Colors.secondary : Colors.primary}
+                      style={styles.activityIcon}
+                    />
+                    <View style={styles.activityTextContainer}>
+                      <Text style={[styles.activityTime, activity.selected && styles.activityTimeSelected]}>
+                        {activity.time}
+                      </Text>
+                      <Text style={[styles.activityName, activity.selected && styles.activityNameSelected]}>
+                        {activity.activity}
+                      </Text>
+                    </View>
+                  </View>
 
-        {/* Activities */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferred Activities</Text>
-          <Text style={styles.sectionSubtitle}>
-            Select activities you'd like to include
-          </Text>
-          <View style={styles.activitiesGrid}>
-            {activities.map((activity) => (
+                  {activity.customizable !== false && (
+                    <View style={[styles.checkbox, activity.selected && styles.checkboxSelected]}>
+                      {activity.selected && (
+                        <Ionicons name="checkmark" size={16} color={Colors.secondary} />
+                      )}
+                    </View>
+                  )}
+
+                  {activity.customizable === false && (
+                    <View style={styles.fixedBadge}>
+                      <Text style={styles.fixedText}>Required</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+
+              {/* Add Activity Button */}
               <TouchableOpacity
-                key={activity.id}
-                style={[
-                  styles.activityCard,
-                  selectedActivities.includes(activity.id) &&
-                    styles.activityCardSelected,
-                ]}
-                onPress={() => toggleActivity(activity.id)}
+                style={styles.addActivityButton}
+                onPress={() => openActivitySelector(dayNumber)}
               >
-                <Ionicons name={activity.icon} size={20} color={Colors.primary} style={styles.activityIcon} />
-                <Text
-                  style={[
-                    styles.activityName,
-                    selectedActivities.includes(activity.id) &&
-                      styles.activityNameSelected,
-                  ]}
-                >
-                  {activity.name}
-                </Text>
+                <Ionicons name="add-circle-outline" size={20} color={Colors.primary} style={styles.addIcon} />
+                <Text style={styles.addActivityText}>Add Activity to Day {dayNumber}</Text>
               </TouchableOpacity>
-            ))}
+            </View>
           </View>
-        </View>
+        ))}
 
         {/* Additional Notes */}
         <View style={styles.section}>
@@ -248,18 +311,21 @@ const CustomizationScreen = ({ route, navigation }) => {
         <View style={styles.summarySection}>
           <Text style={styles.summaryTitle}>Your Customization Summary</Text>
           <View style={styles.summaryCard}>
+            {Object.entries(customizedDays).map(([dayNumber, dayData]) => (
+              <View key={dayNumber} style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Day {dayNumber}:</Text>
+                <Text style={styles.summaryValue}>
+                  {dayData.activities.filter(a => a.selected).length} activities selected
+                </Text>
+              </View>
+            ))}
+            <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Places Added:</Text>
-              <Text style={styles.summaryValue}>{selectedPlaces.length}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Places Excluded:</Text>
-              <Text style={styles.summaryValue}>{excludedPlaces.length}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Activities:</Text>
+              <Text style={styles.summaryLabel}>Total Selected:</Text>
               <Text style={styles.summaryValue}>
-                {selectedActivities.length}
+                {Object.values(customizedDays).reduce((total, day) =>
+                  total + day.activities.filter(a => a.selected).length, 0
+                )} activities
               </Text>
             </View>
           </View>
@@ -268,6 +334,50 @@ const CustomizationScreen = ({ route, navigation }) => {
         {/* Bottom Spacing */}
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* Activity Selector Modal - Outside ScrollView for proper positioning */}
+      {showActivitySelector && selectedDayForAdding && (
+        <View style={styles.activitySelectorOverlay}>
+          <View style={styles.activitySelectorModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Activity to Day {selectedDayForAdding}</Text>
+              <TouchableOpacity
+                onPress={() => setShowActivitySelector(false)}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color={Colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {availableActivities.map((activity) => (
+                <TouchableOpacity
+                  key={activity.id}
+                  style={styles.availableActivityItem}
+                  onPress={() => {
+                    addActivityToDay(activity, selectedDayForAdding);
+                    setShowActivitySelector(false);
+                  }}
+                >
+                  <View style={styles.availableActivityLeft}>
+                    <Ionicons name={activity.icon} size={20} color={Colors.primary} style={styles.availableActivityIcon} />
+                    <View style={styles.availableActivityText}>
+                      <Text style={styles.availableActivityName}>{activity.name}</Text>
+                      <Text style={styles.availableActivityDetails}>
+                        {activity.time} • {activity.category}
+                      </Text>
+                      <Text style={styles.availableActivityDescription} numberOfLines={2}>
+                        {activity.description}
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="add" size={20} color={Colors.primary} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
 
       {/* Bottom Actions */}
       <View style={styles.bottomActions}>
@@ -351,96 +461,222 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginBottom: 15,
   },
-  placesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  placeCard: {
-    width: '48%',
+  daySection: {
     backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 15,
-    marginRight: '2%',
-    marginBottom: 10,
+    margin: 15,
+    marginTop: 0,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  dayHeader: {
+    backgroundColor: Colors.primary,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.border,
-    position: 'relative',
   },
-  placeCardSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryLight,
-  },
-  placeCardExcluded: {
-    borderColor: Colors.error,
-    backgroundColor: '#FFE0E0',
-    opacity: 0.6,
-  },
-  placeIcon: {
-    fontSize: 30,
-    marginBottom: 8,
-  },
-  placeName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
-    textAlign: 'center',
-  },
-  placeNameSelected: {
+  dayTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: Colors.secondary,
+    flex: 1,
   },
-  placeNameExcluded: {
-    color: Colors.error,
-    textDecorationLine: 'line-through',
-  },
-  checkmark: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    fontSize: 18,
-    color: Colors.primary,
-    fontWeight: 'bold',
-  },
-  crossmark: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    fontSize: 18,
-    color: Colors.error,
-    fontWeight: 'bold',
-  },
-  activitiesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  activityCard: {
-    width: '48%',
-    backgroundColor: Colors.card,
+  dayActivityCount: {
+    fontSize: 12,
+    color: Colors.secondary,
+    opacity: 0.8,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
-    padding: 15,
-    marginRight: '2%',
-    marginBottom: 10,
+  },
+  activitiesList: {
+    padding: 16,
+  },
+  activityItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
     borderColor: Colors.border,
   },
-  activityCardSelected: {
-    borderColor: Colors.primary,
+  activityItemSelected: {
     backgroundColor: Colors.primaryLight,
+    borderColor: Colors.primary,
+  },
+  activityItemFixed: {
+    backgroundColor: '#f8f9fa',
+    borderColor: '#e9ecef',
+    opacity: 0.8,
+  },
+  activityLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   activityIcon: {
-    fontSize: 30,
-    marginBottom: 8,
+    marginRight: 12,
   },
-  activityName: {
-    fontSize: 14,
+  activityTextContainer: {
+    flex: 1,
+  },
+  activityTime: {
+    fontSize: 12,
+    color: Colors.primary,
     fontWeight: '600',
-    color: Colors.text,
-    textAlign: 'center',
+    marginBottom: 2,
   },
-  activityNameSelected: {
+  activityTimeSelected: {
     color: Colors.secondary,
   },
+  activityName: {
+    fontSize: 15,
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  activityNameSelected: {
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  fixedBadge: {
+    backgroundColor: Colors.textMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  fixedText: {
+    fontSize: 10,
+    color: Colors.secondary,
+    fontWeight: '600',
+  },
+  addActivityButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: Colors.primary,
+  },
+  addIcon: {
+    marginRight: 8,
+  },
+  addActivityText: {
+    fontSize: 14,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  activitySelectorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  activitySelectorModal: {
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    width: '90%',
+    maxHeight: '80%',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text,
+    flex: 1,
+  },
+  closeButton: {
+    padding: 5,
+  },
+  modalContent: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  availableActivityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  availableActivityLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  availableActivityIcon: {
+    marginRight: 12,
+    marginTop: 2,
+  },
+  availableActivityText: {
+    flex: 1,
+  },
+  availableActivityName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+    marginBottom: 4,
+  },
+  availableActivityDetails: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  availableActivityDescription: {
+    fontSize: 13,
+    color: Colors.textLight,
+    lineHeight: 18,
+  },
+
   notesInput: {
     backgroundColor: Colors.card,
     borderRadius: 12,
@@ -485,6 +721,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: Colors.primary,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 12,
   },
   bottomActions: {
     position: 'absolute',

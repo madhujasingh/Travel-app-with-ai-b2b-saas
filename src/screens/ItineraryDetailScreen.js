@@ -12,9 +12,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { adaptItineraryToWeather, fetchDestinationWeatherForecast } from '../utils/weatherPlanner';
+import { useCart } from '../context/CartContext';
 
 const ItineraryDetailScreen = ({ route, navigation }) => {
   const { itinerary, destination, people, adults, children } = route.params;
+  const { addItemToCart } = useCart();
   const dayPlans = itinerary.dayPlans || [];
   const [selectedDay, setSelectedDay] = useState(0);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -70,13 +72,30 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
   const selectedPlan = weatherAdaptation.adaptedDayPlans[selectedDay] || dayPlans[selectedDay];
 
   const handleAddToCart = () => {
+    // Create cart item object
+    const cartItem = {
+      id: itinerary.id || Date.now().toString(),
+      title: itinerary.title,
+      destination: effectiveDestination,
+      duration: itinerary.duration,
+      price: itinerary.price,
+      people: people || adults || children ? (parseInt(adults || 0) + parseInt(children || 0)) : 1,
+      adults: adults || 0,
+      children: children || 0,
+      image: itinerary.image,
+      addedAt: new Date().toISOString(),
+    };
+
+    // Add to cart using context
+    addItemToCart(cartItem);
+
     Alert.alert(
       'Added to Cart!',
       `${itinerary.title} has been added to your cart.`,
       [
         {
           text: 'View Cart',
-          onPress: () => navigation.navigate('Cart', { itinerary, destination, people, adults, children }),
+          onPress: () => navigation.navigate('CustomerTabs', { screen: 'CartTab' }),
         },
         {
           text: 'Continue Browsing',
@@ -122,7 +141,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Itinerary Details</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Cart')}>
+        <TouchableOpacity onPress={() => navigation.navigate('CartTab')}>
           <Ionicons name="cart" size={24} color={Colors.secondary} />
         </TouchableOpacity>
       </View>

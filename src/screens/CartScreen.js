@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,24 +11,44 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { useCart } from '../context/CartContext';
 
 const CartScreen = ({ route, navigation }) => {
   const canGoBack = navigation.canGoBack();
-  const [cartItems, setCartItems] = useState([
-    {
-      id: 1,
-      title: 'Jaipur Explorer - 3 Days',
-      destination: 'Jaipur',
-      duration: '3 Days / 2 Nights',
-      price: 15000,
-      people: 2,
-      image: 'business',
-    },
-  ]);
+  const { cartItems, addItemToCart, removeItemFromCart, getCartTotal, getCartItemCount } = useCart();
 
-  const getTotalPrice = () => {
-    return cartItems.reduce((total, item) => total + item.price * item.people, 0);
-  };
+  // Add item from route params if present (either addItem or customization)
+  React.useEffect(() => {
+    if (route.params?.addItem) {
+      const newItem = route.params.addItem;
+      addItemToCart(newItem);
+    } else if (route.params?.customization) {
+      // Handle customization object from CustomizationScreen
+      const { itinerary, destination, people, customizedDays, additionalNotes } = route.params.customization;
+
+      // Create a cart item from the customization
+      const cartItem = {
+        id: itinerary.id || `customized-${Date.now()}`,
+        title: `${itinerary.title} (Customized)`,
+        destination: destination,
+        duration: itinerary.duration,
+        price: itinerary.price,
+        people: people || 1,
+        adults: people || 0, // Default to all adults if not specified
+        children: 0,
+        image: itinerary.image,
+        addedAt: new Date().toISOString(),
+        customization: {
+          customizedDays,
+          additionalNotes,
+          originalItinerary: itinerary
+        },
+        isCustomized: true
+      };
+
+      addItemToCart(cartItem);
+    }
+  }, [route.params, addItemToCart]);
 
   const handleRemoveItem = (itemId) => {
     Alert.alert(
@@ -43,7 +63,7 @@ const CartScreen = ({ route, navigation }) => {
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
-            setCartItems(cartItems.filter((item) => item.id !== itemId));
+            removeItemFromCart(itemId);
           },
         },
       ]
@@ -51,7 +71,7 @@ const CartScreen = ({ route, navigation }) => {
   };
 
   const handleContactAgent = () => {
-    if (cartItems.length === 0) {
+    if (getCartItemCount() === 0) {
       Alert.alert('Error', 'Your cart is empty');
       return;
     }
@@ -59,11 +79,11 @@ const CartScreen = ({ route, navigation }) => {
   };
 
   const handleMakePayment = () => {
-    if (cartItems.length === 0) {
+    if (getCartItemCount() === 0) {
       Alert.alert('Error', 'Your cart is empty');
       return;
     }
-    navigation.navigate('Checkout', { cartItems, total: getTotalPrice() });
+    navigation.navigate('Checkout', { cartItems, total: getCartTotal() });
   };
 
   const renderCartItem = (item) => (
@@ -119,20 +139,20 @@ const CartScreen = ({ route, navigation }) => {
         )}
         <Text style={styles.headerTitle}>My Cart</Text>
         <View style={styles.cartCount}>
-          <Text style={styles.cartCountText}>{cartItems.length}</Text>
+          <Text style={styles.cartCountText}>{getCartItemCount()}</Text>
         </View>
       </View>
 
-      {cartItems.length === 0 ? (
+      {getCartItemCount() === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={72} color={Colors.primary} style={styles.emptyIcon} />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptySubtitle}>
-            Browse our itineraries and add your favorites!
+            Browse our amazing destinations and add itineraries to your cart!
           </Text>
           <TouchableOpacity
             style={styles.browseButton}
-            onPress={() => navigation.navigate('CustomerTabs', { screen: 'HomeTab' })}
+            onPress={() => navigation.goBack()}
           >
             <Text style={styles.browseButtonText}>Browse Itineraries</Text>
           </TouchableOpacity>
@@ -152,20 +172,20 @@ const CartScreen = ({ route, navigation }) => {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Subtotal</Text>
                   <Text style={styles.summaryValue}>
-                    ₹{getTotalPrice().toLocaleString()}
+                    ₹{getCartTotal().toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Taxes & Fees</Text>
                   <Text style={styles.summaryValue}>
-                    ₹{Math.round(getTotalPrice() * 0.18).toLocaleString()}
+                    ₹{Math.round(getCartTotal() * 0.18).toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.summaryRow}>
                   <Text style={styles.totalLabel}>Total Amount</Text>
                   <Text style={styles.totalValue}>
-                    ₹{Math.round(getTotalPrice() * 1.18).toLocaleString()}
+                    ₹{Math.round(getCartTotal() * 1.18).toLocaleString()}
                   </Text>
                 </View>
               </View>

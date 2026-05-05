@@ -33,6 +33,7 @@ import SupplierRequestsScreen from './src/screens/SupplierRequestsScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import CustomerProfileScreen from './src/screens/CustomerProfileScreen';
 import { AuthContext } from './src/context/AuthContext';
+import { CartProvider } from './src/context/CartContext';
 import { Colors } from './src/constants/Colors';
 import API_CONFIG from './src/config/api';
 
@@ -244,7 +245,8 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={authContextValue}>
-      <NavigationContainer>
+      <CartProvider>
+        <NavigationContainer>
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
@@ -290,7 +292,8 @@ export default function App() {
             </>
           )}
         </Stack.Navigator>
-      </NavigationContainer>
+        </NavigationContainer>
+      </CartProvider>
     </AuthContext.Provider>
   );
 }

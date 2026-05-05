@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
+import { getSampleItineraries } from '../data/sampleItineraries';
 
 const TYPE_TO_ICON = {
   budget: 'wallet-outline',
@@ -56,26 +57,65 @@ const ItineraryListScreen = ({ route, navigation }) => {
       try {
         let data = [];
 
+        // Always include sample data first (detailed itineraries)
         if (destination) {
-          const searchResponse = await fetch(
-            `${API_CONFIG.BASE_URL}/itineraries/search?destination=${encodeURIComponent(destination)}`
-          );
-
-          if (!searchResponse.ok) {
-            throw new Error(`Failed to fetch itineraries: ${searchResponse.status}`);
+          const sampleData = getSampleItineraries(destination);
+          if (sampleData.length > 0) {
+            data = [...sampleData];
+            console.log(`Added ${sampleData.length} sample itineraries for ${destination}`);
           }
-
-          data = await searchResponse.json();
         }
 
-        if (!destination || data.length === 0) {
-          const fallbackResponse = await fetch(`${API_CONFIG.BASE_URL}/itineraries`);
+        // Then try to get additional itineraries from API
+        try {
+          if (destination) {
+            const searchResponse = await fetch(
+              `${API_CONFIG.BASE_URL}/itineraries/search?destination=${encodeURIComponent(destination)}`
+            );
 
-          if (!fallbackResponse.ok) {
-            throw new Error(`Failed to fetch itineraries: ${fallbackResponse.status}`);
+            if (searchResponse.ok) {
+              const apiData = await searchResponse.json();
+              if (apiData && apiData.length > 0) {
+                // Filter out duplicates by title to avoid showing sample data twice
+                const existingTitles = new Set(data.map(item => item.title));
+                const uniqueApiData = apiData.filter(item => !existingTitles.has(item.title));
+                data = [...data, ...uniqueApiData];
+                console.log(`Added ${uniqueApiData.length} additional API itineraries for ${destination}`);
+              }
+            }
           }
 
-          data = await fallbackResponse.json();
+          // If still no data, try general API endpoint
+          if (data.length === 0) {
+            const fallbackResponse = await fetch(`${API_CONFIG.BASE_URL}/itineraries`);
+
+            if (fallbackResponse.ok) {
+              const apiData = await fallbackResponse.json();
+              if (apiData && apiData.length > 0) {
+                // Filter by destination if available, otherwise take first few
+                let filteredApiData = apiData;
+                if (destination) {
+                  filteredApiData = apiData.filter(item =>
+                    item.destination?.toLowerCase().includes(destination.toLowerCase()) ||
+                    item.title?.toLowerCase().includes(destination.toLowerCase())
+                  );
+                }
+                // Take only a few to not overwhelm
+                data = filteredApiData.slice(0, 3);
+                console.log(`Added ${data.length} fallback API itineraries`);
+              }
+            }
+          }
+        } catch (apiError) {
+          console.log('API not available, using only sample data:', apiError.message);
+        }
+
+        // If still no data at all, show empty state
+        if (data.length === 0) {
+          console.log(`No itineraries available for ${destination}`);
+          setItineraries([]);
+          setLoading(false);
+          return;
         }
 
         const normalized = data.map(normalizeItinerary);
@@ -88,8 +128,22 @@ const ItineraryListScreen = ({ route, navigation }) => {
 
         setItineraries(filtered);
       } catch (error) {
-        console.error('Error fetching itineraries', error);
-        setItineraries([]);
+        console.error('Error loading itineraries', error);
+        // Final fallback to sample data only
+        if (destination) {
+          const sampleData = getSampleItineraries(destination);
+          const normalized = sampleData.map(normalizeItinerary);
+          let filtered = normalized;
+
+          if (budget) {
+            const budgetNum = parseInt(budget, 10);
+            filtered = normalized.filter((item) => item.price <= budgetNum * 1.2);
+          }
+
+          setItineraries(filtered);
+        } else {
+          setItineraries([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -183,7 +237,7 @@ const ItineraryListScreen = ({ route, navigation }) => {
           <Text style={styles.headerTitle}>Itineraries</Text>
           <Text style={styles.headerSubtitle}>{destination}</Text>
         </View>
-        <TouchableOpacity onPress={() => navigation.navigate('Cart')}>
+        <TouchableOpacity onPress={() => navigation.navigate('CustomerTabs', { screen: 'CartTab' })}>
           <Ionicons name="cart" size={24} color={Colors.secondary} />
         </TouchableOpacity>
       </View>
