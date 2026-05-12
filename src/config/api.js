@@ -2,7 +2,7 @@ import { NativeModules, Platform } from 'react-native';
 
 const LOCALHOSTS = new Set(['localhost', '127.0.0.1']);
 
-const LOCAL_IP = 'localhost';
+const PRODUCTION_API_URL = 'https://itinera-backend-ds3v.onrender.com/api';
 
 const extractHostFromScriptUrl = () => {
   const scriptURL = NativeModules?.SourceCode?.scriptURL;
@@ -22,19 +22,15 @@ const resolveHost = () => {
 
   // Expo LAN
   if (scriptHost && !LOCALHOSTS.has(scriptHost)) {
-    return scriptHost;
+    return `http://${scriptHost}:8080/api`;
   }
 
-  // ✅ Fallback for APK
-  return LOCAL_IP;
+  // APK / production fallback
+  return PRODUCTION_API_URL;
 };
 
-const host = resolveHost();
-
 const API_CONFIG = {
-  BASE_URL:
-    process.env.EXPO_PUBLIC_API_URL ||
-    `http://${host}:8080/api`,
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || resolveHost(),
 
   TIMEOUT: 10000,
 };
