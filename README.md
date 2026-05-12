@@ -303,10 +303,32 @@ python train_model.py \
 | Variable | Description |
 |---|---|
 | `EXPO_PUBLIC_API_URL` | Backend base URL |
-| `EXPO_PUBLIC_AI_SERVICE_URL` | AI service base URL |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth Web Client ID |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Google OAuth iOS Client ID |
 | `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google OAuth Android Client ID |
+
+### Render Deployment
+
+This repo includes a [render.yaml](/Users/madhujasingh/Desktop/travelApp2/render.yaml:1) Blueprint that provisions:
+- `itinera-backend` as a public Spring Boot web service
+- `itinera-ai` as a private FastAPI service
+- `itinera-postgres` as a private Render Postgres database
+
+The backend reads the database connection from Render's internal Postgres URL and proxies AI requests to the private AI service over Render's private network.
+
+To deploy on Render:
+
+1. Push this repo to GitHub.
+2. In Render, choose `New +` -> `Blueprint`.
+3. Select the repository and confirm the `render.yaml` file.
+4. Fill in prompted secret values such as `AUTHORIZED_ADMIN_EMAILS`, Google OAuth IDs, and mail credentials if you use those features.
+5. After the first deploy, set your mobile app env `EXPO_PUBLIC_API_URL` to the backend's public Render URL plus `/api`.
+
+Example:
+
+```bash
+EXPO_PUBLIC_API_URL=https://itinera-backend.onrender.com/api
+```
 
 > **Network note:** The app auto-detects the backend host. On Android emulators it falls back to `10.0.2.2`. On physical devices it reads the Metro bundler host from `NativeModules.SourceCode.scriptURL`.
 
@@ -536,5 +558,3 @@ The admin `AdminPosterStudioScreen` generates marketing content without any exte
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
-
-

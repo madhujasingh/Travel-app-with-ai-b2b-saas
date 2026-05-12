@@ -36,10 +36,6 @@ const API_CONFIG = {
     process.env.EXPO_PUBLIC_API_URL ||
     `http://${host}:8080/api`,
 
-  AI_SERVICE_URL:
-    process.env.EXPO_PUBLIC_AI_SERVICE_URL ||
-    `http://${host}:8000`,
-
   TIMEOUT: 10000,
 };
 

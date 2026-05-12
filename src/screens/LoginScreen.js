@@ -60,8 +60,10 @@ const LoginScreen = () => {
     webClientId: googleWebClientId || undefined,
     iosClientId: googleIosClientId || undefined,
     androidClientId: googleAndroidClientId || undefined,
-    redirectUri,
     scopes: ['profile', 'email'],
+    shouldAutoExchangeCode: true,
+    // Add additional security measures
+    prompt: 'select_account',
   });
 
   useEffect(() => {
@@ -213,7 +215,11 @@ const LoginScreen = () => {
       }
     } catch (error) {
       setGoogleLoading(false);
-      Alert.alert('Google Sign-In Failed', 'Unable to start Google sign-in.');
+        Alert.alert(
+          'Google Sign-In Failed',
+          'Please check your Google Cloud Console OAuth settings. Since your app is published, ensure:\n\n1. Authorized redirect URIs include Expo proxy URLs\n2. Authorized JavaScript origins are set\n3. Your app may need additional Google verification\n\nContact the developer if issues persist.',
+          [{ text: 'OK' }]
+        );
     }
   };
 

@@ -290,7 +290,7 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
         recommendation_type: algorithm,
       };
 
-      const response = await fetch(`${API_CONFIG.AI_SERVICE_URL}/recommend`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/ai/recommendations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

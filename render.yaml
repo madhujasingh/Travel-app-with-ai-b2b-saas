@@ -1,0 +1,62 @@
+services:
+  - name: itinera-backend
+    type: web
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: itinera-postgres
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JPA_DDL_AUTO
+        value: update
+      - key: AI_SERVICE_URL
+        fromService:
+          name: itinera-ai
+          type: pserv
+          property: hostport
+      - key: AUTHORIZED_ADMIN_EMAILS
+        sync: false
+      - key: GOOGLE_WEB_CLIENT_ID
+        sync: false
+      - key: GOOGLE_IOS_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ANDROID_CLIENT_ID
+        sync: false
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+
+  - name: itinera-ai
+    type: pserv
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: ai-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: TRAINED_RECOMMENDER_ARTIFACT
+        value: /opt/render/project/src/ai-service/artifacts/travel_model_app.json
+
+databases:
+  - name: itinera-postgres
+    plan: basic-256mb
+    region: oregon
+    databaseName: itinera_db
+    user: itinera
