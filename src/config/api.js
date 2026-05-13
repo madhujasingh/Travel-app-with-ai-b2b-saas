@@ -16,7 +16,7 @@ const resolveHost = () => {
   const scriptHost = extractHostFromScriptUrl();
 
   // Android emulator
-  if (Platform.OS === 'android' && (!scriptHost || LOCALHOSTS.has(scriptHost))) {
+  if (Platform.OS === 'android' && scriptHost && LOCALHOSTS.has(scriptHost)) {
     return '10.0.2.2';
   }
 
