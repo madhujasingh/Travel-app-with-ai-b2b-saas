@@ -22,4 +22,9 @@ public class FlightController {
     public ResponseEntity<JsonNode> searchFlights(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.searchFlights(payload));
     }
+
+    @PostMapping("/review")
+    public ResponseEntity<JsonNode> reviewFlight(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.reviewFlight(payload));
+    }
 }

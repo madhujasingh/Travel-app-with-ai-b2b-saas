@@ -15,4 +15,8 @@ public class FlightService {
     public JsonNode searchFlights(JsonNode payload) {
         return tripJackClient.post("/fms/v1/air-search-all", payload);
     }
+
+    public JsonNode reviewFlight(JsonNode payload) {
+        return tripJackClient.post("/fms/v1/review", payload);
+    }
 }
