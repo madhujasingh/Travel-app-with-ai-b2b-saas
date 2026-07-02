@@ -55,7 +55,7 @@ const LoginScreen = () => {
     '';
   const googleIosClientId = googleIosClientIdRaw || googleWebClientId;
   const googleAndroidClientId = googleAndroidClientIdRaw || googleWebClientId;
-  const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+  const redirectUri = AuthSession.makeRedirectUri();
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: googleWebClientId || undefined,
     iosClientId: googleIosClientId || undefined,
@@ -209,7 +209,7 @@ const LoginScreen = () => {
 
     setGoogleLoading(true);
     try {
-      const result = await promptAsync({ useProxy: true });
+      const result = await promptAsync();
       if (result?.type !== 'success') {
         setGoogleLoading(false);
       }

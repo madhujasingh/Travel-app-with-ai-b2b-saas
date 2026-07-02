@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -89,7 +89,11 @@ const CartScreen = ({ route, navigation }) => {
   const renderCartItem = (item) => (
     <View key={item.id} style={styles.cartItem}>
       <View style={styles.itemHeader}>
-        <Text style={styles.itemImage}>{item.image}</Text>
+        {item.iconName ? (
+          <Ionicons name={item.iconName} size={22} color={Colors.primary} style={styles.itemIcon} />
+        ) : (
+          <Text style={styles.itemImage}>{item.image}</Text>
+        )}
         <View style={styles.itemInfo}>
           <Text style={styles.itemTitle}>{item.title}</Text>
           <Text style={styles.itemDestination}>{item.destination}</Text>
@@ -117,7 +121,7 @@ const CartScreen = ({ route, navigation }) => {
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Subtotal:</Text>
           <Text style={styles.detailValueTotal}>
-            ₹{(item.price * item.people).toLocaleString()}
+            ₹{Math.round(item.lineTotal || item.price * item.people).toLocaleString()}
           </Text>
         </View>
       </View>
@@ -257,6 +261,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: Colors.primary,
+  },
+  itemIcon: {
+    marginRight: 12,
+    marginTop: 2,
   },
   emptyContainer: {
     flex: 1,

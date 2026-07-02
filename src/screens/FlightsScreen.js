@@ -3,8 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
+  Pressable,
   SafeAreaView,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
+import { useCart } from '../context/CartContext';
 
 const AIRPORT_OPTIONS = [
   { code: 'DEL', city: 'Delhi' },
@@ -74,6 +76,52 @@ const formatDateForApi = (value) => {
 
   return null;
 };
+
+const formatDateForDisplay = (date) => {
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const parseDisplayDate = (value) => {
+  const normalized = formatDateForApi(value);
+  if (!normalized) return null;
+
+  const [year, month, day] = normalized.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const addMonths = (date, count) => new Date(date.getFullYear(), date.getMonth() + count, 1);
+
+const isSameDay = (left, right) =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+
+const buildCalendarDays = (monthDate) => {
+  const monthStart = startOfMonth(monthDate);
+  const firstWeekDay = monthStart.getDay();
+  const calendarStart = new Date(monthStart);
+  calendarStart.setDate(monthStart.getDate() - firstWeekDay);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const nextDate = new Date(calendarStart);
+    nextDate.setDate(calendarStart.getDate() + index);
+    return nextDate;
+  });
+};
+
+const MONTH_LABEL = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  year: 'numeric',
+});
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const resolveAirportCode = (value) => {
   const normalized = value.trim().toUpperCase();
@@ -157,6 +205,62 @@ const flattenTripBuckets = (tripInfos = {}) => {
   return flattened;
 };
 
+const flattenReviewTrips = (data) => {
+  if (Array.isArray(data?.tripInfos)) {
+    return data.tripInfos.map((trip, index) => ({
+      bucket: 'REVIEW',
+      tripIndex: index,
+      trip,
+    }));
+  }
+
+  return flattenTripBuckets(data?.tripInfos || data?.searchResult?.tripInfos);
+};
+
+const getPassengerPricing = (fareDetails = {}) => ({
+  adult: Number(fareDetails?.ADULT?.fC?.TF || 0),
+  child: Number(fareDetails?.CHILD?.fC?.TF || 0),
+  infant: Number(fareDetails?.INFANT?.fC?.TF || 0),
+});
+
+const buildFlightCartItem = ({ flight, reviewResponse, passengerCounts }) => {
+  const reviewedTrip = flattenReviewTrips(reviewResponse)?.[0]?.trip;
+  const reviewedPricing = getPassengerPricing(reviewedTrip?.totalPriceList?.[0]?.fd);
+  const fallbackPricing = flight?.passengerPricing || {};
+  const adultPrice = reviewedPricing.adult || fallbackPricing.adult || flight?.price || 0;
+  const childPrice = reviewedPricing.child || fallbackPricing.child || adultPrice;
+  const infantPrice = reviewedPricing.infant || fallbackPricing.infant || 0;
+  const people =
+    Number(passengerCounts?.adults || 0) +
+    Number(passengerCounts?.children || 0) +
+    Number(passengerCounts?.infants || 0);
+
+  const lineTotal =
+    Number(passengerCounts?.adults || 0) * adultPrice +
+    Number(passengerCounts?.children || 0) * childPrice +
+    Number(passengerCounts?.infants || 0) * infantPrice;
+
+  return {
+    id: `flight-${flight.id}`,
+    title: `${flight.airline}${flight.flightNo ? ` ${flight.flightNo}` : ''}`,
+    destination: `${flight.from} -> ${flight.to}`,
+    duration: flight.duration,
+    price: adultPrice,
+    people: people || 1,
+    lineTotal: lineTotal || adultPrice,
+    adults: Number(passengerCounts?.adults || 0),
+    children: Number(passengerCounts?.children || 0),
+    infants: Number(passengerCounts?.infants || 0),
+    image: 'Flight',
+    iconName: 'airplane-outline',
+    fareType: flight.fareType,
+    journeyLabel: flight.journeyLabel,
+    reviewResponse,
+    priceIds: flight.priceIds,
+    addedAt: new Date().toISOString(),
+  };
+};
+
 const mapFlightsFromResponse = (data) => {
   const flattenedTrips = flattenTripBuckets(data?.searchResult?.tripInfos);
 
@@ -189,11 +293,13 @@ const mapFlightsFromResponse = (data) => {
       journeyLabel,
       segmentCount: segments.length,
       priceIds: trip?.totalPriceList?.map((priceInfo) => priceInfo?.id).filter(Boolean) || [],
+      passengerPricing: getPassengerPricing(totalPrice?.fd),
     };
   });
 };
 
 const FlightsScreen = ({ navigation }) => {
+  const { addItemToCart } = useCart();
   const [tripType, setTripType] = useState('ONE_WAY');
   const [routes, setRoutes] = useState([createEmptyRoute('Delhi', 'Mumbai', '10/06/2026')]);
   const [returnDate, setReturnDate] = useState('12/06/2026');
@@ -207,6 +313,15 @@ const FlightsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [flights, setFlights] = useState([]);
   const [searched, setSearched] = useState(false);
+  const [reviewedFare, setReviewedFare] = useState(null);
+  const today = startOfDay(new Date());
+  const [calendarState, setCalendarState] = useState({
+    visible: false,
+    target: null,
+    routeIndex: null,
+    month: startOfMonth(today),
+    selected: today,
+  });
 
   const updateRoute = (index, key, value) => {
     setRoutes((currentRoutes) =>
@@ -382,6 +497,7 @@ const FlightsScreen = ({ navigation }) => {
 
       setLoading(true);
       setSearched(true);
+      setReviewedFare(null);
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/search`, {
         method: 'POST',
@@ -424,15 +540,48 @@ const FlightsScreen = ({ navigation }) => {
         throw new Error(data?.message || 'Unable to review this fare right now.');
       }
 
-      Alert.alert(
-        'Review Ready',
-        `TripJack review loaded for ${flight.airline}. Response contains ${Array.isArray(data?.tripInfos) ? data.tripInfos.length : 0} reviewed trip(s).`
-      );
+      const passengerCounts = {
+        adults: Number(adults || 0),
+        children: Number(children || 0),
+        infants: Number(infants || 0),
+      };
+      const cartItem = buildFlightCartItem({
+        flight,
+        reviewResponse: data,
+        passengerCounts,
+      });
+
+      setReviewedFare({
+        flight,
+        reviewResponse: data,
+        passengerCounts,
+        cartItem,
+      });
     } catch (error) {
       Alert.alert('Review Fare', error.message || 'Unable to review this fare right now.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const addReviewedFareToCart = () => {
+    if (!reviewedFare?.cartItem) {
+      return;
+    }
+
+    addItemToCart(reviewedFare.cartItem);
+    Alert.alert('Added to cart', `${reviewedFare.cartItem.title} is ready in your cart.`);
+  };
+
+  const continueReviewedFareToCheckout = () => {
+    if (!reviewedFare?.cartItem) {
+      return;
+    }
+
+    navigation.navigate('Checkout', {
+      cartItems: [reviewedFare.cartItem],
+      total: reviewedFare.cartItem.lineTotal,
+    });
   };
 
   const renderFlight = ({ item }) => (
@@ -522,6 +671,53 @@ const FlightsScreen = ({ navigation }) => {
   const routeHeaderLabel =
     tripType === 'MULTI_CITY' ? 'Route Legs' : 'Route';
 
+  const openCalendar = ({ target, routeIndex = null, currentValue = '' }) => {
+    const parsedDate = parseDisplayDate(currentValue);
+    const safeDate = parsedDate && parsedDate >= today ? parsedDate : today;
+
+    setCalendarState({
+      visible: true,
+      target,
+      routeIndex,
+      month: startOfMonth(safeDate),
+      selected: safeDate,
+    });
+  };
+
+  const closeCalendar = () => {
+    setCalendarState((currentState) => ({
+      ...currentState,
+      visible: false,
+    }));
+  };
+
+  const handleCalendarDateSelect = (date) => {
+    if (date < today) {
+      return;
+    }
+
+    const formatted = formatDateForDisplay(date);
+
+    if (calendarState.target === 'return') {
+      setReturnDate(formatted);
+    } else if (typeof calendarState.routeIndex === 'number') {
+      updateRoute(calendarState.routeIndex, 'travelDate', formatted);
+    }
+
+    closeCalendar();
+  };
+
+  const shiftCalendarMonth = (offset) => {
+    setCalendarState((currentState) => ({
+      ...currentState,
+      month: addMonths(currentState.month, offset),
+    }));
+  };
+
+  const canGoToPreviousMonth =
+    startOfMonth(calendarState.month) > startOfMonth(today);
+  const calendarDays = buildCalendarDays(calendarState.month);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
@@ -542,193 +738,404 @@ const FlightsScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.searchForm}>
-            <Text style={styles.sectionTitle}>Trip Type</Text>
-            <View style={styles.pillWrap}>
-              {TRIP_TYPES.map((option) => {
-                const active = tripType === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => setTripTypeWithDefaults(option.value)}
-                  >
-                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={styles.heroCard}>
+              <View style={styles.heroBadge}>
+                <Ionicons name="airplane" size={14} color={Colors.secondary} />
+                <Text style={styles.heroBadgeText}>Live airfare search</Text>
+              </View>
+              <Text style={styles.heroTitle}>Plan the smartest route, then lock the best fare.</Text>
+              <Text style={styles.heroSubtitle}>
+                Compare one-way, return, and multi-city options with live TripJack pricing and review-ready checkout.
+              </Text>
+              <View style={styles.heroMetrics}>
+                <View style={styles.metricPill}>
+                  <Text style={styles.metricLabel}>Cabin</Text>
+                  <Text style={styles.metricValue}>{cabinClass.replace(/_/g, ' ')}</Text>
+                </View>
+                <View style={styles.metricPill}>
+                  <Text style={styles.metricLabel}>Travellers</Text>
+                  <Text style={styles.metricValue}>{Number(adults) + Number(children) + Number(infants)}</Text>
+                </View>
+                <View style={styles.metricPill}>
+                  <Text style={styles.metricLabel}>Filter</Text>
+                  <Text style={styles.metricValue}>{connectionFilter}</Text>
+                </View>
+              </View>
             </View>
 
-            <Text style={styles.sectionTitle}>{routeHeaderLabel}</Text>
-            {routes.map((route, index) => (
-              <View key={`route-${index}`} style={styles.routeCard}>
-                <View style={styles.routeHeader}>
-                  <Text style={styles.routeTitle}>Leg {index + 1}</Text>
-                  {tripType === 'MULTI_CITY' && routes.length > 2 ? (
-                    <TouchableOpacity onPress={() => removeMultiCityRoute(index)}>
-                      <Ionicons name="trash-outline" size={18} color={Colors.error} />
-                    </TouchableOpacity>
-                  ) : null}
+            <View style={styles.formSurface}>
+              <View style={styles.sectionBlock}>
+                <View style={styles.sectionHeaderRow}>
+                  <View>
+                    <Text style={styles.sectionEyebrow}>Search setup</Text>
+                    <Text style={styles.sectionTitle}>Trip Type</Text>
+                  </View>
+                </View>
+                <View style={styles.pillWrap}>
+                  {TRIP_TYPES.map((option) => {
+                    const active = tripType === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.pill, active && styles.pillActive]}
+                        onPress={() => setTripTypeWithDefaults(option.value)}
+                      >
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.sectionBlock}>
+                <View style={styles.sectionHeaderRow}>
+                  <View>
+                    <Text style={styles.sectionEyebrow}>Route builder</Text>
+                    <Text style={styles.sectionTitle}>{routeHeaderLabel}</Text>
+                  </View>
+                </View>
+                {routes.map((route, index) => (
+                  <View key={`route-${index}`} style={styles.routeCard}>
+                    <View style={styles.routeHeader}>
+                      <View style={styles.routeTag}>
+                        <Text style={styles.routeTagText}>Leg {index + 1}</Text>
+                      </View>
+                      {tripType === 'MULTI_CITY' && routes.length > 2 ? (
+                        <TouchableOpacity style={styles.routeDeleteButton} onPress={() => removeMultiCityRoute(index)}>
+                          <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.routeGrid}>
+                      <View style={[styles.inputContainer, styles.routeField]}>
+                        <Text style={styles.inputLabel}>From</Text>
+                        <View style={styles.inputShell}>
+                          <Ionicons name="airplane-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Delhi or DEL"
+                            placeholderTextColor={Colors.textMuted}
+                            value={route.from}
+                            onChangeText={(value) => updateRoute(index, 'from', value)}
+                            autoCapitalize="characters"
+                          />
+                        </View>
+                      </View>
+
+                      <TouchableOpacity style={styles.swapButton} onPress={() => swapRouteCities(index)}>
+                        <Ionicons name="swap-horizontal" size={18} color={Colors.secondary} />
+                      </TouchableOpacity>
+
+                      <View style={[styles.inputContainer, styles.routeField]}>
+                        <Text style={styles.inputLabel}>To</Text>
+                        <View style={styles.inputShell}>
+                          <Ionicons name="location-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Mumbai or BOM"
+                            placeholderTextColor={Colors.textMuted}
+                            value={route.to}
+                            onChangeText={(value) => updateRoute(index, 'to', value)}
+                            autoCapitalize="characters"
+                          />
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>Departure</Text>
+                      <Pressable
+                        style={styles.inputShell}
+                        onPress={() =>
+                          openCalendar({
+                            target: 'route',
+                            routeIndex: index,
+                            currentValue: route.travelDate,
+                          })
+                        }
+                      >
+                        <Ionicons name="calendar-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                        <Text style={[styles.dateDisplayText, !route.travelDate && styles.dateDisplayPlaceholder]}>
+                          {route.travelDate || 'Select departure date'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+
+                {tripType === 'MULTI_CITY' ? (
+                  <TouchableOpacity style={styles.secondaryButton} onPress={addMultiCityRoute}>
+                    <Ionicons name="add-circle-outline" size={18} color={Colors.primaryDark} />
+                    <Text style={styles.secondaryButtonText}>Add Route Leg</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {tripType === 'RETURN' ? (
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Return Date</Text>
+                    <Pressable
+                      style={styles.inputShell}
+                      onPress={() =>
+                        openCalendar({
+                          target: 'return',
+                          currentValue: returnDate,
+                        })
+                      }
+                    >
+                      <Ionicons name="calendar-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                      <Text style={[styles.dateDisplayText, !returnDate && styles.dateDisplayPlaceholder]}>
+                        {returnDate || 'Select return date'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.sectionBlock}>
+                <View style={styles.sectionHeaderRow}>
+                  <View>
+                    <Text style={styles.sectionEyebrow}>Traveller details</Text>
+                    <Text style={styles.sectionTitle}>Passengers</Text>
+                  </View>
+                </View>
+                <View style={styles.passengerGrid}>
+                  <View style={[styles.inputContainer, styles.passengerCard]}>
+                    <Text style={styles.inputLabel}>Adults</Text>
+                    <TextInput
+                      style={[styles.input, styles.numericInput]}
+                      value={adults}
+                      onChangeText={setAdults}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={[styles.inputContainer, styles.passengerCard]}>
+                    <Text style={styles.inputLabel}>Children</Text>
+                    <TextInput
+                      style={[styles.input, styles.numericInput]}
+                      value={children}
+                      onChangeText={setChildren}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={[styles.inputContainer, styles.passengerCardNoMargin]}>
+                    <Text style={styles.inputLabel}>Infants</Text>
+                    <TextInput
+                      style={[styles.input, styles.numericInput]}
+                      value={infants}
+                      onChangeText={setInfants}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionEyebrow}>Preferences</Text>
+                <Text style={styles.sectionTitle}>Cabin Class</Text>
+                <View style={styles.pillWrap}>
+                  {CABIN_CLASSES.map((option) => {
+                    const active = cabinClass === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        style={[styles.pill, active && styles.pillActive]}
+                        onPress={() => setCabinClass(option)}
+                      >
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.replace(/_/g, ' ')}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
-                <View style={styles.inputRow}>
-                  <View style={[styles.inputContainer, { flex: 1, marginRight: 10 }]}>
-                    <Text style={styles.inputLabel}>From</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Delhi or DEL"
-                      placeholderTextColor={Colors.textMuted}
-                      value={route.from}
-                      onChangeText={(value) => updateRoute(index, 'from', value)}
-                      autoCapitalize="characters"
-                    />
-                  </View>
-                  <TouchableOpacity style={styles.swapButton} onPress={() => swapRouteCities(index)}>
-                    <Text style={styles.swapIcon}>⇄</Text>
-                  </TouchableOpacity>
-                  <View style={[styles.inputContainer, { flex: 1, marginLeft: 10 }]}>
-                    <Text style={styles.inputLabel}>To</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Mumbai or BOM"
-                      placeholderTextColor={Colors.textMuted}
-                      value={route.to}
-                      onChangeText={(value) => updateRoute(index, 'to', value)}
-                      autoCapitalize="characters"
-                    />
-                  </View>
+                <Text style={styles.sectionTitle}>Flight Filter</Text>
+                <View style={styles.pillWrap}>
+                  {CONNECTION_FILTERS.map((option) => {
+                    const active = connectionFilter === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.pill, active && styles.pillActive]}
+                        onPress={() => setConnectionFilter(option.value)}
+                      >
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.sectionTitle}>Fare Type</Text>
+                <View style={styles.pillWrap}>
+                  {PASSENGER_FARE_TYPES.map((option) => {
+                    const active = fareType === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.pill, active && styles.pillActive]}
+                        onPress={() => setFareType(option.value)}
+                      >
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Departure</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="DD/MM/YYYY"
-                    placeholderTextColor={Colors.textMuted}
-                    value={route.travelDate}
-                    onChangeText={(value) => updateRoute(index, 'travelDate', value)}
-                  />
+                  <Text style={styles.inputLabel}>Preferred Airlines</Text>
+                  <View style={styles.inputShell}>
+                    <Ionicons name="sparkles-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Optional: SG, 6E, AI"
+                      placeholderTextColor={Colors.textMuted}
+                      value={preferredAirlines}
+                      onChangeText={setPreferredAirlines}
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                  <Text style={styles.helperText}>Enter up to 10 airline codes, separated by commas.</Text>
                 </View>
               </View>
-            ))}
 
-            {tripType === 'MULTI_CITY' ? (
-              <TouchableOpacity style={styles.secondaryButton} onPress={addMultiCityRoute}>
-                <Text style={styles.secondaryButtonText}>Add Route Leg</Text>
+              <TouchableOpacity style={styles.searchButton} onPress={searchFlights} disabled={loading}>
+                <View>
+                  <Text style={styles.searchButtonText}>{loading ? 'Searching live fares...' : 'Search Flights'}</Text>
+                  <Text style={styles.searchButtonSubtext}>Best live options across your selected route</Text>
+                </View>
+                <Ionicons name="arrow-forward" size={20} color={Colors.secondary} />
               </TouchableOpacity>
-            ) : null}
 
-            {tripType === 'RETURN' ? (
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Return Date</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="DD/MM/YYYY"
-                  placeholderTextColor={Colors.textMuted}
-                  value={returnDate}
-                  onChangeText={setReturnDate}
-                />
-              </View>
-            ) : null}
+              {reviewedFare ? (
+                <View style={styles.reviewCard}>
+                  <View style={styles.reviewHeader}>
+                    <View>
+                      <Text style={styles.reviewTitle}>Fare Review Ready</Text>
+                      <Text style={styles.reviewSubtitle}>
+                        {reviewedFare.flight.airline} {reviewedFare.flight.flightNo || ''} • {reviewedFare.flight.from} to {reviewedFare.flight.to}
+                      </Text>
+                    </View>
+                    <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
+                  </View>
 
-            <Text style={styles.sectionTitle}>Passengers</Text>
-            <View style={styles.inputRow}>
-              <View style={[styles.inputContainer, styles.smallInput]}>
-                <Text style={styles.inputLabel}>Adults</Text>
-                <TextInput
-                  style={styles.input}
-                  value={adults}
-                  onChangeText={setAdults}
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.inputContainer, styles.smallInput]}>
-                <Text style={styles.inputLabel}>Children</Text>
-                <TextInput
-                  style={styles.input}
-                  value={children}
-                  onChangeText={setChildren}
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={[styles.inputContainer, styles.smallInput]}>
-                <Text style={styles.inputLabel}>Infants</Text>
-                <TextInput
-                  style={styles.input}
-                  value={infants}
-                  onChangeText={setInfants}
-                  keyboardType="numeric"
-                />
-              </View>
+                  <View style={styles.reviewMetaRow}>
+                    <Text style={styles.reviewMetaLabel}>Passengers</Text>
+                    <Text style={styles.reviewMetaValue}>
+                      {reviewedFare.passengerCounts.adults}A / {reviewedFare.passengerCounts.children}C / {reviewedFare.passengerCounts.infants}I
+                    </Text>
+                  </View>
+                  <View style={styles.reviewMetaRow}>
+                    <Text style={styles.reviewMetaLabel}>Fare Type</Text>
+                    <Text style={styles.reviewMetaValue}>{reviewedFare.flight.fareType}</Text>
+                  </View>
+                  <View style={styles.reviewMetaRow}>
+                    <Text style={styles.reviewMetaLabel}>Estimated Total</Text>
+                    <Text style={styles.reviewPrice}>₹{Math.round(reviewedFare.cartItem.lineTotal).toLocaleString()}</Text>
+                  </View>
+
+                  <Text style={styles.reviewHelper}>
+                    Review response loaded from TripJack. You can now save this fare to cart or continue to checkout.
+                  </Text>
+
+                  <View style={styles.reviewActions}>
+                    <TouchableOpacity style={styles.reviewSecondaryButton} onPress={addReviewedFareToCart}>
+                      <Text style={styles.reviewSecondaryButtonText}>Add to Cart</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.reviewPrimaryButton} onPress={continueReviewedFareToCheckout}>
+                      <Text style={styles.reviewPrimaryButtonText}>Continue</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
             </View>
-
-            <Text style={styles.sectionTitle}>Cabin Class</Text>
-            <View style={styles.pillWrap}>
-              {CABIN_CLASSES.map((option) => {
-                const active = cabinClass === option;
-                return (
-                  <TouchableOpacity
-                    key={option}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => setCabinClass(option)}
-                  >
-                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.replace(/_/g, ' ')}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.sectionTitle}>Flight Filter</Text>
-            <View style={styles.pillWrap}>
-              {CONNECTION_FILTERS.map((option) => {
-                const active = connectionFilter === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => setConnectionFilter(option.value)}
-                  >
-                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.sectionTitle}>Fare Type</Text>
-            <View style={styles.pillWrap}>
-              {PASSENGER_FARE_TYPES.map((option) => {
-                const active = fareType === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => setFareType(option.value)}
-                  >
-                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Preferred Airlines</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Optional: SG, 6E, AI"
-                placeholderTextColor={Colors.textMuted}
-                value={preferredAirlines}
-                onChangeText={setPreferredAirlines}
-                autoCapitalize="characters"
-              />
-              <Text style={styles.helperText}>Enter up to 10 airline codes, separated by commas.</Text>
-            </View>
-
-            <TouchableOpacity style={styles.searchButton} onPress={searchFlights} disabled={loading}>
-              <Text style={styles.searchButtonText}>{loading ? 'Searching...' : 'Search Flights'}</Text>
-            </TouchableOpacity>
           </View>
         }
         ListEmptyComponent={renderEmptyState}
       />
+
+      <Modal
+        visible={calendarState.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCalendar}
+      >
+        <Pressable style={styles.calendarOverlay} onPress={closeCalendar}>
+          <Pressable style={styles.calendarModal} onPress={() => {}}>
+            <View style={styles.calendarModalHeader}>
+              <View>
+                <Text style={styles.calendarEyebrow}>Choose date</Text>
+                <Text style={styles.calendarTitle}>
+                  {calendarState.target === 'return' ? 'Return date' : 'Departure date'}
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.calendarCloseButton} onPress={closeCalendar}>
+                <Ionicons name="close" size={18} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.calendarMonthRow}>
+              <TouchableOpacity
+                style={[styles.calendarArrowButton, !canGoToPreviousMonth && styles.calendarArrowDisabled]}
+                onPress={() => shiftCalendarMonth(-1)}
+                disabled={!canGoToPreviousMonth}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={18}
+                  color={canGoToPreviousMonth ? Colors.text : Colors.textMuted}
+                />
+              </TouchableOpacity>
+              <Text style={styles.calendarMonthLabel}>
+                {MONTH_LABEL.format(calendarState.month)}
+              </Text>
+              <TouchableOpacity style={styles.calendarArrowButton} onPress={() => shiftCalendarMonth(1)}>
+                <Ionicons name="chevron-forward" size={18} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.calendarWeekRow}>
+              {WEEKDAY_LABELS.map((label) => (
+                <Text key={label} style={styles.calendarWeekday}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {calendarDays.map((date) => {
+                const isCurrentMonth = date.getMonth() === calendarState.month.getMonth();
+                const isPast = date < today;
+                const isSelected = isSameDay(date, calendarState.selected);
+
+                return (
+                  <TouchableOpacity
+                    key={date.toISOString()}
+                    style={[
+                      styles.calendarDay,
+                      isSelected && styles.calendarDaySelected,
+                      (!isCurrentMonth || isPast) && styles.calendarDayMuted,
+                    ]}
+                    onPress={() => handleCalendarDateSelect(date)}
+                    disabled={isPast}
+                  >
+                    <Text
+                      style={[
+                        styles.calendarDayText,
+                        !isCurrentMonth && styles.calendarDayTextFaded,
+                        isPast && styles.calendarDayTextDisabled,
+                        isSelected && styles.calendarDayTextSelected,
+                      ]}
+                    >
+                      {date.getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.calendarHint}>Past dates are disabled for flight search.</Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -739,44 +1146,160 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: Colors.primary,
+    backgroundColor: '#FF6A21',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 15,
-    paddingTop: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 19,
+    fontWeight: '800',
     color: Colors.secondary,
+    letterSpacing: 0.2,
   },
   searchForm: {
+    paddingTop: 18,
+  },
+  heroCard: {
+    backgroundColor: '#1E2530',
+    borderRadius: 28,
+    padding: 22,
+    marginBottom: 18,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
+    elevation: 10,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginBottom: 16,
+  },
+  heroBadgeText: {
+    color: Colors.secondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  heroTitle: {
+    color: Colors.secondary,
+    fontSize: 28,
+    fontWeight: '800',
+    lineHeight: 34,
+    maxWidth: '90%',
+  },
+  heroSubtitle: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 10,
+  },
+  heroMetrics: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 18,
+  },
+  metricPill: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginRight: 10,
+    marginBottom: 10,
+    minWidth: 92,
+  },
+  metricLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  metricValue: {
+    color: Colors.secondary,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  formSurface: {
     backgroundColor: Colors.card,
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderRadius: 30,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#F9E5D8',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  sectionBlock: {
+    marginBottom: 20,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  sectionEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
     color: Colors.text,
-    marginBottom: 12,
-    marginTop: 4,
+    marginBottom: 14,
   },
   routeCard: {
-    backgroundColor: Colors.background,
-    borderRadius: 18,
-    padding: 14,
+    backgroundColor: '#FFF9F5',
+    borderRadius: 24,
+    padding: 16,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#F7DDCF',
     marginBottom: 14,
   },
   routeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 14,
+  },
+  routeTag: {
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  routeTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+  },
+  routeDeleteButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFF0EC',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   routeTitle: {
     fontSize: 14,
@@ -788,42 +1311,97 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginBottom: 15,
   },
+  routeGrid: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 14,
+  },
   inputContainer: {
     marginBottom: 0,
   },
+  routeField: {
+    flex: 1,
+  },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textLight,
     marginBottom: 8,
+  },
+  inputShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#F3D4C2',
+    paddingHorizontal: 14,
+    minHeight: 58,
+  },
+  inputIcon: {
+    marginRight: 8,
   },
   helperText: {
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 6,
-    marginBottom: 10,
+    lineHeight: 18,
   },
   input: {
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
+    flex: 1,
+    paddingVertical: 16,
+    fontSize: 18,
+    fontWeight: '600',
     color: Colors.text,
+  },
+  dateDisplayText: {
+    flex: 1,
+    paddingVertical: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  dateDisplayPlaceholder: {
+    color: Colors.textMuted,
+    fontWeight: '500',
+  },
+  numericInput: {
+    backgroundColor: Colors.card,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: '#F3D4C2',
+    textAlign: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
   },
   smallInput: {
     flex: 1,
     marginRight: 10,
   },
+  passengerGrid: {
+    flexDirection: 'row',
+  },
+  passengerCard: {
+    flex: 1,
+    marginRight: 10,
+  },
+  passengerCardNoMargin: {
+    flex: 1,
+  },
   swapButton: {
     backgroundColor: Colors.primary,
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    borderRadius: 22,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 5,
+    marginHorizontal: 10,
+    marginBottom: 7,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 6,
   },
   swapIcon: {
     fontSize: 20,
@@ -835,15 +1413,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 999,
-    backgroundColor: Colors.primarySoft,
+    backgroundColor: '#FFF4EC',
     marginRight: 10,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   pillActive: {
     backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   pillText: {
     color: Colors.primaryDark,
@@ -854,36 +1435,246 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   secondaryButton: {
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
     marginBottom: 16,
     borderWidth: 1,
     borderColor: Colors.primary,
-    backgroundColor: Colors.primarySoft,
+    backgroundColor: '#FFF5EF',
   },
   secondaryButtonText: {
     color: Colors.primaryDark,
     fontSize: 15,
     fontWeight: '700',
+    marginLeft: 8,
   },
   searchButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: '#FF6A21',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     alignItems: 'center',
+    justifyContent: 'space-between',
+    flexDirection: 'row',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 10,
   },
   searchButtonText: {
     color: Colors.secondary,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  searchButtonSubtext: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  reviewCard: {
+    marginTop: 18,
+    backgroundColor: '#FFF9F4',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#F7DDCF',
+    padding: 18,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  reviewTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  reviewSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: Colors.textLight,
+  },
+  reviewMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  reviewMetaLabel: {
+    fontSize: 13,
+    color: Colors.textMuted,
+  },
+  reviewMetaValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  reviewPrice: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.primary,
+  },
+  reviewHelper: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  reviewActions: {
+    flexDirection: 'row',
+    marginTop: 14,
+  },
+  reviewSecondaryButton: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primarySoft,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  reviewSecondaryButtonText: {
+    color: Colors.primaryDark,
+    fontWeight: '700',
+  },
+  reviewPrimaryButton: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  reviewPrimaryButtonText: {
+    color: Colors.secondary,
+    fontWeight: '700',
+  },
+  calendarOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 34, 0.45)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  calendarModal: {
+    backgroundColor: Colors.card,
+    borderRadius: 28,
+    padding: 20,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    elevation: 12,
+  },
+  calendarModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  calendarEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 5,
+  },
+  calendarTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  calendarCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarMonthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  calendarArrowButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  calendarArrowDisabled: {
+    opacity: 0.4,
+  },
+  calendarMonthLabel: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  calendarWeekRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  calendarWeekday: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+    marginBottom: 6,
+  },
+  calendarDaySelected: {
+    backgroundColor: Colors.primary,
+  },
+  calendarDayMuted: {
+    opacity: 0.8,
+  },
+  calendarDayText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  calendarDayTextFaded: {
+    color: Colors.textMuted,
+  },
+  calendarDayTextDisabled: {
+    color: '#C8CED8',
+  },
+  calendarDayTextSelected: {
+    color: Colors.secondary,
+  },
+  calendarHint: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Colors.textMuted,
   },
   listContainer: {
     padding: 15,
+    paddingBottom: 32,
   },
   listContainerEmpty: {
     flexGrow: 1,
     padding: 15,
+    paddingBottom: 32,
   },
   flightCard: {
     backgroundColor: Colors.card,

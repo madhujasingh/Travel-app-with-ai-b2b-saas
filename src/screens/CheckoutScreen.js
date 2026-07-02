@@ -14,7 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 
 const CheckoutScreen = ({ route, navigation }) => {
-  const { cartItems, total } = route.params;
+  const cartItems = route.params?.cartItems || [];
+  const total =
+    route.params?.total ||
+    cartItems.reduce((sum, item) => sum + (item.lineTotal || item.price * item.people), 0);
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [cardNumber, setCardNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
@@ -68,7 +71,7 @@ const CheckoutScreen = ({ route, navigation }) => {
           <View style={styles.orderCard}>
             {cartItems.map((item, index) => (
               <View key={index} style={styles.orderItem}>
-                <Ionicons name={item.image || 'briefcase-outline'} size={24} color={Colors.primary} style={styles.orderIcon} />
+                <Ionicons name={item.iconName || item.image || 'briefcase-outline'} size={24} color={Colors.primary} style={styles.orderIcon} />
                 <View style={styles.orderInfo}>
                   <Text style={styles.orderTitle}>{item.title}</Text>
                   <Text style={styles.orderDetails}>
@@ -76,7 +79,7 @@ const CheckoutScreen = ({ route, navigation }) => {
                   </Text>
                 </View>
                 <Text style={styles.orderPrice}>
-                  ₹{(item.price * item.people).toLocaleString()}
+                  ₹{Math.round(item.lineTotal || item.price * item.people).toLocaleString()}
                 </Text>
               </View>
             ))}
