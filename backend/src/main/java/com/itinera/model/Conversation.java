@@ -47,6 +47,9 @@ public class Conversation {
     @Column(name = "summary", columnDefinition = "TEXT")
     private String summary;
 
+    @Column(name = "linked_conversation_id")
+    private Long linkedConversationId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -151,6 +154,14 @@ public class Conversation {
 
     public void setSummary(String summary) {
         this.summary = summary;
+    }
+
+    public Long getLinkedConversationId() {
+        return linkedConversationId;
+    }
+
+    public void setLinkedConversationId(Long linkedConversationId) {
+        this.linkedConversationId = linkedConversationId;
     }
 
     public LocalDateTime getCreatedAt() {

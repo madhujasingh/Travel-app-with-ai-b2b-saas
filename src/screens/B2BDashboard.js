@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,30 @@ import {
   SafeAreaView,
   StatusBar,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
+import API_CONFIG from '../config/api';
+import usePolling from '../hooks/usePolling';
+
+const INCOMING_REQUESTS_POLL_INTERVAL_MS = 20000;
+
+const timeAgo = (isoDate) => {
+  if (!isoDate) return '';
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
 
 const B2BDashboard = ({ navigation }) => {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
   const adminStats = [
@@ -24,16 +41,36 @@ const B2BDashboard = ({ navigation }) => {
     { id: 4, title: 'Pending Queries', value: '23', icon: 'help-circle-outline', color: '#FF9800' },
   ];
 
-  const supplierStats = [
-    { id: 1, title: 'Total Bookings', value: '156', icon: 'clipboard-outline', color: '#FF6B35' },
-    { id: 2, title: 'Revenue', value: '₹12.5L', icon: 'cash-outline', color: '#4CAF50' },
-    { id: 3, title: 'Active Clients', value: '89', icon: 'people-outline', color: '#2196F3' },
-    { id: 4, title: 'Pending Requests', value: '23', icon: 'help-circle-outline', color: '#FF9800' },
-    { id: 5, title: 'Avg Response Time', value: '2.5h', icon: 'time-outline', color: '#9C27B0' },
-    { id: 6, title: 'Conversion Rate', value: '68%', icon: 'trending-up-outline', color: '#00BCD4' },
-  ];
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const hasLoadedRequestsOnceRef = useRef(false);
 
-  const stats = isAdmin ? adminStats : supplierStats;
+  const loadIncomingRequests = useCallback(async () => {
+    if (isAdmin || !token) {
+      return;
+    }
+
+    if (!hasLoadedRequestsOnceRef.current) {
+      setLoadingRequests(true);
+    }
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/messages/conversations/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Failed to load requests');
+      }
+      setIncomingRequests(Array.isArray(data) ? data : []);
+    } catch (error) {
+      // silent on background polls; the list simply keeps its last known state
+    } finally {
+      hasLoadedRequestsOnceRef.current = true;
+      setLoadingRequests(false);
+    }
+  }, [isAdmin, token]);
+
+  usePolling(loadIncomingRequests, INCOMING_REQUESTS_POLL_INTERVAL_MS);
 
   const recentBookings = [
     {
@@ -59,39 +96,6 @@ const B2BDashboard = ({ navigation }) => {
       amount: '₹38,000',
       status: 'Confirmed',
       date: '23 Mar 2026',
-    },
-  ];
-
-  const supplierRequests = [
-    {
-      id: 1,
-      destination: 'Rajasthan Heritage Tour',
-      customerType: 'Group (10 pax)',
-      budget: '₹1,50,000',
-      travelers: 10,
-      deadline: '26 Mar 2026',
-      status: 'New',
-      preferences: 'Adventure, Cultural',
-    },
-    {
-      id: 2,
-      destination: 'Kerala Backwaters',
-      customerType: 'Couple',
-      budget: '₹80,000',
-      travelers: 2,
-      deadline: '25 Mar 2026',
-      status: 'In Progress',
-      preferences: 'Relaxation, Nature',
-    },
-    {
-      id: 3,
-      destination: 'Goa Beach Package',
-      customerType: 'Family (4 pax)',
-      budget: '₹1,20,000',
-      travelers: 4,
-      deadline: '24 Mar 2026',
-      status: 'Awaiting Quote',
-      preferences: 'Beach, Nightlife',
     },
   ];
 
@@ -140,32 +144,6 @@ const B2BDashboard = ({ navigation }) => {
     },
   ];
 
-  const supplierFeatures = [
-    {
-      id: 1,
-      title: 'Booking Management',
-      description: 'Track all bookings',
-      icon: 'clipboard-outline',
-      screen: 'BookingManagement',
-    },
-    {
-      id: 2,
-      title: 'Analytics Dashboard',
-      description: 'Business insights & reports',
-      icon: 'bar-chart-outline',
-      screen: 'Analytics',
-    },
-    {
-      id: 3,
-      title: 'Commission Tracking',
-      description: 'Track your earnings',
-      icon: 'cash-outline',
-      screen: 'CommissionTracking',
-    },
-  ];
-
-  const features = isAdmin ? adminFeatures : supplierFeatures;
-
   const renderStatCard = (stat) => (
     <View key={stat.id} style={[styles.statCard, { backgroundColor: stat.color }]}>
       <Ionicons name={stat.icon} size={28} color={Colors.secondary} style={styles.statIcon} />
@@ -204,64 +182,46 @@ const B2BDashboard = ({ navigation }) => {
   const renderSupplierRequest = ({ item }) => (
     <TouchableOpacity
       style={styles.requestCard}
-      onPress={() => navigation.navigate('RequestDetail', { request: item })}
+      onPress={() => navigation.navigate('ChatScreen', { conversation: item })}
       activeOpacity={0.8}
     >
       <View style={styles.requestHeader}>
         <View style={styles.requestTitleRow}>
           <Ionicons name="location-outline" size={18} color={Colors.primary} />
-          <Text style={styles.requestDestination}>{item.destination}</Text>
+          <Text style={styles.requestDestination}>{item.destination || 'General request'}</Text>
         </View>
-        <View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor:
-                item.status === 'New'
-                  ? '#E3F2FD'
-                  : item.status === 'In Progress'
-                  ? '#FFF3E0'
-                  : '#E8F5E9',
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.statusText,
-              {
-                color:
-                  item.status === 'New'
-                    ? '#1976D2'
-                    : item.status === 'In Progress'
-                    ? '#F57C00'
-                    : '#388E3C',
-              },
-            ]}
-          >
-            {item.status}
-          </Text>
+        <View style={[styles.statusBadge, { backgroundColor: '#E3F2FD' }]}>
+          <Text style={[styles.statusText, { color: '#1976D2' }]}>New</Text>
         </View>
       </View>
 
       <View style={styles.requestDetails}>
-        <View style={styles.requestDetailRow}>
-          <Ionicons name="people-outline" size={14} color={Colors.textLight} />
-          <Text style={styles.requestDetailText}>{item.customerType}</Text>
-        </View>
-        <View style={styles.requestDetailRow}>
-          <Ionicons name="cash-outline" size={14} color={Colors.textLight} />
-          <Text style={styles.requestDetailText}>Budget: {item.budget}</Text>
-        </View>
-        <View style={styles.requestDetailRow}>
-          <Ionicons name="person-outline" size={14} color={Colors.textLight} />
-          <Text style={styles.requestDetailText}>{item.travelers} Travelers</Text>
-        </View>
+        {item.numberOfPeople ? (
+          <View style={styles.requestDetailRow}>
+            <Ionicons name="people-outline" size={14} color={Colors.textLight} />
+            <Text style={styles.requestDetailText}>{item.numberOfPeople} Travelers</Text>
+          </View>
+        ) : null}
+        {item.budget ? (
+          <View style={styles.requestDetailRow}>
+            <Ionicons name="cash-outline" size={14} color={Colors.textLight} />
+            <Text style={styles.requestDetailText}>Budget: {item.budget}</Text>
+          </View>
+        ) : null}
+        {item.summary ? (
+          <View style={styles.requestDetailRow}>
+            <Ionicons name="document-text-outline" size={14} color={Colors.textLight} />
+            <Text style={styles.requestDetailText} numberOfLines={1}>
+              {item.summary}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.requestFooter}>
         <View style={styles.deadlineRow}>
           <Ionicons name="time-outline" size={12} color={Colors.textMuted} />
-          <Text style={styles.deadlineText}>Deadline: {item.deadline}</Text>
+          <Text style={styles.deadlineText}>Received {timeAgo(item.createdAt)}</Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
       </View>
@@ -282,42 +242,6 @@ const B2BDashboard = ({ navigation }) => {
       </View>
       <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
     </TouchableOpacity>
-  );
-
-  const renderSupplierQuickActions = () => (
-    <View style={styles.quickActions}>
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('SupplierRequests')}
-        >
-          <Ionicons name="list-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-          <Text style={styles.actionText}>View Requests</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('CreatePackage')}
-        >
-          <Ionicons name="add-circle-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-          <Text style={styles.actionText}>Create Package</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('ChatInbox')}
-        >
-          <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-          <Text style={styles.actionText}>Messages</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate('Reports')}
-        >
-          <Ionicons name="bar-chart-outline" size={22} color={Colors.primary} style={styles.actionIcon} />
-          <Text style={styles.actionText}>Reports</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 
   const renderAdminQuickActions = () => (
@@ -413,14 +337,45 @@ const B2BDashboard = ({ navigation }) => {
           <Text style={styles.planBadge}>{isAdmin ? 'Admin Access' : 'Supplier Access'}</Text>
         </View>
 
-        {/* Stats Section */}
-        <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Overview</Text>
-          <View style={styles.statsGrid}>{stats.map(renderStatCard)}</View>
-        </View>
+        {/* Stats Section - Admin only */}
+        {isAdmin && (
+          <View style={styles.statsSection}>
+            <Text style={styles.sectionTitle}>Overview</Text>
+            <View style={styles.statsGrid}>{adminStats.map(renderStatCard)}</View>
+          </View>
+        )}
 
-        {/* Quick Actions */}
-        {isAdmin ? renderAdminQuickActions() : renderSupplierQuickActions()}
+        {/* Quick Actions - Admin only */}
+        {isAdmin && renderAdminQuickActions()}
+
+        {/* Incoming Requests - Supplier only */}
+        {!isAdmin && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Incoming Requests</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('ChatInbox')}>
+                <Text style={styles.viewAll}>View All</Text>
+              </TouchableOpacity>
+            </View>
+            {loadingRequests ? (
+              <ActivityIndicator size="small" color={Colors.primary} style={styles.requestsLoader} />
+            ) : incomingRequests.length === 0 ? (
+              <View style={styles.emptyRequests}>
+                <Ionicons name="mail-open-outline" size={28} color={Colors.textMuted} />
+                <Text style={styles.emptyRequestsText}>
+                  No requests yet. New customer requests forwarded by admin will show up here.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={incomingRequests}
+                renderItem={renderSupplierRequest}
+                keyExtractor={(item) => item.id.toString()}
+                scrollEnabled={false}
+              />
+            )}
+          </View>
+        )}
 
         {/* Recent Bookings */}
         <View style={styles.section}>
@@ -438,31 +393,13 @@ const B2BDashboard = ({ navigation }) => {
           />
         </View>
 
-        {/* Supplier Requests - Only for Supplier */}
-        {!isAdmin && (
+        {/* Features - Admin only */}
+        {isAdmin && (
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Incoming Requests</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('SupplierRequests')}>
-                <Text style={styles.viewAll}>View All</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={supplierRequests}
-              renderItem={renderSupplierRequest}
-              keyExtractor={(item) => item.id.toString()}
-              scrollEnabled={false}
-            />
+            <Text style={styles.sectionTitle}>Features</Text>
+            <View style={styles.featuresGrid}>{adminFeatures.map(renderFeature)}</View>
           </View>
         )}
-
-        {/* Features */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Features</Text>
-          <View style={styles.featuresGrid}>{features.map(renderFeature)}</View>
-        </View>
-
-
 
         {/* Bottom Spacing */}
         <View style={{ height: 40 }} />
@@ -818,6 +755,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textLight,
     marginLeft: 8,
+    flexShrink: 1,
+  },
+  requestsLoader: {
+    marginVertical: 20,
+  },
+  emptyRequests: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+  },
+  emptyRequestsText: {
+    marginTop: 10,
+    textAlign: 'center',
+    color: Colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
   },
   requestFooter: {
     flexDirection: 'row',

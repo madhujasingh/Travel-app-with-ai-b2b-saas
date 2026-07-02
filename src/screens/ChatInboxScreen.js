@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,19 +14,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
+import usePolling from '../hooks/usePolling';
+
+const CONVERSATIONS_POLL_INTERVAL_MS = 20000;
 
 const ChatInboxScreen = ({ navigation }) => {
   const canGoBack = navigation.canGoBack();
   const { token, user } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
 
   const loadConversations = useCallback(async () => {
     if (!token) {
       return;
     }
 
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/messages/conversations/me`, {
         headers: {
@@ -41,15 +47,16 @@ const ChatInboxScreen = ({ navigation }) => {
 
       setConversations(Array.isArray(data) ? data : []);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to load chats');
+      if (!hasLoadedOnceRef.current) {
+        Alert.alert('Error', error.message || 'Unable to load chats');
+      }
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   }, [token]);
 
-  useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+  usePolling(loadConversations, CONVERSATIONS_POLL_INTERVAL_MS);
 
   const getCounterpartyLabel = (conversation) => {
     if (user?.role === 'CUSTOMER') {

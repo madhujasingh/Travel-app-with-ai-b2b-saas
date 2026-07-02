@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -127,14 +127,14 @@ const resolveAirportCode = (value) => {
   const normalized = value.trim().toUpperCase();
   if (!normalized) return null;
 
-  const directCode = AIRPORT_OPTIONS.find((option) => option.code === normalized);
-  if (directCode) {
-    return directCode.code;
-  }
-
   const byCity = AIRPORT_OPTIONS.find((option) => option.city.toUpperCase() === normalized);
   if (byCity) {
     return byCity.code;
+  }
+
+  // TripJack accepts any valid IATA airport code, not just the curated quick-pick list above.
+  if (/^[A-Z]{3}$/.test(normalized)) {
+    return normalized;
   }
 
   return null;
@@ -172,6 +172,8 @@ const getBaggageLabel = (fareDetails) => {
   };
 };
 
+const NAMED_BUCKETS = ['ONWARD', 'RETURN', 'COMBO'];
+
 const buildJourneyLabel = (bucket) => {
   if (bucket === 'RETURN') {
     return 'Return';
@@ -181,13 +183,25 @@ const buildJourneyLabel = (bucket) => {
     return 'Combo';
   }
 
-  return 'Onward';
+  if (bucket === 'ONWARD') {
+    return 'Onward';
+  }
+
+  // Domestic multi-city results are keyed by numeric route-leg index ("0","1",...)
+  // instead of ONWARD/RETURN/COMBO - see PDF: "Equivalent Number of Route Infos,
+  // Equivalent index ids generated. (Each index id belongs to each route info)".
+  const legNumber = Number(bucket);
+  return Number.isNaN(legNumber) ? 'Onward' : `Leg ${legNumber + 1}`;
 };
 
 const flattenTripBuckets = (tripInfos = {}) => {
   const flattened = [];
+  const allKeys = Object.keys(tripInfos || {});
+  const bucketKeys = allKeys.some((key) => NAMED_BUCKETS.includes(key))
+    ? NAMED_BUCKETS
+    : allKeys.slice().sort((a, b) => Number(a) - Number(b));
 
-  ['ONWARD', 'RETURN', 'COMBO'].forEach((bucket) => {
+  bucketKeys.forEach((bucket) => {
     const trips = tripInfos?.[bucket];
     if (!Array.isArray(trips)) {
       return;
@@ -205,97 +219,113 @@ const flattenTripBuckets = (tripInfos = {}) => {
   return flattened;
 };
 
-const flattenReviewTrips = (data) => {
-  if (Array.isArray(data?.tripInfos)) {
-    return data.tripInfos.map((trip, index) => ({
-      bucket: 'REVIEW',
-      tripIndex: index,
-      trip,
-    }));
-  }
-
-  return flattenTripBuckets(data?.tripInfos || data?.searchResult?.tripInfos);
-};
-
 const getPassengerPricing = (fareDetails = {}) => ({
   adult: Number(fareDetails?.ADULT?.fC?.TF || 0),
   child: Number(fareDetails?.CHILD?.fC?.TF || 0),
   infant: Number(fareDetails?.INFANT?.fC?.TF || 0),
 });
 
-const buildFlightCartItem = ({ flight, reviewResponse, passengerCounts }) => {
-  const reviewedTrip = flattenReviewTrips(reviewResponse)?.[0]?.trip;
-  const reviewedPricing = getPassengerPricing(reviewedTrip?.totalPriceList?.[0]?.fd);
-  const fallbackPricing = flight?.passengerPricing || {};
-  const adultPrice = reviewedPricing.adult || fallbackPricing.adult || flight?.price || 0;
-  const childPrice = reviewedPricing.child || fallbackPricing.child || adultPrice;
-  const infantPrice = reviewedPricing.infant || fallbackPricing.infant || 0;
+// AirReviewResponse.totalPriceInfo.totalFareDetail is the authoritative grand total
+// across every reviewed leg and every passenger - already summed by TripJack, so we
+// don't need to (and shouldn't) re-derive it by multiplying per-pax fares ourselves.
+const getReviewGrandTotal = (reviewResponse) => {
+  const total = Number(reviewResponse?.totalPriceInfo?.totalFareDetail?.fC?.TF);
+  return Number.isFinite(total) && total > 0 ? total : null;
+};
+
+const buildFlightCartItem = ({ flights, reviewResponse, passengerCounts }) => {
+  const legs = Array.isArray(flights) ? flights : [flights];
+  const primaryLeg = legs[0] || {};
   const people =
     Number(passengerCounts?.adults || 0) +
     Number(passengerCounts?.children || 0) +
     Number(passengerCounts?.infants || 0);
 
-  const lineTotal =
-    Number(passengerCounts?.adults || 0) * adultPrice +
-    Number(passengerCounts?.children || 0) * childPrice +
-    Number(passengerCounts?.infants || 0) * infantPrice;
+  const grandTotal = getReviewGrandTotal(reviewResponse);
+  const fallbackTotal = legs.reduce((sum, leg) => {
+    const pricing = leg?.passengerPricing || {};
+    return (
+      sum +
+      Number(passengerCounts?.adults || 0) * (pricing.adult || leg?.price || 0) +
+      Number(passengerCounts?.children || 0) * (pricing.child || pricing.adult || leg?.price || 0) +
+      Number(passengerCounts?.infants || 0) * (pricing.infant || 0)
+    );
+  }, 0);
+  const lineTotal = grandTotal || fallbackTotal || primaryLeg?.price || 0;
+
+  const title = legs
+    .map((leg) => `${leg.airline}${leg.flightNo ? ` ${leg.flightNo}` : ''}`)
+    .join(' + ');
+  const destination = legs.length > 1
+    ? `${legs[0].from} -> ${legs[legs.length - 1].to} (${legs.length} legs)`
+    : `${primaryLeg.from} -> ${primaryLeg.to}`;
 
   return {
-    id: `flight-${flight.id}`,
-    title: `${flight.airline}${flight.flightNo ? ` ${flight.flightNo}` : ''}`,
-    destination: `${flight.from} -> ${flight.to}`,
-    duration: flight.duration,
-    price: adultPrice,
+    id: `flight-${legs.map((leg) => leg.id).join('_')}`,
+    title,
+    destination,
+    duration: primaryLeg.duration,
+    price: lineTotal / (people || 1),
     people: people || 1,
-    lineTotal: lineTotal || adultPrice,
+    lineTotal: lineTotal || primaryLeg?.price || 0,
     adults: Number(passengerCounts?.adults || 0),
     children: Number(passengerCounts?.children || 0),
     infants: Number(passengerCounts?.infants || 0),
     image: 'Flight',
     iconName: 'airplane-outline',
-    fareType: flight.fareType,
-    journeyLabel: flight.journeyLabel,
+    fareType: primaryLeg.fareType,
+    journeyLabel: legs.map((leg) => leg.journeyLabel).join(' + '),
     reviewResponse,
-    priceIds: flight.priceIds,
+    priceIds: legs.flatMap((leg) => leg.priceIds || []),
     addedAt: new Date().toISOString(),
   };
 };
 
 const mapFlightsFromResponse = (data) => {
   const flattenedTrips = flattenTripBuckets(data?.searchResult?.tripInfos);
+  const cards = [];
 
-  return flattenedTrips.map(({ bucket, trip, tripIndex }, index) => {
+  flattenedTrips.forEach(({ bucket, trip, tripIndex }) => {
     const segments = Array.isArray(trip?.sI) ? trip.sI : [];
     const firstSegment = segments[0];
     const lastSegment = segments[segments.length - 1];
-    const totalPrice = trip?.totalPriceList?.[0];
-    const adultFare = totalPrice?.fd?.ADULT;
-    const baggage = getBaggageLabel(adultFare);
     const totalDuration = segments.reduce((sum, segment) => sum + Number(segment?.duration || 0), 0);
     const totalStops = segments.reduce((sum, segment) => sum + Number(segment?.stops || 0), 0);
     const journeyLabel = buildJourneyLabel(bucket);
+    const priceOptions = Array.isArray(trip?.totalPriceList) ? trip.totalPriceList : [];
 
-    return {
-      id: `${bucket}-${tripIndex}-${totalPrice?.id || firstSegment?.id || index}`,
-      airline: firstSegment?.fD?.aI?.name || 'Airline',
-      flightNo: `${firstSegment?.fD?.aI?.code || ''}-${firstSegment?.fD?.fN || ''}`.replace(/^-|-$/g, ''),
-      from: firstSegment?.da?.code || firstSegment?.da?.city || '--',
-      to: lastSegment?.aa?.code || lastSegment?.aa?.city || '--',
-      departure: formatTime(firstSegment?.dt),
-      arrival: formatTime(lastSegment?.at),
-      duration: formatDuration(totalDuration || firstSegment?.duration),
-      price: Number(adultFare?.fC?.TF || 0),
-      stops: totalStops === 0 ? 'Non-stop' : `${totalStops} stop`,
-      image: 'airplane',
-      checkInBaggage: baggage.checkIn,
-      cabinBaggage: baggage.carry,
-      fareType: totalPrice?.fareIdentifier || 'PUBLISHED',
-      journeyLabel,
-      segmentCount: segments.length,
-      priceIds: trip?.totalPriceList?.map((priceInfo) => priceInfo?.id).filter(Boolean) || [],
-      passengerPricing: getPassengerPricing(totalPrice?.fd),
-    };
+    // Each entry in totalPriceList is a DIFFERENT alternate fare (e.g. PUBLISHED vs
+    // FLEXI_PLUS) for this SAME flight - not a different leg. The Review API expects
+    // exactly one price id per leg, so each fare option becomes its own selectable card.
+    priceOptions.forEach((priceOption, priceIndex) => {
+      const adultFare = priceOption?.fd?.ADULT;
+      const baggage = getBaggageLabel(adultFare);
+
+      cards.push({
+        id: `${bucket}-${tripIndex}-${priceOption?.id || `${firstSegment?.id}-${priceIndex}`}`,
+        groupKey: bucket,
+        airline: firstSegment?.fD?.aI?.name || 'Airline',
+        flightNo: `${firstSegment?.fD?.aI?.code || ''}-${firstSegment?.fD?.fN || ''}`.replace(/^-|-$/g, ''),
+        from: firstSegment?.da?.code || firstSegment?.da?.city || '--',
+        to: lastSegment?.aa?.code || lastSegment?.aa?.city || '--',
+        departure: formatTime(firstSegment?.dt),
+        arrival: formatTime(lastSegment?.at),
+        duration: formatDuration(totalDuration || firstSegment?.duration),
+        price: Number(adultFare?.fC?.TF || 0),
+        stops: totalStops === 0 ? 'Non-stop' : `${totalStops} stop`,
+        image: 'airplane',
+        checkInBaggage: baggage.checkIn,
+        cabinBaggage: baggage.carry,
+        fareType: priceOption?.fareIdentifier || 'PUBLISHED',
+        journeyLabel,
+        segmentCount: segments.length,
+        priceIds: priceOption?.id ? [priceOption.id] : [],
+        passengerPricing: getPassengerPricing(priceOption?.fd),
+      });
+    });
   });
+
+  return cards;
 };
 
 const FlightsScreen = ({ navigation }) => {
@@ -314,6 +344,8 @@ const FlightsScreen = ({ navigation }) => {
   const [flights, setFlights] = useState([]);
   const [searched, setSearched] = useState(false);
   const [reviewedFare, setReviewedFare] = useState(null);
+  const [selectedByGroup, setSelectedByGroup] = useState({});
+  const [showFilters, setShowFilters] = useState(true);
   const today = startOfDay(new Date());
   const [calendarState, setCalendarState] = useState({
     visible: false,
@@ -498,6 +530,7 @@ const FlightsScreen = ({ navigation }) => {
       setLoading(true);
       setSearched(true);
       setReviewedFare(null);
+      setSelectedByGroup({});
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/search`, {
         method: 'POST',
@@ -510,7 +543,9 @@ const FlightsScreen = ({ navigation }) => {
         throw new Error(data?.message || 'Unable to search flights right now.');
       }
 
-      setFlights(mapFlightsFromResponse(data));
+      const results = mapFlightsFromResponse(data);
+      setFlights(results);
+      setShowFilters(results.length === 0);
     } catch (error) {
       setFlights([]);
       Alert.alert('Flight Search', error.message || 'Unable to fetch flights right now.');
@@ -519,8 +554,26 @@ const FlightsScreen = ({ navigation }) => {
     }
   };
 
-  const reviewFare = async (flight) => {
-    if (!flight?.priceIds?.length) {
+  // Groups mirror the search response buckets (ONWARD/RETURN, or numeric multi-city
+  // legs). Domestic Return and Domestic Multi-city require one price id PER leg,
+  // reviewed together in a single request - see PDF: "In Case of Domestic Return -
+  // 2 Price id has to be requested (1 from ONWARD and another from RETURN)".
+  const groupKeys = useMemo(() => {
+    const seen = [];
+    flights.forEach((flight) => {
+      if (!seen.includes(flight.groupKey)) {
+        seen.push(flight.groupKey);
+      }
+    });
+    return seen;
+  }, [flights]);
+
+  const isMultiLeg = groupKeys.length > 1;
+  const allLegsSelected = isMultiLeg && groupKeys.every((key) => selectedByGroup[key]);
+
+  const runReview = async (legs) => {
+    const priceIds = legs.flatMap((leg) => leg.priceIds || []);
+    if (!priceIds.length) {
       Alert.alert('Review unavailable', 'This fare is missing the TripJack review identifier.');
       return;
     }
@@ -530,9 +583,7 @@ const FlightsScreen = ({ navigation }) => {
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          priceIds: flight.priceIds,
-        }),
+        body: JSON.stringify({ priceIds }),
       });
 
       const data = await response.json();
@@ -546,13 +597,13 @@ const FlightsScreen = ({ navigation }) => {
         infants: Number(infants || 0),
       };
       const cartItem = buildFlightCartItem({
-        flight,
+        flights: legs,
         reviewResponse: data,
         passengerCounts,
       });
 
       setReviewedFare({
-        flight,
+        flights: legs,
         reviewResponse: data,
         passengerCounts,
         cartItem,
@@ -562,6 +613,20 @@ const FlightsScreen = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const reviewFare = (flight) => runReview([flight]);
+
+  const selectFlightForGroup = (flight) => {
+    setSelectedByGroup((prev) => ({ ...prev, [flight.groupKey]: flight }));
+    setReviewedFare(null);
+  };
+
+  const reviewSelectedFares = () => {
+    if (!allLegsSelected) {
+      return;
+    }
+    runReview(groupKeys.map((key) => selectedByGroup[key]));
   };
 
   const addReviewedFareToCart = () => {
@@ -584,59 +649,81 @@ const FlightsScreen = ({ navigation }) => {
     });
   };
 
-  const renderFlight = ({ item }) => (
-    <TouchableOpacity style={styles.flightCard} activeOpacity={0.8}>
-      <View style={styles.flightHeader}>
-        <View style={styles.airlineInfo}>
-          <Ionicons name={item.image} size={26} color={Colors.primary} style={styles.flightImage} />
-          <View>
-            <Text style={styles.airlineName}>{item.airline}</Text>
-            <Text style={styles.flightNo}>{item.flightNo || 'Flight details'}</Text>
-            <Text style={styles.journeyLabel}>{item.journeyLabel}{item.segmentCount > 1 ? ` • ${item.segmentCount} segments` : ''}</Text>
+  const renderFlight = ({ item }) => {
+    const isSelected = isMultiLeg && selectedByGroup[item.groupKey]?.id === item.id;
+
+    return (
+      <TouchableOpacity
+        style={[styles.flightCard, isSelected && styles.flightCardSelected]}
+        activeOpacity={0.8}
+        onPress={isMultiLeg ? () => selectFlightForGroup(item) : undefined}
+      >
+        <View style={styles.flightHeader}>
+          <View style={styles.airlineInfo}>
+            <Ionicons name={item.image} size={26} color={Colors.primary} style={styles.flightImage} />
+            <View>
+              <Text style={styles.airlineName}>{item.airline}</Text>
+              <Text style={styles.flightNo}>{item.flightNo || 'Flight details'}</Text>
+              <Text style={styles.journeyLabel}>{item.journeyLabel}{item.segmentCount > 1 ? ` • ${item.segmentCount} segments` : ''}</Text>
+            </View>
+          </View>
+          <View style={styles.priceContainer}>
+            <Text style={styles.price}>₹{item.price.toLocaleString()}</Text>
+            <Text style={styles.perPerson}>per adult</Text>
           </View>
         </View>
-        <View style={styles.priceContainer}>
-          <Text style={styles.price}>₹{item.price.toLocaleString()}</Text>
-          <Text style={styles.perPerson}>per adult</Text>
-        </View>
-      </View>
 
-      <View style={styles.flightDetails}>
-        <View style={styles.timeContainer}>
-          <Text style={styles.time}>{item.departure}</Text>
-          <Text style={styles.city}>{item.from}</Text>
-        </View>
-
-        <View style={styles.durationContainer}>
-          <Text style={styles.duration}>{item.duration}</Text>
-          <View style={styles.durationLine}>
-            <View style={styles.dot} />
-            <View style={styles.line} />
-            <Ionicons name="airplane" size={14} color={Colors.primary} style={styles.planeIcon} />
-            <View style={styles.line} />
-            <View style={styles.dot} />
+        <View style={styles.flightDetails}>
+          <View style={styles.timeContainer}>
+            <Text style={styles.time}>{item.departure}</Text>
+            <Text style={styles.city}>{item.from}</Text>
           </View>
-          <Text style={styles.stops}>{item.stops}</Text>
+
+          <View style={styles.durationContainer}>
+            <Text style={styles.duration}>{item.duration}</Text>
+            <View style={styles.durationLine}>
+              <View style={styles.dot} />
+              <View style={styles.line} />
+              <Ionicons name="airplane" size={14} color={Colors.primary} style={styles.planeIcon} />
+              <View style={styles.line} />
+              <View style={styles.dot} />
+            </View>
+            <Text style={styles.stops}>{item.stops}</Text>
+          </View>
+
+          <View style={styles.timeContainer}>
+            <Text style={styles.time}>{item.arrival}</Text>
+            <Text style={styles.city}>{item.to}</Text>
+          </View>
         </View>
 
-        <View style={styles.timeContainer}>
-          <Text style={styles.time}>{item.arrival}</Text>
-          <Text style={styles.city}>{item.to}</Text>
+        <View style={styles.flightFooter}>
+          <View style={styles.amenities}>
+            <View style={styles.amenityBadge}>
+              <Ionicons name="briefcase-outline" size={11} color={Colors.primaryDark} />
+              <Text style={styles.amenityText}>{item.checkInBaggage}</Text>
+            </View>
+            <View style={styles.amenityBadge}>
+              <Ionicons name="bag-handle-outline" size={11} color={Colors.primaryDark} />
+              <Text style={styles.amenityText}>{item.cabinBaggage}</Text>
+            </View>
+            <View style={[styles.amenityBadge, styles.fareTypeBadge]}>
+              <Text style={styles.fareTypeBadgeText}>{item.fareType}</Text>
+            </View>
+          </View>
+          {isMultiLeg ? (
+            <View style={[styles.bookButton, isSelected && styles.bookButtonSelected]}>
+              <Text style={styles.bookButtonText}>{isSelected ? 'Selected' : 'Select'}</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.bookButton} onPress={() => reviewFare(item)}>
+              <Text style={styles.bookButtonText}>Review Fare</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      </View>
-
-      <View style={styles.flightFooter}>
-        <View style={styles.amenities}>
-          <Text style={styles.amenity}>{item.checkInBaggage}</Text>
-          <Text style={styles.amenity}>{item.cabinBaggage}</Text>
-          <Text style={styles.amenity}>{item.fareType}</Text>
-        </View>
-        <TouchableOpacity style={styles.bookButton} onPress={() => reviewFare(item)}>
-          <Text style={styles.bookButtonText}>Review Fare</Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmptyState = () => {
     if (loading) {
@@ -714,6 +801,18 @@ const FlightsScreen = ({ navigation }) => {
     }));
   };
 
+  const searchSummary = useMemo(() => {
+    const routeLabel = routes
+      .map((route) => `${route.from || '?'} → ${route.to || '?'}`)
+      .join('  •  ');
+    const dateLabel = tripType === 'RETURN'
+      ? `${routes[0]?.travelDate || '--'} → ${returnDate || '--'}`
+      : routes.map((route) => route.travelDate || '--').join('  •  ');
+    const paxCount = Number(adults || 0) + Number(children || 0) + Number(infants || 0);
+
+    return { routeLabel, dateLabel, paxCount };
+  }, [routes, tripType, returnDate, adults, children, infants]);
+
   const canGoToPreviousMonth =
     startOfMonth(calendarState.month) > startOfMonth(today);
   const calendarDays = buildCalendarDays(calendarState.month);
@@ -734,10 +833,37 @@ const FlightsScreen = ({ navigation }) => {
         data={flights}
         renderItem={renderFlight}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={flights.length ? styles.listContainer : styles.listContainerEmpty}
+        contentContainerStyle={[
+          flights.length ? styles.listContainer : styles.listContainerEmpty,
+          isMultiLeg && searched && flights.length > 0 ? styles.listContainerWithFooter : null,
+        ]}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.searchForm}>
+            {!showFilters && searched ? (
+              <TouchableOpacity
+                style={styles.summaryBar}
+                activeOpacity={0.85}
+                onPress={() => setShowFilters(true)}
+              >
+                <View style={styles.summaryBarIcon}>
+                  <Ionicons name="airplane" size={18} color={Colors.secondary} />
+                </View>
+                <View style={styles.summaryBarText}>
+                  <Text style={styles.summaryBarRoute} numberOfLines={1}>{searchSummary.routeLabel}</Text>
+                  <Text style={styles.summaryBarMeta} numberOfLines={1}>
+                    {searchSummary.dateLabel} • {searchSummary.paxCount} traveller{searchSummary.paxCount === 1 ? '' : 's'} • {cabinClass.replace(/_/g, ' ')}
+                  </Text>
+                </View>
+                <View style={styles.summaryBarEdit}>
+                  <Ionicons name="create-outline" size={16} color={Colors.primaryDark} />
+                  <Text style={styles.summaryBarEditText}>Edit</Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
+            {showFilters ? (
+              <>
             <View style={styles.heroCard}>
               <View style={styles.heroBadge}>
                 <Ionicons name="airplane" size={14} color={Colors.secondary} />
@@ -1004,53 +1130,118 @@ const FlightsScreen = ({ navigation }) => {
                 </View>
                 <Ionicons name="arrow-forward" size={20} color={Colors.secondary} />
               </TouchableOpacity>
-
-              {reviewedFare ? (
-                <View style={styles.reviewCard}>
-                  <View style={styles.reviewHeader}>
-                    <View>
-                      <Text style={styles.reviewTitle}>Fare Review Ready</Text>
-                      <Text style={styles.reviewSubtitle}>
-                        {reviewedFare.flight.airline} {reviewedFare.flight.flightNo || ''} • {reviewedFare.flight.from} to {reviewedFare.flight.to}
-                      </Text>
-                    </View>
-                    <Ionicons name="checkmark-circle" size={24} color={Colors.success} />
-                  </View>
-
-                  <View style={styles.reviewMetaRow}>
-                    <Text style={styles.reviewMetaLabel}>Passengers</Text>
-                    <Text style={styles.reviewMetaValue}>
-                      {reviewedFare.passengerCounts.adults}A / {reviewedFare.passengerCounts.children}C / {reviewedFare.passengerCounts.infants}I
-                    </Text>
-                  </View>
-                  <View style={styles.reviewMetaRow}>
-                    <Text style={styles.reviewMetaLabel}>Fare Type</Text>
-                    <Text style={styles.reviewMetaValue}>{reviewedFare.flight.fareType}</Text>
-                  </View>
-                  <View style={styles.reviewMetaRow}>
-                    <Text style={styles.reviewMetaLabel}>Estimated Total</Text>
-                    <Text style={styles.reviewPrice}>₹{Math.round(reviewedFare.cartItem.lineTotal).toLocaleString()}</Text>
-                  </View>
-
-                  <Text style={styles.reviewHelper}>
-                    Review response loaded from TripJack. You can now save this fare to cart or continue to checkout.
-                  </Text>
-
-                  <View style={styles.reviewActions}>
-                    <TouchableOpacity style={styles.reviewSecondaryButton} onPress={addReviewedFareToCart}>
-                      <Text style={styles.reviewSecondaryButtonText}>Add to Cart</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.reviewPrimaryButton} onPress={continueReviewedFareToCheckout}>
-                      <Text style={styles.reviewPrimaryButtonText}>Continue</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : null}
             </View>
+              </>
+            ) : null}
+
+            {isMultiLeg && searched ? (
+              <View style={styles.legSelectionCard}>
+                <Text style={styles.legSelectionTitle}>
+                  {tripType === 'MULTI_CITY' ? 'Pick one flight per route leg' : 'Pick your onward and return flight'}
+                </Text>
+                <Text style={styles.legSelectionHint}>
+                  Tap a flight in each group below, then review them together. TripJack prices these as a single itinerary.
+                </Text>
+                <View style={styles.legSelectionChips}>
+                  {groupKeys.map((key) => {
+                    const selection = selectedByGroup[key];
+                    return (
+                      <View key={key} style={[styles.legSelectionChip, selection && styles.legSelectionChipDone]}>
+                        <Ionicons
+                          name={selection ? 'checkmark-circle' : 'ellipse-outline'}
+                          size={16}
+                          color={selection ? Colors.success : Colors.textMuted}
+                        />
+                        <Text style={styles.legSelectionChipText} numberOfLines={1}>
+                          {buildJourneyLabel(key)}{selection ? `: ₹${selection.price.toLocaleString()}` : ''}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={renderEmptyState}
       />
+
+      {isMultiLeg && searched && flights.length > 0 ? (
+        <View style={styles.stickyFooter}>
+          <View style={styles.stickyFooterText}>
+            <Text style={styles.stickyFooterTitle}>
+              {groupKeys.filter((key) => selectedByGroup[key]).length} of {groupKeys.length} legs selected
+            </Text>
+            <Text style={styles.stickyFooterSubtitle} numberOfLines={1}>
+              {allLegsSelected
+                ? groupKeys.map((key) => `${buildJourneyLabel(key)} ₹${selectedByGroup[key].price.toLocaleString()}`).join('  •  ')
+                : 'Tap a flight card above for each leg'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.stickyFooterButton, (!allLegsSelected || loading) && styles.legReviewButtonDisabled]}
+            onPress={reviewSelectedFares}
+            disabled={!allLegsSelected || loading}
+          >
+            <Text style={styles.stickyFooterButtonText}>{loading ? 'Reviewing...' : 'Review Combined Fare'}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <Modal
+        visible={!!reviewedFare}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReviewedFare(null)}
+      >
+        <Pressable style={styles.calendarOverlay} onPress={() => setReviewedFare(null)}>
+          <Pressable style={styles.reviewModalCard} onPress={() => {}}>
+            {reviewedFare ? (
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewHeader}>
+                  <View style={styles.reviewHeaderCopy}>
+                    <Text style={styles.reviewTitle}>Fare Review Ready</Text>
+                    <Text style={styles.reviewSubtitle}>
+                      {reviewedFare.flights.map((leg) => `${leg.airline} ${leg.flightNo || ''} (${leg.from}→${leg.to})`).join('  •  ')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setReviewedFare(null)}>
+                    <Ionicons name="close-circle" size={26} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.reviewMetaRow}>
+                  <Text style={styles.reviewMetaLabel}>Passengers</Text>
+                  <Text style={styles.reviewMetaValue}>
+                    {reviewedFare.passengerCounts.adults}A / {reviewedFare.passengerCounts.children}C / {reviewedFare.passengerCounts.infants}I
+                  </Text>
+                </View>
+                <View style={styles.reviewMetaRow}>
+                  <Text style={styles.reviewMetaLabel}>Fare Type</Text>
+                  <Text style={styles.reviewMetaValue}>{reviewedFare.flights[0].fareType}</Text>
+                </View>
+                <View style={styles.reviewMetaRow}>
+                  <Text style={styles.reviewMetaLabel}>Total (all legs, all passengers)</Text>
+                  <Text style={styles.reviewPrice}>₹{Math.round(reviewedFare.cartItem.lineTotal).toLocaleString()}</Text>
+                </View>
+
+                <Text style={styles.reviewHelper}>
+                  Review response loaded from TripJack. You can now save this fare to cart or continue to checkout.
+                </Text>
+
+                <View style={styles.reviewActions}>
+                  <TouchableOpacity style={styles.reviewSecondaryButton} onPress={addReviewedFareToCart}>
+                    <Text style={styles.reviewSecondaryButtonText}>Add to Cart</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.reviewPrimaryButton} onPress={continueReviewedFareToCheckout}>
+                    <Text style={styles.reviewPrimaryButtonText}>Continue</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={calendarState.visible}
@@ -1475,13 +1666,154 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  reviewCard: {
+  legSelectionCard: {
     marginTop: 18,
     backgroundColor: '#FFF9F4',
     borderRadius: 24,
     borderWidth: 1,
     borderColor: '#F7DDCF',
     padding: 18,
+  },
+  legSelectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  legSelectionHint: {
+    marginTop: 4,
+    marginBottom: 12,
+    fontSize: 12,
+    color: Colors.textMuted,
+    lineHeight: 18,
+  },
+  legSelectionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  legSelectionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    marginBottom: 8,
+    maxWidth: '100%',
+  },
+  legSelectionChipDone: {
+    borderColor: Colors.success,
+    backgroundColor: '#EAF7EC',
+  },
+  legSelectionChipText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  legReviewButtonDisabled: {
+    opacity: 0.5,
+  },
+  stickyFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  stickyFooterText: {
+    flex: 1,
+    marginRight: 12,
+  },
+  stickyFooterTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  stickyFooterSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: Colors.textLight,
+  },
+  stickyFooterButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  stickyFooterButtonText: {
+    color: Colors.secondary,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  summaryBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#F3D4C2',
+    padding: 12,
+    marginBottom: 14,
+  },
+  summaryBarIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  summaryBarText: {
+    flex: 1,
+  },
+  summaryBarRoute: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  summaryBarMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  summaryBarEdit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginLeft: 8,
+  },
+  summaryBarEditText: {
+    marginLeft: 4,
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+  },
+  reviewCard: {
+    backgroundColor: '#FFF9F4',
+    borderRadius: 24,
+    padding: 18,
+  },
+  reviewHeaderCopy: {
+    flex: 1,
+    paddingRight: 12,
   },
   reviewHeader: {
     flexDirection: 'row',
@@ -1558,6 +1890,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 34, 0.45)',
     justifyContent: 'center',
     padding: 20,
+  },
+  reviewModalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#F7DDCF',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    elevation: 12,
+    overflow: 'hidden',
   },
   calendarModal: {
     backgroundColor: Colors.card,
@@ -1676,16 +2020,24 @@ const styles = StyleSheet.create({
     padding: 15,
     paddingBottom: 32,
   },
+  listContainerWithFooter: {
+    paddingBottom: 96,
+  },
   flightCard: {
     backgroundColor: Colors.card,
     borderRadius: 20,
     marginBottom: 15,
+    borderWidth: 2,
+    borderColor: 'transparent',
     shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 6,
     overflow: 'hidden',
+  },
+  flightCardSelected: {
+    borderColor: Colors.primary,
   },
   flightHeader: {
     flexDirection: 'row',
@@ -1797,12 +2149,32 @@ const styles = StyleSheet.create({
   },
   amenities: {
     flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
-  amenity: {
-    fontSize: 12,
+  amenityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  amenityText: {
+    marginLeft: 4,
+    fontSize: 11,
     color: Colors.textLight,
-    marginRight: 15,
-    marginBottom: 4,
+    fontWeight: '600',
+  },
+  fareTypeBadge: {
+    backgroundColor: Colors.primarySoft,
+  },
+  fareTypeBadgeText: {
+    fontSize: 11,
+    color: Colors.primaryDark,
+    fontWeight: '700',
   },
   bookButton: {
     backgroundColor: Colors.primary,
@@ -1810,6 +2182,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     marginLeft: 12,
+  },
+  bookButtonSelected: {
+    backgroundColor: Colors.success,
   },
   bookButtonText: {
     color: Colors.secondary,

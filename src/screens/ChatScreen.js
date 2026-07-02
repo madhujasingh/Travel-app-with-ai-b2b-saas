@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -16,6 +16,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
+import usePolling from '../hooks/usePolling';
+
+const MESSAGES_POLL_INTERVAL_MS = 10000;
 
 const ChatScreen = ({ route, navigation }) => {
   const { token, user } = useAuth();
@@ -24,6 +27,7 @@ const ChatScreen = ({ route, navigation }) => {
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
   const [forwarding, setForwarding] = useState(false);
+  const [sendingToCustomer, setSendingToCustomer] = useState(false);
   const [submittingTemplate, setSubmittingTemplate] = useState(false);
   const [templateForm, setTemplateForm] = useState({
     title: '',
@@ -54,6 +58,8 @@ const ChatScreen = ({ route, navigation }) => {
       : `Supplier #${conversation?.supplierId}`;
   }, [conversation, user?.role]);
 
+  const hasLoadedMessagesOnceRef = useRef(false);
+
   const loadMessages = useCallback(async () => {
     if (!token || !conversation?.id) {
       return;
@@ -74,13 +80,15 @@ const ChatScreen = ({ route, navigation }) => {
 
       setMessages(Array.isArray(data) ? data : []);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to load chat');
+      if (!hasLoadedMessagesOnceRef.current) {
+        Alert.alert('Error', error.message || 'Unable to load chat');
+      }
+    } finally {
+      hasLoadedMessagesOnceRef.current = true;
     }
   }, [conversation?.id, token]);
 
-  useEffect(() => {
-    loadMessages();
-  }, [loadMessages]);
+  usePolling(loadMessages, MESSAGES_POLL_INTERVAL_MS);
 
   const sendMessage = async () => {
     const trimmed = content.trim();
@@ -153,6 +161,7 @@ const ChatScreen = ({ route, navigation }) => {
                   numberOfPeople: conversation.numberOfPeople,
                   budget: conversation.budget,
                   summary: conversation.summary,
+                  sourceConversationId: conversation.id,
                   initialMessage: `Forwarded by admin from customer conversation #${conversation.id}. Please draft itinerary options.`,
                 }),
               }
@@ -180,6 +189,75 @@ const ChatScreen = ({ route, navigation }) => {
     } finally {
       setForwarding(false);
     }
+  };
+
+  const handleSendToCustomer = async () => {
+    if (
+      user?.role !== 'ADMIN' ||
+      conversation?.type !== 'SUPPLIER_ADMIN' ||
+      !conversation?.linkedConversationId ||
+      sendingToCustomer
+    ) {
+      return;
+    }
+
+    const proposal =
+      [...messages].reverse().find((message) => message.senderRole === 'SUPPLIER') ||
+      messages[messages.length - 1];
+
+    if (!proposal) {
+      Alert.alert('Nothing to send', 'There is no package message in this conversation yet.');
+      return;
+    }
+
+    Alert.alert(
+      'Send Package To Customer',
+      `Send this to the customer now?\n\n${proposal.content}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            setSendingToCustomer(true);
+            try {
+              const sendRes = await fetch(
+                `${API_CONFIG.BASE_URL}/messages/conversations/${conversation.linkedConversationId}/messages`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({ content: proposal.content }),
+                }
+              );
+
+              const sendData = await sendRes.json();
+              if (!sendRes.ok) {
+                throw new Error(sendData?.message || 'Failed to send package to customer');
+              }
+
+              const conversationRes = await fetch(
+                `${API_CONFIG.BASE_URL}/messages/conversations/${conversation.linkedConversationId}`,
+                {
+                  headers: { Authorization: `Bearer ${token}` },
+                }
+              );
+              const linkedConversation = await conversationRes.json();
+              if (!conversationRes.ok) {
+                throw new Error(linkedConversation?.message || 'Failed to open customer conversation');
+              }
+
+              navigation.push('ChatScreen', { conversation: linkedConversation });
+            } catch (error) {
+              Alert.alert('Error', error.message || 'Unable to send package to customer');
+            } finally {
+              setSendingToCustomer(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const updateTemplateField = (field, value) => {
@@ -284,6 +362,22 @@ const ChatScreen = ({ route, navigation }) => {
             disabled={forwarding}
           >
             <Text style={styles.forwardButtonText}>Forward This Request To Supplier</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {user?.role === 'ADMIN' &&
+      conversation?.type === 'SUPPLIER_ADMIN' &&
+      conversation?.linkedConversationId ? (
+        <View style={styles.forwardSection}>
+          <TouchableOpacity
+            style={[styles.forwardButton, sendingToCustomer && styles.sendButtonDisabled]}
+            onPress={handleSendToCustomer}
+            disabled={sendingToCustomer}
+          >
+            <Text style={styles.forwardButtonText}>
+              {sendingToCustomer ? 'Sending...' : 'Send Package To Customer'}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : null}

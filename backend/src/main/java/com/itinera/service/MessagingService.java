@@ -9,6 +9,8 @@ import com.itinera.repository.ConversationMessageRepository;
 import com.itinera.repository.ConversationRepository;
 import com.itinera.repository.ItineraryRepository;
 import com.itinera.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,8 @@ import java.util.Map;
 
 @Service
 public class MessagingService {
+
+    private static final Logger log = LoggerFactory.getLogger(MessagingService.class);
 
     @Autowired
     private ConversationRepository conversationRepository;
@@ -81,6 +85,7 @@ public class MessagingService {
         conversation.setNumberOfPeople(getInteger(payload, "numberOfPeople"));
         conversation.setBudget(getString(payload, "budget"));
         conversation.setSummary(getString(payload, "summary"));
+        conversation.setLinkedConversationId(resolveSourceConversationId(payload, admin.getId()));
         Conversation saved = conversationRepository.save(conversation);
 
         String initialMessage = getString(payload, "initialMessage");
@@ -276,6 +281,27 @@ public class MessagingService {
 
         sb.append("Linked Itinerary ID: ").append(itinerary.getId());
         return sb.toString();
+    }
+
+    private Long resolveSourceConversationId(Map<String, Object> payload, Long adminId) {
+        Long sourceConversationId = getLong(payload, "sourceConversationId");
+        if (sourceConversationId == null) {
+            return null;
+        }
+
+        try {
+            Conversation source = findConversation(sourceConversationId);
+            if (source.getType() != Conversation.ConversationType.CUSTOMER_ADMIN
+                    || !adminId.equals(source.getAdminId())) {
+                log.warn("Ignoring sourceConversationId {}: not a CUSTOMER_ADMIN conversation owned by admin {}",
+                        sourceConversationId, adminId);
+                return null;
+            }
+            return sourceConversationId;
+        } catch (Exception ex) {
+            log.warn("Ignoring invalid sourceConversationId {}: {}", sourceConversationId, ex.getMessage());
+            return null;
+        }
     }
 
     private void ensureAllowedPairing(Conversation conversation, User sender) {
