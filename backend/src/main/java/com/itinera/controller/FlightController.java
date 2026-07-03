@@ -27,4 +27,9 @@ public class FlightController {
     public ResponseEntity<JsonNode> reviewFlight(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.reviewFlight(payload));
     }
+
+    @PostMapping("/fare-rule")
+    public ResponseEntity<JsonNode> fareRule(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.fareRule(payload));
+    }
 }

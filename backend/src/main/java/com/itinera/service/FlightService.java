@@ -19,4 +19,8 @@ public class FlightService {
     public JsonNode reviewFlight(JsonNode payload) {
         return tripJackClient.post("/fms/v1/review", payload);
     }
+
+    public JsonNode fareRule(JsonNode payload) {
+        return tripJackClient.post("/fms/v2/farerule", payload);
+    }
 }
