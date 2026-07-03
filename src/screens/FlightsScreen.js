@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -233,6 +234,36 @@ const getReviewGrandTotal = (reviewResponse) => {
   return Number.isFinite(total) && total > 0 ? total : null;
 };
 
+const FARE_RULE_SECTIONS = [
+  { key: 'CANCELLATION', label: 'Cancellation' },
+  { key: 'DATECHANGE', label: 'Date Change' },
+  { key: 'NO_SHOW', label: 'No Show' },
+  { key: 'SEAT_CHARGEABLE', label: 'Seat Chargeable' },
+];
+
+const formatFareRulePolicyWindow = (policy) => {
+  if (policy?.pp) {
+    return policy.pp.replace(/_/g, ' ');
+  }
+  if (policy?.st != null && policy?.et != null) {
+    return `${policy.st}–${policy.et} hrs before departure`;
+  }
+  return null;
+};
+
+// Cat 16 fare rules can come back as supplier free text wrapped in raw RTF -
+// strip control words/groups so the plain policy text is readable in the app.
+const stripFareRuleRtf = (raw) => {
+  if (!raw) return '';
+  return raw
+    .replace(/\\par\b/g, '\n')
+    .replace(/\\[a-zA-Z]+-?\d*\s?/g, '')
+    .replace(/[{}]/g, '')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 const buildFlightCartItem = ({ flights, reviewResponse, passengerCounts }) => {
   const legs = Array.isArray(flights) ? flights : [flights];
   const primaryLeg = legs[0] || {};
@@ -344,6 +375,7 @@ const FlightsScreen = ({ navigation }) => {
   const [flights, setFlights] = useState([]);
   const [searched, setSearched] = useState(false);
   const [reviewedFare, setReviewedFare] = useState(null);
+  const [fareRuleState, setFareRuleState] = useState({ visible: false, loading: false, data: null, error: null });
   const [selectedByGroup, setSelectedByGroup] = useState({});
   const [showFilters, setShowFilters] = useState(true);
   const today = startOfDay(new Date());
@@ -616,6 +648,39 @@ const FlightsScreen = ({ navigation }) => {
   };
 
   const reviewFare = (flight) => runReview([flight]);
+
+  const closeFareRules = () => setFareRuleState({ visible: false, loading: false, data: null, error: null });
+
+  const viewFareRules = async () => {
+    const bookingId = reviewedFare?.reviewResponse?.bookingId;
+    if (!bookingId) {
+      Alert.alert('Fare Rules', 'Fare rule lookup needs a reviewed fare first.');
+      return;
+    }
+
+    setFareRuleState({ visible: true, loading: true, data: null, error: null });
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/flights/fare-rule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: bookingId, flowType: 'REVIEW' }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to fetch fare rules right now.');
+      }
+
+      setFareRuleState({ visible: true, loading: false, data, error: null });
+    } catch (error) {
+      setFareRuleState({
+        visible: true,
+        loading: false,
+        data: null,
+        error: error.message || 'Unable to fetch fare rules right now.',
+      });
+    }
+  };
 
   const selectFlightForGroup = (flight) => {
     setSelectedByGroup((prev) => ({ ...prev, [flight.groupKey]: flight }));
@@ -1229,6 +1294,11 @@ const FlightsScreen = ({ navigation }) => {
                   Review response loaded from TripJack. You can now save this fare to cart or continue to checkout.
                 </Text>
 
+                <TouchableOpacity style={styles.fareRuleLinkButton} onPress={viewFareRules}>
+                  <Ionicons name="document-text-outline" size={16} color={Colors.primaryDark} />
+                  <Text style={styles.fareRuleLinkText}>View Fare Rules</Text>
+                </TouchableOpacity>
+
                 <View style={styles.reviewActions}>
                   <TouchableOpacity style={styles.reviewSecondaryButton} onPress={addReviewedFareToCart}>
                     <Text style={styles.reviewSecondaryButtonText}>Add to Cart</Text>
@@ -1239,6 +1309,72 @@ const FlightsScreen = ({ navigation }) => {
                 </View>
               </View>
             ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={fareRuleState.visible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeFareRules}
+      >
+        <Pressable style={styles.calendarOverlay} onPress={closeFareRules}>
+          <Pressable style={styles.reviewModalCard} onPress={() => {}}>
+            <View style={styles.reviewCard}>
+              <View style={styles.reviewHeader}>
+                <View style={styles.reviewHeaderCopy}>
+                  <Text style={styles.reviewTitle}>Fare Rules</Text>
+                  <Text style={styles.reviewSubtitle}>Cancellation, date change &amp; no-show policies</Text>
+                </View>
+                <TouchableOpacity onPress={closeFareRules}>
+                  <Ionicons name="close-circle" size={26} color={Colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              {fareRuleState.loading ? (
+                <ActivityIndicator color={Colors.primary} style={styles.fareRuleLoader} />
+              ) : fareRuleState.error ? (
+                <Text style={styles.fareRuleText}>{fareRuleState.error}</Text>
+              ) : (
+                <ScrollView style={styles.fareRuleScroll}>
+                  {Object.entries(fareRuleState.data?.fareRule || {}).map(([route, routeRule]) => (
+                    <View key={route} style={styles.fareRuleSection}>
+                      <Text style={styles.fareRuleRoute}>{route}</Text>
+                      {routeRule?.miscInfo?.length ? (
+                        routeRule.miscInfo.map((text, idx) => (
+                          <Text key={idx} style={styles.fareRuleText}>{stripFareRuleRtf(text)}</Text>
+                        ))
+                      ) : (
+                        FARE_RULE_SECTIONS.map(({ key, label }) => {
+                          const policies = routeRule?.tfr?.[key];
+                          if (!policies?.length) {
+                            return null;
+                          }
+                          return (
+                            <View key={key} style={styles.fareRulePolicyBlock}>
+                              <Text style={styles.fareRulePolicyLabel}>{label}</Text>
+                              {policies.map((policy, idx) => (
+                                <View key={idx} style={styles.fareRulePolicyRow}>
+                                  {formatFareRulePolicyWindow(policy) ? (
+                                    <Text style={styles.fareRulePolicyWindow}>
+                                      {formatFareRulePolicyWindow(policy)}
+                                    </Text>
+                                  ) : null}
+                                  <Text style={styles.fareRulePolicyInfo}>
+                                    {policy.policyInfo || 'No details available'}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          );
+                        })
+                      )}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1884,6 +2020,62 @@ const styles = StyleSheet.create({
   reviewPrimaryButtonText: {
     color: Colors.secondary,
     fontWeight: '700',
+  },
+  fareRuleLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  fareRuleLinkText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+  },
+  fareRuleLoader: {
+    marginVertical: 24,
+  },
+  fareRuleScroll: {
+    maxHeight: 380,
+  },
+  fareRuleSection: {
+    marginBottom: 16,
+  },
+  fareRuleRoute: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  fareRulePolicyBlock: {
+    marginBottom: 10,
+  },
+  fareRulePolicyLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+    marginBottom: 4,
+  },
+  fareRulePolicyRow: {
+    marginBottom: 6,
+  },
+  fareRulePolicyWindow: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'capitalize',
+    marginBottom: 2,
+  },
+  fareRulePolicyInfo: {
+    fontSize: 12,
+    color: Colors.text,
+    lineHeight: 17,
+  },
+  fareRuleText: {
+    fontSize: 12,
+    color: Colors.text,
+    lineHeight: 18,
+    marginBottom: 8,
   },
   calendarOverlay: {
     flex: 1,
