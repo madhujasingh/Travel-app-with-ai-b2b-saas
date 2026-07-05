@@ -23,4 +23,8 @@ public class FlightService {
     public JsonNode fareRule(JsonNode payload) {
         return tripJackClient.post("/fms/v2/farerule", payload);
     }
+
+    public JsonNode seatMap(JsonNode payload) {
+        return tripJackClient.post("/fms/v1/seat", payload);
+    }
 }

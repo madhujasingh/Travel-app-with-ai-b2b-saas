@@ -32,4 +32,9 @@ public class FlightController {
     public ResponseEntity<JsonNode> fareRule(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.fareRule(payload));
     }
+
+    @PostMapping("/seat-map")
+    public ResponseEntity<JsonNode> seatMap(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.seatMap(payload));
+    }
 }
