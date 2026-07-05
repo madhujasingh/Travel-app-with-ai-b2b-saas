@@ -1257,11 +1257,69 @@ const FlightsScreen = ({ navigation }) => {
         visible={!!reviewedFare}
         transparent
         animationType="slide"
-        onRequestClose={() => setReviewedFare(null)}
+        onRequestClose={() => (fareRuleState.visible ? closeFareRules() : setReviewedFare(null))}
       >
-        <Pressable style={styles.calendarOverlay} onPress={() => setReviewedFare(null)}>
+        <Pressable
+          style={styles.calendarOverlay}
+          onPress={() => (fareRuleState.visible ? closeFareRules() : setReviewedFare(null))}
+        >
           <Pressable style={styles.reviewModalCard} onPress={() => {}}>
-            {reviewedFare ? (
+            {reviewedFare && fareRuleState.visible ? (
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewHeader}>
+                  <View style={styles.reviewHeaderCopy}>
+                    <Text style={styles.reviewTitle}>Fare Rules</Text>
+                    <Text style={styles.reviewSubtitle}>Cancellation, date change &amp; no-show policies</Text>
+                  </View>
+                  <TouchableOpacity onPress={closeFareRules}>
+                    <Ionicons name="close-circle" size={26} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+
+                {fareRuleState.loading ? (
+                  <ActivityIndicator color={Colors.primary} style={styles.fareRuleLoader} />
+                ) : fareRuleState.error ? (
+                  <Text style={styles.fareRuleText}>{fareRuleState.error}</Text>
+                ) : (
+                  <ScrollView style={styles.fareRuleScroll}>
+                    {Object.entries(fareRuleState.data?.fareRule || {}).map(([route, routeRule]) => (
+                      <View key={route} style={styles.fareRuleSection}>
+                        <Text style={styles.fareRuleRoute}>{route}</Text>
+                        {routeRule?.miscInfo?.length ? (
+                          routeRule.miscInfo.map((text, idx) => (
+                            <Text key={idx} style={styles.fareRuleText}>{stripFareRuleRtf(text)}</Text>
+                          ))
+                        ) : (
+                          FARE_RULE_SECTIONS.map(({ key, label }) => {
+                            const policies = routeRule?.tfr?.[key];
+                            if (!policies?.length) {
+                              return null;
+                            }
+                            return (
+                              <View key={key} style={styles.fareRulePolicyBlock}>
+                                <Text style={styles.fareRulePolicyLabel}>{label}</Text>
+                                {policies.map((policy, idx) => (
+                                  <View key={idx} style={styles.fareRulePolicyRow}>
+                                    {formatFareRulePolicyWindow(policy) ? (
+                                      <Text style={styles.fareRulePolicyWindow}>
+                                        {formatFareRulePolicyWindow(policy)}
+                                      </Text>
+                                    ) : null}
+                                    <Text style={styles.fareRulePolicyInfo}>
+                                      {policy.policyInfo || 'No details available'}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            );
+                          })
+                        )}
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            ) : reviewedFare ? (
               <View style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
                   <View style={styles.reviewHeaderCopy}>
@@ -1309,72 +1367,6 @@ const FlightsScreen = ({ navigation }) => {
                 </View>
               </View>
             ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={fareRuleState.visible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeFareRules}
-      >
-        <Pressable style={styles.calendarOverlay} onPress={closeFareRules}>
-          <Pressable style={styles.reviewModalCard} onPress={() => {}}>
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <View style={styles.reviewHeaderCopy}>
-                  <Text style={styles.reviewTitle}>Fare Rules</Text>
-                  <Text style={styles.reviewSubtitle}>Cancellation, date change &amp; no-show policies</Text>
-                </View>
-                <TouchableOpacity onPress={closeFareRules}>
-                  <Ionicons name="close-circle" size={26} color={Colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-
-              {fareRuleState.loading ? (
-                <ActivityIndicator color={Colors.primary} style={styles.fareRuleLoader} />
-              ) : fareRuleState.error ? (
-                <Text style={styles.fareRuleText}>{fareRuleState.error}</Text>
-              ) : (
-                <ScrollView style={styles.fareRuleScroll}>
-                  {Object.entries(fareRuleState.data?.fareRule || {}).map(([route, routeRule]) => (
-                    <View key={route} style={styles.fareRuleSection}>
-                      <Text style={styles.fareRuleRoute}>{route}</Text>
-                      {routeRule?.miscInfo?.length ? (
-                        routeRule.miscInfo.map((text, idx) => (
-                          <Text key={idx} style={styles.fareRuleText}>{stripFareRuleRtf(text)}</Text>
-                        ))
-                      ) : (
-                        FARE_RULE_SECTIONS.map(({ key, label }) => {
-                          const policies = routeRule?.tfr?.[key];
-                          if (!policies?.length) {
-                            return null;
-                          }
-                          return (
-                            <View key={key} style={styles.fareRulePolicyBlock}>
-                              <Text style={styles.fareRulePolicyLabel}>{label}</Text>
-                              {policies.map((policy, idx) => (
-                                <View key={idx} style={styles.fareRulePolicyRow}>
-                                  {formatFareRulePolicyWindow(policy) ? (
-                                    <Text style={styles.fareRulePolicyWindow}>
-                                      {formatFareRulePolicyWindow(policy)}
-                                    </Text>
-                                  ) : null}
-                                  <Text style={styles.fareRulePolicyInfo}>
-                                    {policy.policyInfo || 'No details available'}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          );
-                        })
-                      )}
-                    </View>
-                  ))}
-                </ScrollView>
-              )}
-            </View>
           </Pressable>
         </Pressable>
       </Modal>
