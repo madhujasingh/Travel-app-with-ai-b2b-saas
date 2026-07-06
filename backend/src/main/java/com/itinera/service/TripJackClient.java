@@ -51,7 +51,7 @@ public class TripJackClient {
         } catch (HttpStatusCodeException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "TripJack request failed with status " + ex.getStatusCode().value()
+                    "TripJack request failed with status " + ex.getStatusCode().value() + ": " + ex.getResponseBodyAsString()
             );
         } catch (ResourceAccessException ex) {
             throw new ResponseStatusException(
