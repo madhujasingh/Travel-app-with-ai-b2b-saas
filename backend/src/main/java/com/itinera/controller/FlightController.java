@@ -57,4 +57,9 @@ public class FlightController {
     public ResponseEntity<JsonNode> confirmBook(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.confirmBook(payload));
     }
+
+    @PostMapping("/booking-details")
+    public ResponseEntity<JsonNode> bookingDetails(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.bookingDetails(payload));
+    }
 }

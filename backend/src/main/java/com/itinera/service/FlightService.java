@@ -45,4 +45,10 @@ public class FlightService {
     public JsonNode confirmBook(JsonNode payload) {
         return tripJackClient.post("/oms/v1/air/confirm-book", payload);
     }
+
+    // Same TripJack endpoint for plain Booking Detail and Detailed Booking
+    // Information - the caller controls which via the requirePaxPricing flag.
+    public JsonNode bookingDetails(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/booking-details", payload);
+    }
 }
