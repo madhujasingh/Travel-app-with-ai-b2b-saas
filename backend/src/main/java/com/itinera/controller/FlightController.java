@@ -67,4 +67,19 @@ public class FlightController {
     public ResponseEntity<JsonNode> releasePnr(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.releasePnr(payload));
     }
+
+    @PostMapping("/amendment-charges")
+    public ResponseEntity<JsonNode> amendmentCharges(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.amendmentCharges(payload));
+    }
+
+    @PostMapping("/submit-amendment")
+    public ResponseEntity<JsonNode> submitAmendment(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.submitAmendment(payload));
+    }
+
+    @PostMapping("/amendment-details")
+    public ResponseEntity<JsonNode> amendmentDetails(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.amendmentDetails(payload));
+    }
 }

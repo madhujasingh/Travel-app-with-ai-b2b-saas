@@ -55,4 +55,16 @@ public class FlightService {
     public JsonNode releasePnr(JsonNode payload) {
         return tripJackClient.post("/oms/v1/air/unhold", payload);
     }
+
+    public JsonNode amendmentCharges(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/amendment/amendment-charges", payload);
+    }
+
+    public JsonNode submitAmendment(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/amendment/submit-amendment", payload);
+    }
+
+    public JsonNode amendmentDetails(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/amendment/amendment-details", payload);
+    }
 }
