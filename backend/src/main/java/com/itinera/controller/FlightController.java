@@ -42,4 +42,19 @@ public class FlightController {
     public ResponseEntity<JsonNode> fareValidate(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.fareValidate(payload));
     }
+
+    @PostMapping("/book")
+    public ResponseEntity<JsonNode> bookFlight(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.bookFlight(payload));
+    }
+
+    @PostMapping("/confirm-fare-before-ticket")
+    public ResponseEntity<JsonNode> confirmFareBeforeTicketing(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.confirmFareBeforeTicketing(payload));
+    }
+
+    @PostMapping("/confirm-book")
+    public ResponseEntity<JsonNode> confirmBook(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.confirmBook(payload));
+    }
 }

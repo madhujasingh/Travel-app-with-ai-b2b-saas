@@ -31,4 +31,18 @@ public class FlightService {
     public JsonNode fareValidate(JsonNode payload) {
         return tripJackClient.post("/oms/v1/air/book/fare-validate", payload);
     }
+
+    // Same TripJack endpoint for Instant Book and Hold - the caller controls
+    // which by including (or omitting) paymentInfos in the payload.
+    public JsonNode bookFlight(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/book", payload);
+    }
+
+    public JsonNode confirmFareBeforeTicketing(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/fare-validate", payload);
+    }
+
+    public JsonNode confirmBook(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/confirm-book", payload);
+    }
 }
