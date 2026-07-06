@@ -27,4 +27,8 @@ public class FlightService {
     public JsonNode seatMap(JsonNode payload) {
         return tripJackClient.post("/fms/v1/seat", payload);
     }
+
+    public JsonNode fareValidate(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/book/fare-validate", payload);
+    }
 }

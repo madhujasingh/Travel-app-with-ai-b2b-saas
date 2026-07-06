@@ -37,4 +37,9 @@ public class FlightController {
     public ResponseEntity<JsonNode> seatMap(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.seatMap(payload));
     }
+
+    @PostMapping("/fare-validate")
+    public ResponseEntity<JsonNode> fareValidate(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.fareValidate(payload));
+    }
 }
