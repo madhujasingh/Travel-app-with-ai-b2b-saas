@@ -62,4 +62,9 @@ public class FlightController {
     public ResponseEntity<JsonNode> bookingDetails(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.bookingDetails(payload));
     }
+
+    @PostMapping("/release-pnr")
+    public ResponseEntity<JsonNode> releasePnr(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.releasePnr(payload));
+    }
 }

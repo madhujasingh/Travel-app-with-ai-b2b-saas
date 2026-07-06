@@ -51,4 +51,8 @@ public class FlightService {
     public JsonNode bookingDetails(JsonNode payload) {
         return tripJackClient.post("/oms/v1/booking-details", payload);
     }
+
+    public JsonNode releasePnr(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/unhold", payload);
+    }
 }
