@@ -67,4 +67,8 @@ public class FlightService {
     public JsonNode amendmentDetails(JsonNode payload) {
         return tripJackClient.post("/oms/v1/air/amendment/amendment-details", payload);
     }
+
+    public JsonNode userBalance() {
+        return tripJackClient.get("/ums/v1/user-detail");
+    }
 }

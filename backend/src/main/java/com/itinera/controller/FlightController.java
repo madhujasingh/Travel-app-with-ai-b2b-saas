@@ -3,6 +3,7 @@ package com.itinera.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.itinera.service.FlightService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -81,5 +82,10 @@ public class FlightController {
     @PostMapping("/amendment-details")
     public ResponseEntity<JsonNode> amendmentDetails(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.amendmentDetails(payload));
+    }
+
+    @GetMapping("/user-balance")
+    public ResponseEntity<JsonNode> userBalance() {
+        return ResponseEntity.ok(flightService.userBalance());
     }
 }

@@ -34,12 +34,7 @@ public class TripJackClient {
     }
 
     public JsonNode post(String path, JsonNode payload) {
-        if (!StringUtils.hasText(tripJackConfig.getApiKey())) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "TripJack API key is not configured"
-            );
-        }
+        requireApiKey();
 
         try {
             return restClient.post()
@@ -57,6 +52,37 @@ public class TripJackClient {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "TripJack service is unavailable"
+            );
+        }
+    }
+
+    public JsonNode get(String path) {
+        requireApiKey();
+
+        try {
+            return restClient.get()
+                    .uri(path)
+                    .header("apikey", tripJackConfig.getApiKey())
+                    .retrieve()
+                    .body(JsonNode.class);
+        } catch (HttpStatusCodeException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed with status " + ex.getStatusCode().value() + ": " + ex.getResponseBodyAsString()
+            );
+        } catch (ResourceAccessException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "TripJack service is unavailable"
+            );
+        }
+    }
+
+    private void requireApiKey() {
+        if (!StringUtils.hasText(tripJackConfig.getApiKey())) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "TripJack API key is not configured"
             );
         }
     }
