@@ -264,6 +264,32 @@ const stripFareRuleRtf = (raw) => {
     .trim();
 };
 
+// tripSeatMap.tripSeat is keyed by TripJack segment id, with rows/columns that
+// include gaps for the aisle (e.g. a 3-3 layout skips column 4) - build a
+// row-major grid from sInfo positions rather than assuming contiguous columns.
+const buildSeatGrid = (segment) => {
+  const rowCount = Number(segment?.sData?.row || 0);
+  const columnCount = Number(segment?.sData?.column || 0);
+  const seatByPosition = {};
+  (segment?.sInfo || []).forEach((seat) => {
+    const row = seat?.seatPosition?.row;
+    const column = seat?.seatPosition?.column;
+    if (row != null && column != null) {
+      seatByPosition[`${row}-${column}`] = seat;
+    }
+  });
+
+  const rows = [];
+  for (let row = 1; row <= rowCount; row += 1) {
+    const cols = [];
+    for (let column = 1; column <= columnCount; column += 1) {
+      cols.push(seatByPosition[`${row}-${column}`] || null);
+    }
+    rows.push(cols);
+  }
+  return rows;
+};
+
 const buildFlightCartItem = ({ flights, reviewResponse, passengerCounts }) => {
   const legs = Array.isArray(flights) ? flights : [flights];
   const primaryLeg = legs[0] || {};
@@ -376,6 +402,7 @@ const FlightsScreen = ({ navigation }) => {
   const [searched, setSearched] = useState(false);
   const [reviewedFare, setReviewedFare] = useState(null);
   const [fareRuleState, setFareRuleState] = useState({ visible: false, loading: false, data: null, error: null });
+  const [seatMapState, setSeatMapState] = useState({ visible: false, loading: false, data: null, error: null });
   const [selectedByGroup, setSelectedByGroup] = useState({});
   const [showFilters, setShowFilters] = useState(true);
   const today = startOfDay(new Date());
@@ -658,6 +685,7 @@ const FlightsScreen = ({ navigation }) => {
       return;
     }
 
+    setSeatMapState({ visible: false, loading: false, data: null, error: null });
     setFareRuleState({ visible: true, loading: true, data: null, error: null });
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/fare-rule`, {
@@ -680,6 +708,54 @@ const FlightsScreen = ({ navigation }) => {
         error: error.message || 'Unable to fetch fare rules right now.',
       });
     }
+  };
+
+  const closeSeatMap = () => setSeatMapState({ visible: false, loading: false, data: null, error: null });
+
+  const viewSeatMap = async () => {
+    const bookingId = reviewedFare?.reviewResponse?.bookingId;
+    if (!bookingId) {
+      Alert.alert('Seat Map', 'Seat map lookup needs a reviewed fare first.');
+      return;
+    }
+
+    setFareRuleState({ visible: false, loading: false, data: null, error: null });
+    setSeatMapState({ visible: true, loading: true, data: null, error: null });
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/flights/seat-map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to fetch the seat map right now.');
+      }
+
+      setSeatMapState({ visible: true, loading: false, data, error: null });
+    } catch (error) {
+      setSeatMapState({
+        visible: true,
+        loading: false,
+        data: null,
+        error: error.message || 'Unable to fetch the seat map right now.',
+      });
+    }
+  };
+
+  const handleSeatPress = (seat) => {
+    if (seat.isBooked) {
+      Alert.alert('Seat Unavailable', `Seat ${seat.seatNo} is already booked.`);
+      return;
+    }
+
+    const tags = [];
+    if (seat.isLegroom) tags.push('Extra legroom');
+    if (seat.isAisle) tags.push('Aisle');
+    if (seat.isExitRow) tags.push('Exit row');
+    const priceLabel = seat.amount > 0 ? `₹${seat.amount}` : 'Included in fare';
+    Alert.alert(`Seat ${seat.seatNo}`, [priceLabel, ...tags].join(' • '));
   };
 
   const selectFlightForGroup = (flight) => {
@@ -1257,14 +1333,97 @@ const FlightsScreen = ({ navigation }) => {
         visible={!!reviewedFare}
         transparent
         animationType="slide"
-        onRequestClose={() => (fareRuleState.visible ? closeFareRules() : setReviewedFare(null))}
+        onRequestClose={() => {
+          if (fareRuleState.visible) return closeFareRules();
+          if (seatMapState.visible) return closeSeatMap();
+          return setReviewedFare(null);
+        }}
       >
         <Pressable
           style={styles.calendarOverlay}
-          onPress={() => (fareRuleState.visible ? closeFareRules() : setReviewedFare(null))}
+          onPress={() => {
+            if (fareRuleState.visible) return closeFareRules();
+            if (seatMapState.visible) return closeSeatMap();
+            return setReviewedFare(null);
+          }}
         >
           <Pressable style={styles.reviewModalCard} onPress={() => {}}>
-            {reviewedFare && fareRuleState.visible ? (
+            {reviewedFare && seatMapState.visible ? (
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewHeader}>
+                  <View style={styles.reviewHeaderCopy}>
+                    <Text style={styles.reviewTitle}>Seat Map</Text>
+                    <Text style={styles.reviewSubtitle}>Tap a seat to see its price and details</Text>
+                  </View>
+                  <TouchableOpacity onPress={closeSeatMap}>
+                    <Ionicons name="close-circle" size={26} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+
+                {seatMapState.loading ? (
+                  <ActivityIndicator color={Colors.primary} style={styles.fareRuleLoader} />
+                ) : seatMapState.error ? (
+                  <Text style={styles.fareRuleText}>{seatMapState.error}</Text>
+                ) : (
+                  <ScrollView style={styles.fareRuleScroll}>
+                    <View style={styles.seatLegendRow}>
+                      <View style={styles.seatLegendItem}>
+                        <View style={[styles.seatLegendSwatch, styles.seatAvailable]} />
+                        <Text style={styles.seatLegendLabel}>Available</Text>
+                      </View>
+                      <View style={styles.seatLegendItem}>
+                        <View style={[styles.seatLegendSwatch, styles.seatChargeable]} />
+                        <Text style={styles.seatLegendLabel}>Chargeable</Text>
+                      </View>
+                      <View style={styles.seatLegendItem}>
+                        <View style={[styles.seatLegendSwatch, styles.seatBooked]} />
+                        <Text style={styles.seatLegendLabel}>Booked</Text>
+                      </View>
+                      <View style={styles.seatLegendItem}>
+                        <View style={[styles.seatLegendSwatch, styles.seatLegroom]} />
+                        <Text style={styles.seatLegendLabel}>Legroom</Text>
+                      </View>
+                    </View>
+
+                    {Object.entries(seatMapState.data?.tripSeatMap?.tripSeat || {}).map(([segmentId, segment], segmentIndex) => (
+                      <View key={segmentId} style={styles.fareRuleSection}>
+                        <Text style={styles.fareRuleRoute}>
+                          {reviewedFare.flights[segmentIndex]
+                            ? `${reviewedFare.flights[segmentIndex].from} → ${reviewedFare.flights[segmentIndex].to}`
+                            : `Flight ${segmentIndex + 1}`}
+                        </Text>
+                        {segment?.nt ? <Text style={styles.fareRuleText}>{segment.nt}</Text> : null}
+                        {buildSeatGrid(segment).map((rowSeats, rowIdx) => (
+                          <View key={rowIdx} style={styles.seatRow}>
+                            {rowSeats.map((seat, colIdx) =>
+                              seat ? (
+                                <TouchableOpacity
+                                  key={colIdx}
+                                  style={[
+                                    styles.seatBox,
+                                    seat.isBooked
+                                      ? styles.seatBooked
+                                      : Number(seat.amount) > 0
+                                      ? styles.seatChargeable
+                                      : styles.seatAvailable,
+                                    seat.isLegroom ? styles.seatLegroom : null,
+                                  ]}
+                                  onPress={() => handleSeatPress(seat)}
+                                >
+                                  <Text style={styles.seatBoxText}>{seat.seatNo}</Text>
+                                </TouchableOpacity>
+                              ) : (
+                                <View key={colIdx} style={styles.seatGap} />
+                              )
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            ) : reviewedFare && fareRuleState.visible ? (
               <View style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
                   <View style={styles.reviewHeaderCopy}>
@@ -1352,10 +1511,16 @@ const FlightsScreen = ({ navigation }) => {
                   Review response loaded from TripJack. You can now save this fare to cart or continue to checkout.
                 </Text>
 
-                <TouchableOpacity style={styles.fareRuleLinkButton} onPress={viewFareRules}>
-                  <Ionicons name="document-text-outline" size={16} color={Colors.primaryDark} />
-                  <Text style={styles.fareRuleLinkText}>View Fare Rules</Text>
-                </TouchableOpacity>
+                <View style={styles.fareRuleLinkRow}>
+                  <TouchableOpacity style={styles.fareRuleLinkButton} onPress={viewFareRules}>
+                    <Ionicons name="document-text-outline" size={16} color={Colors.primaryDark} />
+                    <Text style={styles.fareRuleLinkText}>View Fare Rules</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.fareRuleLinkButton} onPress={viewSeatMap}>
+                    <Ionicons name="grid-outline" size={16} color={Colors.primaryDark} />
+                    <Text style={styles.fareRuleLinkText}>View Seat Map</Text>
+                  </TouchableOpacity>
+                </View>
 
                 <View style={styles.reviewActions}>
                   <TouchableOpacity style={styles.reviewSecondaryButton} onPress={addReviewedFareToCart}>
@@ -2013,10 +2178,14 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     fontWeight: '700',
   },
+  fareRuleLinkRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+  },
   fareRuleLinkButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    marginRight: 20,
   },
   fareRuleLinkText: {
     marginLeft: 6,
@@ -2068,6 +2237,68 @@ const styles = StyleSheet.create({
     color: Colors.text,
     lineHeight: 18,
     marginBottom: 8,
+  },
+  seatLegendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 14,
+  },
+  seatLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 14,
+    marginBottom: 6,
+  },
+  seatLegendSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  seatLegendLabel: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  seatRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  seatBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    marginRight: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seatGap: {
+    width: 28,
+    height: 28,
+    marginRight: 4,
+  },
+  seatBoxText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  seatAvailable: {
+    backgroundColor: '#E3F5E5',
+    borderWidth: 1,
+    borderColor: Colors.success,
+  },
+  seatChargeable: {
+    backgroundColor: '#FFF3D6',
+    borderWidth: 1,
+    borderColor: Colors.warning,
+  },
+  seatBooked: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.textMuted,
+  },
+  seatLegroom: {
+    borderWidth: 2,
+    borderColor: Colors.primary,
   },
   calendarOverlay: {
     flex: 1,
