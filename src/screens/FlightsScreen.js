@@ -195,6 +195,23 @@ const buildJourneyLabel = (bucket) => {
   return Number.isNaN(legNumber) ? 'Onward' : `Leg ${legNumber + 1}`;
 };
 
+// International Return/Multi-City results come back in a single "COMBO" bucket
+// with every leg's segments flattened into one sI array (e.g. onward DEL->SIN
+// then return SIN->MAA->DEL all in the same array, distinguished only by isRs
+// and by sN resetting to 0 at each new leg's first segment) - split on that
+// reset so from/to/duration/stops reflect one leg, not the whole chain.
+const splitSegmentsIntoLegs = (segments) => {
+  const legs = [];
+  segments.forEach((segment) => {
+    if (legs.length === 0 || Number(segment?.sN) === 0) {
+      legs.push([segment]);
+    } else {
+      legs[legs.length - 1].push(segment);
+    }
+  });
+  return legs;
+};
+
 const flattenTripBuckets = (tripInfos = {}) => {
   const flattened = [];
   const allKeys = Object.keys(tripInfos || {});
@@ -344,11 +361,21 @@ const mapFlightsFromResponse = (data) => {
 
   flattenedTrips.forEach(({ bucket, trip, tripIndex }) => {
     const segments = Array.isArray(trip?.sI) ? trip.sI : [];
-    const firstSegment = segments[0];
-    const lastSegment = segments[segments.length - 1];
-    const totalDuration = segments.reduce((sum, segment) => sum + Number(segment?.duration || 0), 0);
-    const totalStops = segments.reduce((sum, segment) => sum + Number(segment?.stops || 0), 0);
-    const journeyLabel = buildJourneyLabel(bucket);
+    const legs = splitSegmentsIntoLegs(segments);
+    const primaryLegSegments = legs[0] || segments;
+    const additionalLegs = legs.slice(1);
+    const firstSegment = primaryLegSegments[0];
+    const lastSegment = primaryLegSegments[primaryLegSegments.length - 1];
+    const totalDuration = primaryLegSegments.reduce((sum, segment) => sum + Number(segment?.duration || 0), 0);
+    const totalStops = primaryLegSegments.reduce((sum, segment) => sum + Number(segment?.stops || 0), 0);
+    const additionalLegSummaries = additionalLegs.map((legSegments) => {
+      const legFirst = legSegments[0];
+      const legLast = legSegments[legSegments.length - 1];
+      return `${legFirst?.da?.code || '--'} → ${legLast?.aa?.code || '--'}`;
+    });
+    const journeyLabel = additionalLegSummaries.length
+      ? `${buildJourneyLabel(bucket)} (+ ${additionalLegSummaries.join(', ')})`
+      : buildJourneyLabel(bucket);
     const priceOptions = Array.isArray(trip?.totalPriceList) ? trip.totalPriceList : [];
 
     // Each entry in totalPriceList is a DIFFERENT alternate fare (e.g. PUBLISHED vs
@@ -790,6 +817,18 @@ const FlightsScreen = ({ navigation }) => {
     });
   };
 
+  const holdThisFareSandbox = () => {
+    if (!reviewedFare) {
+      return;
+    }
+
+    navigation.navigate('FlightBooking', {
+      flights: reviewedFare.flights,
+      reviewResponse: reviewedFare.reviewResponse,
+      passengerCounts: reviewedFare.passengerCounts,
+    });
+  };
+
   const renderFlight = ({ item }) => {
     const isSelected = isMultiLeg && selectedByGroup[item.groupKey]?.id === item.id;
 
@@ -967,7 +1006,9 @@ const FlightsScreen = ({ navigation }) => {
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Flights</Text>
-        <View style={{ width: 30 }} />
+        <TouchableOpacity onPress={() => navigation.navigate('MyFlightBookings')}>
+          <Ionicons name="briefcase-outline" size={24} color={Colors.secondary} />
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -1530,6 +1571,11 @@ const FlightsScreen = ({ navigation }) => {
                     <Text style={styles.reviewPrimaryButtonText}>Continue</Text>
                   </TouchableOpacity>
                 </View>
+
+                <TouchableOpacity style={styles.sandboxButton} onPress={holdThisFareSandbox}>
+                  <Ionicons name="flask-outline" size={16} color={Colors.primaryDark} />
+                  <Text style={styles.sandboxButtonText}>Hold This Fare (TripJack Sandbox)</Text>
+                </TouchableOpacity>
               </View>
             ) : null}
           </Pressable>
@@ -2177,6 +2223,23 @@ const styles = StyleSheet.create({
   reviewPrimaryButtonText: {
     color: Colors.secondary,
     fontWeight: '700',
+  },
+  sandboxButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Colors.primaryDark,
+    paddingVertical: 12,
+    marginTop: 10,
+  },
+  sandboxButtonText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.primaryDark,
   },
   fareRuleLinkRow: {
     flexDirection: 'row',
