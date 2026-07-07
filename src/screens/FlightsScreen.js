@@ -432,6 +432,8 @@ const FlightsScreen = ({ navigation }) => {
   const [seatMapState, setSeatMapState] = useState({ visible: false, loading: false, data: null, error: null });
   const [selectedByGroup, setSelectedByGroup] = useState({});
   const [showFilters, setShowFilters] = useState(true);
+  const [travellerModalVisible, setTravellerModalVisible] = useState(false);
+  const [showAirlineInput, setShowAirlineInput] = useState(false);
   const today = startOfDay(new Date());
   const [calendarState, setCalendarState] = useState({
     visible: false,
@@ -933,8 +935,21 @@ const FlightsScreen = ({ navigation }) => {
     );
   };
 
-  const routeHeaderLabel =
-    tripType === 'MULTI_CITY' ? 'Route Legs' : 'Route';
+  // Per TripJack: adults+children <= 9 total, infants <= adults (FAQ: "Minimum
+  // time between two consecutive trips" section / paxInfo rules).
+  const adjustPassenger = (type, delta) => {
+    const current = { adults: Number(adults), children: Number(children), infants: Number(infants) };
+    const next = { ...current, [type]: current[type] + delta };
+
+    if (type === 'adults' && next.adults < 1) return;
+    if (type !== 'adults' && next[type] < 0) return;
+    if (next.adults + next.children > 9) return;
+    if (next.infants > next.adults) return;
+
+    if (type === 'adults') setAdults(String(next.adults));
+    if (type === 'children') setChildren(String(next.children));
+    if (type === 'infants') setInfants(String(next.infants));
+  };
 
   const openCalendar = ({ target, routeIndex = null, currentValue = '' }) => {
     const parsedDate = parseDisplayDate(currentValue);
@@ -1044,62 +1059,23 @@ const FlightsScreen = ({ navigation }) => {
 
             {showFilters ? (
               <>
-            <View style={styles.heroCard}>
-              <View style={styles.heroBadge}>
-                <Ionicons name="airplane" size={14} color={Colors.secondary} />
-                <Text style={styles.heroBadgeText}>Live airfare search</Text>
-              </View>
-              <Text style={styles.heroTitle}>Plan the smartest route, then lock the best fare.</Text>
-              <Text style={styles.heroSubtitle}>
-                Compare one-way, return, and multi-city options with live TripJack pricing and review-ready checkout.
-              </Text>
-              <View style={styles.heroMetrics}>
-                <View style={styles.metricPill}>
-                  <Text style={styles.metricLabel}>Cabin</Text>
-                  <Text style={styles.metricValue}>{cabinClass.replace(/_/g, ' ')}</Text>
-                </View>
-                <View style={styles.metricPill}>
-                  <Text style={styles.metricLabel}>Travellers</Text>
-                  <Text style={styles.metricValue}>{Number(adults) + Number(children) + Number(infants)}</Text>
-                </View>
-                <View style={styles.metricPill}>
-                  <Text style={styles.metricLabel}>Filter</Text>
-                  <Text style={styles.metricValue}>{connectionFilter}</Text>
-                </View>
-              </View>
-            </View>
-
             <View style={styles.formSurface}>
-              <View style={styles.sectionBlock}>
-                <View style={styles.sectionHeaderRow}>
-                  <View>
-                    <Text style={styles.sectionEyebrow}>Search setup</Text>
-                    <Text style={styles.sectionTitle}>Trip Type</Text>
-                  </View>
-                </View>
-                <View style={styles.pillWrap}>
-                  {TRIP_TYPES.map((option) => {
-                    const active = tripType === option.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.pill, active && styles.pillActive]}
-                        onPress={() => setTripTypeWithDefaults(option.value)}
-                      >
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+              <View style={styles.tripTypeRow}>
+                {TRIP_TYPES.map((option) => {
+                  const active = tripType === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.tripTypeTab, active && styles.tripTypeTabActive]}
+                      onPress={() => setTripTypeWithDefaults(option.value)}
+                    >
+                      <Text style={[styles.tripTypeTabText, active && styles.tripTypeTabTextActive]}>{option.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <View style={styles.sectionBlock}>
-                <View style={styles.sectionHeaderRow}>
-                  <View>
-                    <Text style={styles.sectionEyebrow}>Route builder</Text>
-                    <Text style={styles.sectionTitle}>{routeHeaderLabel}</Text>
-                  </View>
-                </View>
                 {routes.map((route, index) => (
                   <View key={`route-${index}`} style={styles.routeCard}>
                     <View style={styles.routeHeader}>
@@ -1198,110 +1174,51 @@ const FlightsScreen = ({ navigation }) => {
                 ) : null}
               </View>
 
-              <View style={styles.sectionBlock}>
-                <View style={styles.sectionHeaderRow}>
-                  <View>
-                    <Text style={styles.sectionEyebrow}>Traveller details</Text>
-                    <Text style={styles.sectionTitle}>Passengers</Text>
-                  </View>
-                </View>
-                <View style={styles.passengerGrid}>
-                  <View style={[styles.inputContainer, styles.passengerCard]}>
-                    <Text style={styles.inputLabel}>Adults</Text>
-                    <TextInput
-                      style={[styles.input, styles.numericInput]}
-                      value={adults}
-                      onChangeText={setAdults}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={[styles.inputContainer, styles.passengerCard]}>
-                    <Text style={styles.inputLabel}>Children</Text>
-                    <TextInput
-                      style={[styles.input, styles.numericInput]}
-                      value={children}
-                      onChangeText={setChildren}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={[styles.inputContainer, styles.passengerCardNoMargin]}>
-                    <Text style={styles.inputLabel}>Infants</Text>
-                    <TextInput
-                      style={[styles.input, styles.numericInput]}
-                      value={infants}
-                      onChangeText={setInfants}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
+              <TouchableOpacity style={styles.travellerSummaryRow} onPress={() => setTravellerModalVisible(true)}>
+                <Ionicons name="people-outline" size={18} color={Colors.primaryDark} />
+                <Text style={styles.travellerSummaryText} numberOfLines={1}>
+                  {Number(adults) + Number(children) + Number(infants)} traveller{Number(adults) + Number(children) + Number(infants) === 1 ? '' : 's'} · {cabinClass.replace(/_/g, ' ')}
+                  {fareType !== 'REGULAR' ? ` · ${PASSENGER_FARE_TYPES.find((f) => f.value === fareType)?.label}` : ''}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+
+              <View style={styles.pillWrap}>
+                {CONNECTION_FILTERS.map((option) => {
+                  const active = connectionFilter === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.pill, active && styles.pillActive]}
+                      onPress={() => setConnectionFilter(option.value)}
+                    >
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              <View style={styles.sectionBlock}>
-                <Text style={styles.sectionEyebrow}>Preferences</Text>
-                <Text style={styles.sectionTitle}>Cabin Class</Text>
-                <View style={styles.pillWrap}>
-                  {CABIN_CLASSES.map((option) => {
-                    const active = cabinClass === option;
-                    return (
-                      <TouchableOpacity
-                        key={option}
-                        style={[styles.pill, active && styles.pillActive]}
-                        onPress={() => setCabinClass(option)}
-                      >
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.replace(/_/g, ' ')}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.sectionTitle}>Flight Filter</Text>
-                <View style={styles.pillWrap}>
-                  {CONNECTION_FILTERS.map((option) => {
-                    const active = connectionFilter === option.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.pill, active && styles.pillActive]}
-                        onPress={() => setConnectionFilter(option.value)}
-                      >
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <Text style={styles.sectionTitle}>Fare Type</Text>
-                <View style={styles.pillWrap}>
-                  {PASSENGER_FARE_TYPES.map((option) => {
-                    const active = fareType === option.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.pill, active && styles.pillActive]}
-                        onPress={() => setFareType(option.value)}
-                      >
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
+              {showAirlineInput ? (
                 <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Preferred Airlines</Text>
                   <View style={styles.inputShell}>
                     <Ionicons name="sparkles-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="Optional: SG, 6E, AI"
+                      placeholder="Airline codes, e.g. SG, 6E, AI"
                       placeholderTextColor={Colors.textMuted}
                       value={preferredAirlines}
                       onChangeText={setPreferredAirlines}
                       autoCapitalize="characters"
                     />
                   </View>
-                  <Text style={styles.helperText}>Enter up to 10 airline codes, separated by commas.</Text>
+                  <Text style={styles.helperText}>Up to 10 airline codes, separated by commas.</Text>
                 </View>
-              </View>
+              ) : (
+                <TouchableOpacity style={styles.inlineLinkButton} onPress={() => setShowAirlineInput(true)}>
+                  <Ionicons name="add" size={16} color={Colors.primaryDark} />
+                  <Text style={styles.inlineLinkText}>Preferred airlines (optional)</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={styles.searchButton} onPress={searchFlights} disabled={loading}>
                 <View>
@@ -1669,6 +1586,87 @@ const FlightsScreen = ({ navigation }) => {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={travellerModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTravellerModalVisible(false)}
+      >
+        <Pressable style={styles.calendarOverlay} onPress={() => setTravellerModalVisible(false)}>
+          <Pressable style={styles.calendarModal} onPress={() => {}}>
+            <View style={styles.calendarModalHeader}>
+              <View>
+                <Text style={styles.calendarEyebrow}>Travellers &amp; fare</Text>
+                <Text style={styles.calendarTitle}>Who's flying?</Text>
+              </View>
+              <TouchableOpacity style={styles.calendarCloseButton} onPress={() => setTravellerModalVisible(false)}>
+                <Ionicons name="close" size={18} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {[
+                { key: 'adults', label: 'Adults', helper: '12+ years', value: adults },
+                { key: 'children', label: 'Children', helper: '2-12 years', value: children },
+                { key: 'infants', label: 'Infants', helper: 'Under 2 years', value: infants },
+              ].map((row) => (
+                <View key={row.key} style={styles.stepperRow}>
+                  <View>
+                    <Text style={styles.stepperLabel}>{row.label}</Text>
+                    <Text style={styles.stepperHelper}>{row.helper}</Text>
+                  </View>
+                  <View style={styles.stepperControls}>
+                    <TouchableOpacity style={styles.stepperButton} onPress={() => adjustPassenger(row.key, -1)}>
+                      <Ionicons name="remove" size={18} color={Colors.primaryDark} />
+                    </TouchableOpacity>
+                    <Text style={styles.stepperValue}>{row.value}</Text>
+                    <TouchableOpacity style={styles.stepperButton} onPress={() => adjustPassenger(row.key, 1)}>
+                      <Ionicons name="add" size={18} color={Colors.primaryDark} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+
+              <Text style={styles.modalSectionLabel}>Cabin Class</Text>
+              <View style={styles.pillWrap}>
+                {CABIN_CLASSES.map((option) => {
+                  const active = cabinClass === option;
+                  return (
+                    <TouchableOpacity
+                      key={option}
+                      style={[styles.pill, active && styles.pillActive]}
+                      onPress={() => setCabinClass(option)}
+                    >
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.replace(/_/g, ' ')}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.modalSectionLabel}>Fare Type</Text>
+              <View style={styles.pillWrap}>
+                {PASSENGER_FARE_TYPES.map((option) => {
+                  const active = fareType === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[styles.pill, active && styles.pillActive]}
+                      onPress={() => setFareType(option.value)}
+                    >
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity style={styles.searchButton} onPress={() => setTravellerModalVisible(false)}>
+                <Text style={styles.searchButtonText}>Done</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1700,72 +1698,6 @@ const styles = StyleSheet.create({
   searchForm: {
     paddingTop: 18,
   },
-  heroCard: {
-    backgroundColor: '#1E2530',
-    borderRadius: 28,
-    padding: 22,
-    marginBottom: 18,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.16,
-    shadowRadius: 22,
-    elevation: 10,
-  },
-  heroBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginBottom: 16,
-  },
-  heroBadgeText: {
-    color: Colors.secondary,
-    fontSize: 12,
-    fontWeight: '700',
-    marginLeft: 6,
-  },
-  heroTitle: {
-    color: Colors.secondary,
-    fontSize: 28,
-    fontWeight: '800',
-    lineHeight: 34,
-    maxWidth: '90%',
-  },
-  heroSubtitle: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 10,
-  },
-  heroMetrics: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 18,
-  },
-  metricPill: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginRight: 10,
-    marginBottom: 10,
-    minWidth: 92,
-  },
-  metricLabel: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  metricValue: {
-    color: Colors.secondary,
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 3,
-  },
   formSurface: {
     backgroundColor: Colors.card,
     borderRadius: 30,
@@ -1780,26 +1712,6 @@ const styles = StyleSheet.create({
   },
   sectionBlock: {
     marginBottom: 20,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  sectionEyebrow: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.primaryDark,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 14,
   },
   routeCard: {
     backgroundColor: '#FFF9F5',
@@ -1898,28 +1810,9 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontWeight: '500',
   },
-  numericInput: {
-    backgroundColor: Colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#F3D4C2',
-    textAlign: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-  },
   smallInput: {
     flex: 1,
     marginRight: 10,
-  },
-  passengerGrid: {
-    flexDirection: 'row',
-  },
-  passengerCard: {
-    flex: 1,
-    marginRight: 10,
-  },
-  passengerCardNoMargin: {
-    flex: 1,
   },
   swapButton: {
     backgroundColor: Colors.primary,
@@ -1966,6 +1859,108 @@ const styles = StyleSheet.create({
   },
   pillTextActive: {
     color: Colors.secondary,
+  },
+  tripTypeRow: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF4EC',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 18,
+  },
+  tripTypeTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 11,
+    alignItems: 'center',
+  },
+  tripTypeTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  tripTypeTabText: {
+    color: Colors.primaryDark,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  tripTypeTabTextActive: {
+    color: Colors.secondary,
+  },
+  travellerSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+  },
+  travellerSummaryText: {
+    flex: 1,
+    marginLeft: 10,
+    marginRight: 8,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+    textTransform: 'capitalize',
+  },
+  inlineLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  inlineLinkText: {
+    marginLeft: 4,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  stepperLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  stepperHelper: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  stepperControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepperButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepperValue: {
+    width: 36,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  modalSectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginTop: 18,
+    marginBottom: 10,
   },
   secondaryButton: {
     borderRadius: 16,
