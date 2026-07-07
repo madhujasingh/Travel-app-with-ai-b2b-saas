@@ -56,6 +56,68 @@ const routeSummary = (flights) => {
   return flights.map((leg) => `${leg.from}→${leg.to}`).join(' • ');
 };
 
+// Friendlier text for TripJack's documented error codes (error-codes/errorcodes.pdf)
+// that can realistically occur in the Book / Confirm-Fare-Before-Ticket /
+// Confirm-Book flow - keyed by errCode as a string.
+const TRIPJACK_ERROR_MESSAGES = {
+  1000: 'This flight is no longer available. Please search again for a fresh fare.',
+  1001: 'The number of infants can\'t be greater than the number of adults.',
+  1002: 'The number of children can\'t be greater than the number of adults.',
+  1006: 'A booking can have at most 9 passengers.',
+  1007: 'Each traveller\'s first name is required and can\'t contain spaces.',
+  1008: 'Each traveller\'s last name is required and must contain only letters and spaces.',
+  1009: 'No fare was selected - please go back and review a fare first.',
+  1010: 'Two travellers can\'t have the exact same name.',
+  1012: 'Each adult traveller must be 12-100 years old as of the travel date.',
+  1013: 'Each child traveller must be 2-12 years old as of the travel date.',
+  1014: 'Each infant traveller must be 0-2 years old as of the travel date.',
+  1015: 'The payment amount doesn\'t match this booking\'s total - please refresh and try again.',
+  1051: 'Date of birth is required for the adult traveller(s).',
+  1052: 'Date of birth is required for the child traveller(s).',
+  1053: 'Date of birth is required for the infant traveller(s).',
+  1057: 'This booking couldn\'t be found - it may have expired or the ID is incorrect.',
+  1059: 'Your hold has expired. Please search again to get a fresh fare and start a new hold.',
+  1064: 'A passport number is required for this fare.',
+  1065: 'A valid passport issue date is required for this fare.',
+  1066: 'A valid passport expiry date is required for this fare.',
+  1067: 'The passport must not expire within 6 months of the travel date.',
+  1068: 'The travel date can\'t be before the passport issue date.',
+  1071: 'This fare is no longer available. Please search again for a fresh fare.',
+  805: 'The GST number must be exactly 15 characters and a valid format.',
+  806: 'The email or mobile number provided is invalid.',
+  2560: 'Emergency contact email, phone, and name are all required for this fare.',
+  2561: 'Emergency contact name can\'t be blank for this fare.',
+};
+
+// Codes where the underlying fare/hold/booking is dead - there's nothing to
+// retry on this screen, the user needs to go back and search again.
+const SESSION_DEAD_ERROR_CODES = new Set([1000, 1057, 1059, 1071]);
+
+// TripJack errors sometimes come back as a direct passthrough
+// ({status, errors:[{errCode, message}]}) and sometimes wrapped by our own
+// GlobalExceptionHandler ({message: "TripJack request failed with status
+// 400: {...raw body...}"}) - handle both shapes rather than assuming one.
+const parseTripJackError = (data, fallback) => {
+  let errCode = data?.errors?.[0]?.errCode;
+  let message = data?.errors?.[0]?.message || data?.message;
+
+  if (!errCode && typeof data?.message === 'string') {
+    const codeMatch = data.message.match(/"errCode"\s*:\s*"?(\d+)"?/);
+    const messageMatch = data.message.match(/"message"\s*:\s*"([^"]+)"/);
+    if (codeMatch) errCode = codeMatch[1];
+    if (messageMatch) message = messageMatch[1];
+  }
+
+  const code = errCode ? Number(errCode) : null;
+  const friendly = code && TRIPJACK_ERROR_MESSAGES[code];
+
+  return {
+    code,
+    message: friendly || message || fallback,
+    sessionDead: code ? SESSION_DEAD_ERROR_CODES.has(code) : false,
+  };
+};
+
 const FlightBookingScreen = ({ route, navigation }) => {
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId } = route.params || {};
   const isResume = !reviewResponse;
@@ -112,6 +174,18 @@ const FlightBookingScreen = ({ route, navigation }) => {
     setTravellers((prev) => prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)));
   };
 
+  const showTripJackErrorAlert = (title, error) => {
+    const message = error?.message || 'Something went wrong - please try again.';
+    if (error?.sessionDead) {
+      Alert.alert(title, message, [
+        { text: 'Search Again', onPress: () => navigation.goBack() },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+    Alert.alert(title, message);
+  };
+
   const handleHold = async () => {
     if (!bookingId) return;
     setBusy(true);
@@ -151,7 +225,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       });
       const data = await response.json();
       if (!response.ok || data?.status?.success === false) {
-        throw new Error(data?.message || data?.errors?.[0]?.message || 'Unable to hold this fare right now.');
+        throw parseTripJackError(data, 'Unable to hold this fare right now.');
       }
 
       await saveHold({
@@ -167,7 +241,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       setBookingDetails(details);
       setPhase('held');
     } catch (error) {
-      Alert.alert('Hold Fare', error.message || 'Unable to hold this fare right now.');
+      showTripJackErrorAlert('Hold Fare', error);
     } finally {
       setBusy(false);
     }
@@ -185,9 +259,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       });
       const confirmFareData = await confirmFareResponse.json();
       if (!confirmFareResponse.ok || confirmFareData?.status?.success === false) {
-        throw new Error(
-          confirmFareData?.message || confirmFareData?.errors?.[0]?.message || 'Fare is no longer available for this held booking.'
-        );
+        throw parseTripJackError(confirmFareData, 'Fare is no longer available for this held booking.');
       }
 
       const amount = totalFare || bookingDetails?.order?.amount || 0;
@@ -198,9 +270,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       });
       const confirmBookData = await confirmBookResponse.json();
       if (!confirmBookResponse.ok || confirmBookData?.status?.success === false) {
-        throw new Error(
-          confirmBookData?.message || confirmBookData?.errors?.[0]?.message || 'Unable to confirm and pay for this booking.'
-        );
+        throw parseTripJackError(confirmBookData, 'Unable to confirm and pay for this booking.');
       }
 
       await wait(BOOKING_DETAILS_DELAY_MS);
@@ -215,7 +285,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       });
       setPhase('confirmed');
     } catch (error) {
-      Alert.alert('Confirm & Pay', error.message || 'Unable to confirm and pay for this booking.');
+      showTripJackErrorAlert('Confirm & Pay', error);
       setPhase('held');
     } finally {
       setBusy(false);
