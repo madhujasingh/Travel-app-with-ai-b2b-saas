@@ -1548,10 +1548,6 @@ const FlightsScreen = ({ navigation }) => {
                   <Text style={styles.reviewPrice}>₹{Math.round(reviewedFare.cartItem.lineTotal).toLocaleString()}</Text>
                 </View>
 
-                <Text style={styles.reviewHelper}>
-                  Review response loaded from TripJack. You can now save this fare to cart or continue to checkout.
-                </Text>
-
                 <View style={styles.fareRuleLinkRow}>
                   <TouchableOpacity style={styles.fareRuleLinkButton} onPress={viewFareRules}>
                     <Ionicons name="document-text-outline" size={16} color={Colors.primaryDark} />
@@ -1565,19 +1561,26 @@ const FlightsScreen = ({ navigation }) => {
                   ) : null}
                 </View>
 
+                <TouchableOpacity style={styles.bookCtaButton} onPress={holdThisFareSandbox} activeOpacity={0.85}>
+                  <View>
+                    <Text style={styles.bookCtaTitle}>Book This Fare</Text>
+                    <Text style={styles.bookCtaSubtitle}>
+                      TripJack sandbox · ₹{Math.round(reviewedFare.cartItem.lineTotal).toLocaleString()}
+                    </Text>
+                  </View>
+                  <Ionicons name="arrow-forward-circle" size={30} color={Colors.secondary} />
+                </TouchableOpacity>
+
+                <Text style={styles.reviewHelper}>Or manage this fare as a regular cart item instead:</Text>
+
                 <View style={styles.reviewActions}>
                   <TouchableOpacity style={styles.reviewSecondaryButton} onPress={addReviewedFareToCart}>
                     <Text style={styles.reviewSecondaryButtonText}>Add to Cart</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.reviewPrimaryButton} onPress={continueReviewedFareToCheckout}>
-                    <Text style={styles.reviewPrimaryButtonText}>Continue</Text>
+                  <TouchableOpacity style={styles.reviewTertiaryButton} onPress={continueReviewedFareToCheckout}>
+                    <Text style={styles.reviewTertiaryButtonText}>Continue</Text>
                   </TouchableOpacity>
                 </View>
-
-                <TouchableOpacity style={styles.sandboxButton} onPress={holdThisFareSandbox}>
-                  <Ionicons name="flask-outline" size={16} color={Colors.primaryDark} />
-                  <Text style={styles.sandboxButtonText}>Hold This Fare (TripJack Sandbox)</Text>
-                </TouchableOpacity>
               </View>
             ) : null}
           </Pressable>
@@ -2215,33 +2218,42 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
     fontWeight: '700',
   },
-  reviewPrimaryButton: {
+  reviewTertiaryButton: {
     flex: 1,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
     paddingVertical: 12,
     alignItems: 'center',
   },
-  reviewPrimaryButtonText: {
-    color: Colors.secondary,
-    fontWeight: '700',
+  reviewTertiaryButtonText: {
+    color: Colors.textMuted,
+    fontWeight: '600',
+    fontSize: 13,
   },
-  sandboxButton: {
+  bookCtaButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: Colors.primaryDark,
-    paddingVertical: 12,
-    marginTop: 10,
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginTop: 14,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  sandboxButtonText: {
-    marginLeft: 6,
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.primaryDark,
+  bookCtaTitle: {
+    color: Colors.secondary,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  bookCtaSubtitle: {
+    color: Colors.primarySoft,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 3,
   },
   fareRuleLinkRow: {
     flexDirection: 'row',
