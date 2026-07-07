@@ -415,8 +415,8 @@ const mapFlightsFromResponse = (data) => {
 const FlightsScreen = ({ navigation }) => {
   const { addItemToCart } = useCart();
   const [tripType, setTripType] = useState('ONE_WAY');
-  const [routes, setRoutes] = useState([createEmptyRoute('Delhi', 'Mumbai', '10/06/2026')]);
-  const [returnDate, setReturnDate] = useState('12/06/2026');
+  const [routes, setRoutes] = useState([createEmptyRoute('Delhi', 'Mumbai', '')]);
+  const [returnDate, setReturnDate] = useState('');
   const [adults, setAdults] = useState('1');
   const [children, setChildren] = useState('0');
   const [infants, setInfants] = useState('0');
@@ -465,7 +465,7 @@ const FlightsScreen = ({ navigation }) => {
 
     if (nextType === 'MULTI_CITY') {
       const first = routes[0] || createEmptyRoute();
-      const second = routes[1] || createEmptyRoute('Mumbai', 'Bengaluru', '15/06/2026');
+      const second = routes[1] || createEmptyRoute('Mumbai', 'Bengaluru', '');
       setRoutes([first, second]);
     }
   };
@@ -822,11 +822,9 @@ const FlightsScreen = ({ navigation }) => {
       return;
     }
 
-    navigation.navigate('FlightBooking', {
-      flights: reviewedFare.flights,
-      reviewResponse: reviewedFare.reviewResponse,
-      passengerCounts: reviewedFare.passengerCounts,
-    });
+    const { flights, reviewResponse, passengerCounts } = reviewedFare;
+    setReviewedFare(null);
+    navigation.navigate('FlightBooking', { flights, reviewResponse, passengerCounts });
   };
 
   const renderFlight = ({ item }) => {

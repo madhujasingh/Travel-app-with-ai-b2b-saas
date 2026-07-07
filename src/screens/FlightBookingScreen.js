@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -15,6 +17,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
+import DatePickerModal from '../components/DatePickerModal';
+
+const TITLES_BY_PAX_TYPE = {
+  ADULT: ['Mr', 'Mrs', 'Ms'],
+  CHILD: ['Ms', 'Master'],
+  INFANT: ['Ms', 'Master'],
+};
 
 const HOLDS_STORAGE_KEY = 'itinera.flightHolds';
 
@@ -180,6 +189,8 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const [emergencyEmail, setEmergencyEmail] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [ssrSelections, setSsrSelections] = useState({});
+  const [titlePicker, setTitlePicker] = useState({ visible: false, travellerIndex: null });
+  const [datePicker, setDatePicker] = useState({ visible: false, travellerIndex: null, field: null });
   const [bookingDetails, setBookingDetails] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -231,6 +242,32 @@ const FlightBookingScreen = ({ route, navigation }) => {
 
   const updateTraveller = (index, field, value) => {
     setTravellers((prev) => prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)));
+  };
+
+  const openTitlePicker = (travellerIndex) => setTitlePicker({ visible: true, travellerIndex });
+  const closeTitlePicker = () => setTitlePicker({ visible: false, travellerIndex: null });
+  const chooseTitle = (title) => {
+    if (titlePicker.travellerIndex != null) {
+      updateTraveller(titlePicker.travellerIndex, 'ti', title);
+    }
+    closeTitlePicker();
+  };
+
+  const openDatePicker = (travellerIndex, field) => setDatePicker({ visible: true, travellerIndex, field });
+  const closeDatePicker = () => setDatePicker({ visible: false, travellerIndex: null, field: null });
+  const chooseDate = (dateString) => {
+    if (datePicker.travellerIndex != null && datePicker.field) {
+      updateTraveller(datePicker.travellerIndex, datePicker.field, dateString);
+    }
+    closeDatePicker();
+  };
+
+  const parseDateValue = (value) => {
+    if (!value) return null;
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const [, year, month, day] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day));
   };
 
   const showTripJackErrorAlert = (title, error) => {
@@ -388,12 +425,23 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const pnrEntries = Object.entries(bookingDetails?.itemInfos?.AIR?.travellerInfos?.[0]?.pnrDetails || {});
   const ticketEntries = Object.entries(bookingDetails?.itemInfos?.AIR?.travellerInfos?.[0]?.ticketNumberDetails || {});
 
+  // Once a Hold/booking actually exists, there's nothing left to "go back" to
+  // edit on this screen (the form's already been submitted) - send the user
+  // to the list where this booking now lives, instead of back to search.
+  const handleBack = () => {
+    if (phase === 'held' || phase === 'confirming' || phase === 'confirmed') {
+      navigation.replace('MyFlightBookings');
+      return;
+    }
+    navigation.goBack();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={handleBack}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Sandbox Booking</Text>
@@ -424,12 +472,15 @@ const FlightBookingScreen = ({ route, navigation }) => {
                   Traveller {index + 1} ({t.pt})
                 </Text>
                 <View style={styles.row}>
-                  <TextInput
-                    style={[styles.input, styles.inputSmall]}
-                    value={t.ti}
-                    onChangeText={(v) => updateTraveller(index, 'ti', v)}
-                    placeholder="Title"
-                  />
+                  <Pressable
+                    style={[styles.input, styles.inputSmall, styles.titleSelect]}
+                    onPress={() => openTitlePicker(index)}
+                  >
+                    <Text style={t.ti ? styles.selectValueText : styles.selectPlaceholderText}>
+                      {t.ti || 'Title'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={14} color={Colors.textMuted} />
+                  </Pressable>
                   <TextInput
                     style={[styles.input, styles.inputFlex]}
                     value={t.fN}
@@ -443,12 +494,12 @@ const FlightBookingScreen = ({ route, navigation }) => {
                     placeholder="Last name"
                   />
                 </View>
-                <TextInput
-                  style={styles.input}
-                  value={t.dob}
-                  onChangeText={(v) => updateTraveller(index, 'dob', v)}
-                  placeholder="DOB (YYYY-MM-DD)"
-                />
+                <Pressable style={[styles.input, styles.selectRow]} onPress={() => openDatePicker(index, 'dob')}>
+                  <Ionicons name="calendar-outline" size={16} color={Colors.textMuted} />
+                  <Text style={t.dob ? styles.selectValueText : styles.selectPlaceholderText}>
+                    {t.dob || 'Date of Birth'}
+                  </Text>
+                </Pressable>
                 {passportRequired ? (
                   <>
                     <Text style={styles.cardSubtitle}>Passport (required for this fare)</Text>
@@ -467,19 +518,22 @@ const FlightBookingScreen = ({ route, navigation }) => {
                         placeholder="Nationality (e.g. IN)"
                         autoCapitalize="characters"
                       />
-                      <TextInput
-                        style={[styles.input, styles.inputFlex]}
-                        value={t.pid}
-                        onChangeText={(v) => updateTraveller(index, 'pid', v)}
-                        placeholder="Issue Date (YYYY-MM-DD)"
-                      />
+                      <Pressable
+                        style={[styles.input, styles.inputFlex, styles.selectRow]}
+                        onPress={() => openDatePicker(index, 'pid')}
+                      >
+                        <Ionicons name="calendar-outline" size={16} color={Colors.textMuted} />
+                        <Text style={t.pid ? styles.selectValueText : styles.selectPlaceholderText}>
+                          {t.pid || 'Issue Date'}
+                        </Text>
+                      </Pressable>
                     </View>
-                    <TextInput
-                      style={styles.input}
-                      value={t.eD}
-                      onChangeText={(v) => updateTraveller(index, 'eD', v)}
-                      placeholder="Expiry Date (YYYY-MM-DD)"
-                    />
+                    <Pressable style={[styles.input, styles.selectRow]} onPress={() => openDatePicker(index, 'eD')}>
+                      <Ionicons name="calendar-outline" size={16} color={Colors.textMuted} />
+                      <Text style={t.eD ? styles.selectValueText : styles.selectPlaceholderText}>
+                        {t.eD || 'Expiry Date'}
+                      </Text>
+                    </Pressable>
                   </>
                 ) : null}
               </View>
@@ -678,6 +732,33 @@ const FlightBookingScreen = ({ route, navigation }) => {
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal visible={titlePicker.visible} transparent animationType="fade" onRequestClose={closeTitlePicker}>
+        <Pressable style={styles.pickerOverlay} onPress={closeTitlePicker}>
+          <Pressable style={styles.pickerSheet} onPress={() => {}}>
+            <Text style={styles.pickerTitle}>Select Title</Text>
+            {(TITLES_BY_PAX_TYPE[travellers[titlePicker.travellerIndex]?.pt] || TITLES_BY_PAX_TYPE.ADULT).map((title) => (
+              <TouchableOpacity key={title} style={styles.pickerOption} onPress={() => chooseTitle(title)}>
+                <Text style={styles.pickerOptionText}>{title}</Text>
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <DatePickerModal
+        visible={datePicker.visible}
+        title={
+          datePicker.field === 'dob' ? 'Date of Birth' : datePicker.field === 'pid' ? 'Passport Issue Date' : 'Passport Expiry Date'
+        }
+        initialDate={parseDateValue(
+          datePicker.travellerIndex != null ? travellers[datePicker.travellerIndex]?.[datePicker.field] : null
+        )}
+        maxDate={datePicker.field === 'eD' ? undefined : new Date()}
+        minDate={datePicker.field === 'eD' ? new Date() : undefined}
+        onSelect={chooseDate}
+        onClose={closeDatePicker}
+      />
     </SafeAreaView>
   );
 };
@@ -796,6 +877,53 @@ const styles = StyleSheet.create({
   inputFlex: {
     flex: 1,
     marginRight: 8,
+  },
+  titleSelect: {
+    width: 84,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectValueText: {
+    fontSize: 13,
+    color: Colors.text,
+  },
+  selectPlaceholderText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 34, 0.45)',
+    justifyContent: 'center',
+    padding: 30,
+  },
+  pickerSheet: {
+    backgroundColor: Colors.card,
+    borderRadius: 20,
+    padding: 16,
+  },
+  pickerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 10,
+    paddingHorizontal: 6,
+  },
+  pickerOption: {
+    paddingVertical: 13,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  pickerOptionText: {
+    fontSize: 15,
+    color: Colors.text,
+    fontWeight: '600',
   },
   metaRow: {
     flexDirection: 'row',
