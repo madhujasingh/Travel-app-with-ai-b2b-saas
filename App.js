@@ -19,6 +19,8 @@ import CheckoutScreen from './src/screens/CheckoutScreen';
 import TalkToAgentScreen from './src/screens/TalkToAgentScreen';
 import HotelsScreen from './src/screens/HotelsScreen';
 import FlightsScreen from './src/screens/FlightsScreen';
+import FlightBookingScreen from './src/screens/FlightBookingScreen';
+import MyFlightBookingsScreen from './src/screens/MyFlightBookingsScreen';
 import B2BDashboard from './src/screens/B2BDashboard';
 import AIRecommendationsScreen from './src/screens/AIRecommendationsScreen';
 import AIPlaceInsightScreen from './src/screens/AIPlaceInsightScreen';
@@ -278,6 +280,8 @@ export default function App() {
               <Stack.Screen name="TalkToAgent" component={TalkToAgentScreen} />
               <Stack.Screen name="Hotels" component={HotelsScreen} />
               <Stack.Screen name="Flights" component={FlightsScreen} />
+              <Stack.Screen name="FlightBooking" component={FlightBookingScreen} />
+              <Stack.Screen name="MyFlightBookings" component={MyFlightBookingsScreen} />
               <Stack.Screen name="AIRecommendations" component={AIRecommendationsScreen} />
               <Stack.Screen name="AIPlaceInsight" component={AIPlaceInsightScreen} />
               <Stack.Screen name="ChatInbox" component={ChatInboxScreen} />
