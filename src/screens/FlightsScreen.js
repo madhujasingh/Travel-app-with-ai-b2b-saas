@@ -1557,10 +1557,12 @@ const FlightsScreen = ({ navigation }) => {
                     <Ionicons name="document-text-outline" size={16} color={Colors.primaryDark} />
                     <Text style={styles.fareRuleLinkText}>View Fare Rules</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.fareRuleLinkButton} onPress={viewSeatMap}>
-                    <Ionicons name="grid-outline" size={16} color={Colors.primaryDark} />
-                    <Text style={styles.fareRuleLinkText}>View Seat Map</Text>
-                  </TouchableOpacity>
+                  {reviewedFare?.reviewResponse?.conditions?.isa ? (
+                    <TouchableOpacity style={styles.fareRuleLinkButton} onPress={viewSeatMap}>
+                      <Ionicons name="grid-outline" size={16} color={Colors.primaryDark} />
+                      <Text style={styles.fareRuleLinkText}>View Seat Map</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
 
                 <View style={styles.reviewActions}>

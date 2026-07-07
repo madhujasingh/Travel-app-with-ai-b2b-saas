@@ -36,19 +36,55 @@ const saveHold = async (entry) => {
   await AsyncStorage.setItem(HOLDS_STORAGE_KEY, JSON.stringify(next));
 };
 
+const emptyTraveller = (ti, pt) => ({
+  ti,
+  pt,
+  fN: '',
+  lN: '',
+  dob: '',
+  pNum: '',
+  eD: '',
+  pNat: '',
+  pid: '',
+});
+
 const buildDefaultTravellers = (passengerCounts) => {
   const travellers = [];
   const counts = passengerCounts || { adults: 1, children: 0, infants: 0 };
   for (let i = 0; i < Number(counts.adults || 0); i += 1) {
-    travellers.push({ ti: 'Mr', pt: 'ADULT', fN: '', lN: '', dob: '' });
+    travellers.push(emptyTraveller('Mr', 'ADULT'));
   }
   for (let i = 0; i < Number(counts.children || 0); i += 1) {
-    travellers.push({ ti: 'Master', pt: 'CHILD', fN: '', lN: '', dob: '' });
+    travellers.push(emptyTraveller('Master', 'CHILD'));
   }
   for (let i = 0; i < Number(counts.infants || 0); i += 1) {
-    travellers.push({ ti: 'Master', pt: 'INFANT', fN: '', lN: '', dob: '' });
+    travellers.push(emptyTraveller('Master', 'INFANT'));
   }
-  return travellers.length ? travellers : [{ ti: 'Mr', pt: 'ADULT', fN: '', lN: '', dob: '' }];
+  return travellers.length ? travellers : [emptyTraveller('Mr', 'ADULT')];
+};
+
+// SSR (Special Service Request) options for Baggage/Meal live per-segment under
+// AirReviewResponse -> tripInfos[].sI[].ssrInfo - only surface segments that
+// actually have BAGGAGE or MEAL options (SEAT is handled by the separate Seat
+// Map feature, not here).
+const getSsrSegments = (reviewResponse) => {
+  const trips = Array.isArray(reviewResponse?.tripInfos) ? reviewResponse.tripInfos : [];
+  const segments = [];
+  trips.forEach((trip) => {
+    (trip?.sI || []).forEach((segment) => {
+      const baggageOptions = segment?.ssrInfo?.BAGGAGE || [];
+      const mealOptions = segment?.ssrInfo?.MEAL || [];
+      if (baggageOptions.length || mealOptions.length) {
+        segments.push({
+          id: segment?.id,
+          label: `${segment?.da?.code || '--'} → ${segment?.aa?.code || '--'}`,
+          baggageOptions,
+          mealOptions,
+        });
+      }
+    });
+  });
+  return segments;
 };
 
 const routeSummary = (flights) => {
@@ -87,6 +123,11 @@ const TRIPJACK_ERROR_MESSAGES = {
   806: 'The email or mobile number provided is invalid.',
   2560: 'Emergency contact email, phone, and name are all required for this fare.',
   2561: 'Emergency contact name can\'t be blank for this fare.',
+  1119: 'Child or infant travellers can\'t be included in a student fare booking.',
+  1120: 'Child or infant travellers can\'t be included in a senior citizen fare booking.',
+  2567: 'A document ID is required in the passenger details for this fare.',
+  2568: 'The document ID can\'t contain special characters.',
+  2569: 'For a senior citizen fare, the traveller must be over 60 on the date of departure.',
 };
 
 // Codes where the underlying fare/hold/booking is dead - there's nothing to
@@ -132,15 +173,33 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const [deliveryPhone, setDeliveryPhone] = useState('+919500112233');
   const [gstNumber, setGstNumber] = useState('');
   const [gstRegisteredName, setGstRegisteredName] = useState('');
+  const [gstEmail, setGstEmail] = useState('');
+  const [gstMobile, setGstMobile] = useState('');
+  const [gstAddress, setGstAddress] = useState('');
   const [emergencyName, setEmergencyName] = useState('');
   const [emergencyEmail, setEmergencyEmail] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
+  const [ssrSelections, setSsrSelections] = useState({});
   const [bookingDetails, setBookingDetails] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const gstRequired = !!conditions?.gst?.igm;
+  const gstOptional = !gstRequired && !!conditions?.gst?.gstappl;
   const emergencyRequired = !!conditions?.iecr;
+  const passportRequired = !!conditions?.pcs?.pm;
   const holdAllowed = isResume || conditions?.isBA !== false;
+  const ssrSegments = getSsrSegments(reviewResponse);
+
+  const setSsrChoice = (segmentId, type, code) => {
+    setSsrSelections((prev) => {
+      const current = prev[segmentId] || {};
+      const next = current[type] === code ? undefined : code;
+      return {
+        ...prev,
+        [segmentId]: { ...current, [type]: next },
+      };
+    });
+  };
 
   const fetchBookingDetails = async (id) => {
     const response = await fetch(`${API_CONFIG.BASE_URL}/flights/booking-details`, {
@@ -195,6 +254,12 @@ const FlightBookingScreen = ({ route, navigation }) => {
         travellerInfo: travellers.map((t) => {
           const traveller = { ti: t.ti, pt: t.pt, fN: t.fN, lN: t.lN };
           if (t.dob) traveller.dob = t.dob;
+          if (passportRequired || t.pNum) {
+            traveller.pNum = t.pNum;
+            traveller.eD = t.eD;
+            traveller.pNat = t.pNat;
+            traveller.pid = t.pid;
+          }
           return traveller;
         }),
         deliveryInfo: {
@@ -203,10 +268,15 @@ const FlightBookingScreen = ({ route, navigation }) => {
         },
       };
 
-      if (gstRequired || gstNumber) {
+      // Per the FAQ: "all fields are mandatory, whenever passing gst fields" -
+      // send the full set together, never just gstNumber/registeredName alone.
+      if (gstRequired || gstOptional || gstNumber) {
         body.gstInfo = {
           gstNumber,
           registeredName: gstRegisteredName,
+          mobile: gstMobile,
+          email: gstEmail,
+          address: gstAddress,
         };
       }
 
@@ -217,6 +287,15 @@ const FlightBookingScreen = ({ route, navigation }) => {
           ecn: emergencyName,
         };
       }
+
+      const ssrBaggageInfos = Object.entries(ssrSelections)
+        .filter(([, sel]) => sel?.baggage)
+        .map(([key, sel]) => ({ key, code: sel.baggage }));
+      const ssrMealInfos = Object.entries(ssrSelections)
+        .filter(([, sel]) => sel?.meal)
+        .map(([key, sel]) => ({ key, code: sel.meal }));
+      if (ssrBaggageInfos.length) body.ssrBaggageInfos = ssrBaggageInfos;
+      if (ssrMealInfos.length) body.ssrMealInfos = ssrMealInfos;
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/book`, {
         method: 'POST',
@@ -370,6 +449,39 @@ const FlightBookingScreen = ({ route, navigation }) => {
                   onChangeText={(v) => updateTraveller(index, 'dob', v)}
                   placeholder="DOB (YYYY-MM-DD)"
                 />
+                {passportRequired ? (
+                  <>
+                    <Text style={styles.cardSubtitle}>Passport (required for this fare)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={t.pNum}
+                      onChangeText={(v) => updateTraveller(index, 'pNum', v)}
+                      placeholder="Passport Number"
+                      autoCapitalize="characters"
+                    />
+                    <View style={styles.row}>
+                      <TextInput
+                        style={[styles.input, styles.inputFlex]}
+                        value={t.pNat}
+                        onChangeText={(v) => updateTraveller(index, 'pNat', v)}
+                        placeholder="Nationality (e.g. IN)"
+                        autoCapitalize="characters"
+                      />
+                      <TextInput
+                        style={[styles.input, styles.inputFlex]}
+                        value={t.pid}
+                        onChangeText={(v) => updateTraveller(index, 'pid', v)}
+                        placeholder="Issue Date (YYYY-MM-DD)"
+                      />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={t.eD}
+                      onChangeText={(v) => updateTraveller(index, 'eD', v)}
+                      placeholder="Expiry Date (YYYY-MM-DD)"
+                    />
+                  </>
+                ) : null}
               </View>
             ))}
 
@@ -390,14 +502,16 @@ const FlightBookingScreen = ({ route, navigation }) => {
               />
             </View>
 
-            {gstRequired ? (
+            {gstRequired || gstOptional ? (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>GST Info (required for this fare)</Text>
+                <Text style={styles.cardTitle}>
+                  GST Info {gstRequired ? '(required for this fare)' : '(optional for this fare)'}
+                </Text>
                 <TextInput
                   style={styles.input}
                   value={gstNumber}
                   onChangeText={setGstNumber}
-                  placeholder="GST Number"
+                  placeholder="GST Number (15 characters)"
                   autoCapitalize="characters"
                 />
                 <TextInput
@@ -406,6 +520,28 @@ const FlightBookingScreen = ({ route, navigation }) => {
                   onChangeText={setGstRegisteredName}
                   placeholder="Registered Name"
                 />
+                <TextInput
+                  style={styles.input}
+                  value={gstMobile}
+                  onChangeText={setGstMobile}
+                  placeholder="GST Mobile"
+                />
+                <TextInput
+                  style={styles.input}
+                  value={gstEmail}
+                  onChangeText={setGstEmail}
+                  placeholder="GST Email"
+                  autoCapitalize="none"
+                />
+                <TextInput
+                  style={styles.input}
+                  value={gstAddress}
+                  onChangeText={setGstAddress}
+                  placeholder="GST Address"
+                />
+                <Text style={styles.hintText}>
+                  All GST fields are required together if you fill any of them in.
+                </Text>
               </View>
             ) : null}
 
@@ -433,6 +569,54 @@ const FlightBookingScreen = ({ route, navigation }) => {
                 />
               </View>
             ) : null}
+
+            {ssrSegments.map((segment) => (
+              <View key={segment.id} style={styles.card}>
+                <Text style={styles.cardTitle}>Baggage &amp; Meal (Optional) — {segment.label}</Text>
+                {segment.baggageOptions.length ? (
+                  <>
+                    <Text style={styles.cardSubtitle}>Baggage</Text>
+                    <View style={styles.chipRow}>
+                      {segment.baggageOptions.map((option) => {
+                        const selected = ssrSelections[segment.id]?.baggage === option.code;
+                        return (
+                          <TouchableOpacity
+                            key={option.code}
+                            style={[styles.ssrChip, selected ? styles.ssrChipSelected : null]}
+                            onPress={() => setSsrChoice(segment.id, 'baggage', option.code)}
+                          >
+                            <Text style={[styles.ssrChipText, selected ? styles.ssrChipTextSelected : null]}>
+                              {option.desc} {Number(option.amount) > 0 ? `(+₹${option.amount})` : ''}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
+                {segment.mealOptions.length ? (
+                  <>
+                    <Text style={styles.cardSubtitle}>Meal</Text>
+                    <View style={styles.chipRow}>
+                      {segment.mealOptions.map((option) => {
+                        const selected = ssrSelections[segment.id]?.meal === option.code;
+                        return (
+                          <TouchableOpacity
+                            key={option.code}
+                            style={[styles.ssrChip, selected ? styles.ssrChipSelected : null]}
+                            onPress={() => setSsrChoice(segment.id, 'meal', option.code)}
+                          >
+                            <Text style={[styles.ssrChipText, selected ? styles.ssrChipTextSelected : null]}>
+                              {option.desc} {Number(option.amount) > 0 ? `(+₹${option.amount})` : ''}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : null}
+              </View>
+            ))}
 
             <TouchableOpacity style={styles.primaryButton} onPress={handleHold} disabled={busy}>
               <Text style={styles.primaryButtonText}>{busy ? 'Holding…' : 'Hold This Fare (No Payment)'}</Text>
@@ -561,8 +745,39 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 2,
   },
+  hintText: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
   row: {
     flexDirection: 'row',
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
+  ssrChip: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  ssrChipSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primarySoft,
+  },
+  ssrChipText: {
+    fontSize: 12,
+    color: Colors.textLight,
+  },
+  ssrChipTextSelected: {
+    color: Colors.primaryDark,
+    fontWeight: '700',
   },
   input: {
     borderWidth: 1,
