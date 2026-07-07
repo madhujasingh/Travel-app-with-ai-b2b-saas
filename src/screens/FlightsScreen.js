@@ -141,6 +141,15 @@ const resolveAirportCode = (value) => {
   return null;
 };
 
+const getAirportSuggestions = (query) => {
+  const normalized = query.trim().toUpperCase();
+  if (!normalized) return [];
+
+  return AIRPORT_OPTIONS.filter(
+    (option) => option.city.toUpperCase().includes(normalized) || option.code.includes(normalized)
+  ).slice(0, 6);
+};
+
 const formatTime = (isoDateTime) => {
   if (!isoDateTime) return '--';
 
@@ -415,7 +424,7 @@ const mapFlightsFromResponse = (data) => {
 const FlightsScreen = ({ navigation }) => {
   const { addItemToCart } = useCart();
   const [tripType, setTripType] = useState('ONE_WAY');
-  const [routes, setRoutes] = useState([createEmptyRoute('Delhi', 'Mumbai', '')]);
+  const [routes, setRoutes] = useState([createEmptyRoute('', '', '')]);
   const [returnDate, setReturnDate] = useState('');
   const [adults, setAdults] = useState('1');
   const [children, setChildren] = useState('0');
@@ -434,6 +443,7 @@ const FlightsScreen = ({ navigation }) => {
   const [showFilters, setShowFilters] = useState(true);
   const [travellerModalVisible, setTravellerModalVisible] = useState(false);
   const [showAirlineInput, setShowAirlineInput] = useState(false);
+  const [airportSuggestFor, setAirportSuggestFor] = useState(null);
   const today = startOfDay(new Date());
   const [calendarState, setCalendarState] = useState({
     visible: false,
@@ -449,6 +459,11 @@ const FlightsScreen = ({ navigation }) => {
         routeIndex === index ? { ...route, [key]: value } : route
       )
     );
+  };
+
+  const chooseAirportSuggestion = (index, field, option) => {
+    updateRoute(index, field, option.city);
+    setAirportSuggestFor(null);
   };
 
   const setTripTypeWithDefaults = (nextType) => {
@@ -467,12 +482,13 @@ const FlightsScreen = ({ navigation }) => {
 
     if (nextType === 'MULTI_CITY') {
       const first = routes[0] || createEmptyRoute();
-      const second = routes[1] || createEmptyRoute('Mumbai', 'Bengaluru', '');
+      const second = routes[1] || createEmptyRoute('', '', '');
       setRoutes([first, second]);
     }
   };
 
   const swapRouteCities = (index) => {
+    setAirportSuggestFor(null);
     setRoutes((currentRoutes) =>
       currentRoutes.map((route, routeIndex) =>
         routeIndex === index
@@ -581,6 +597,7 @@ const FlightsScreen = ({ navigation }) => {
   };
 
   const searchFlights = async () => {
+    setAirportSuggestFor(null);
     const adultCount = Number(adults || 0);
     const childCount = Number(children || 0);
     const infantCount = Number(infants || 0);
@@ -952,6 +969,7 @@ const FlightsScreen = ({ navigation }) => {
   };
 
   const openCalendar = ({ target, routeIndex = null, currentValue = '' }) => {
+    setAirportSuggestFor(null);
     const parsedDate = parseDisplayDate(currentValue);
     const safeDate = parsedDate && parsedDate >= today ? parsedDate : today;
 
@@ -1096,11 +1114,14 @@ const FlightsScreen = ({ navigation }) => {
                           <Ionicons name="airplane-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
                           <TextInput
                             style={styles.input}
-                            placeholder="Delhi or DEL"
+                            placeholder="City or airport code"
                             placeholderTextColor={Colors.textMuted}
                             value={route.from}
-                            onChangeText={(value) => updateRoute(index, 'from', value)}
-                            autoCapitalize="characters"
+                            onChangeText={(value) => {
+                              updateRoute(index, 'from', value);
+                              setAirportSuggestFor({ routeIndex: index, field: 'from' });
+                            }}
+                            onFocus={() => setAirportSuggestFor({ routeIndex: index, field: 'from' })}
                           />
                         </View>
                       </View>
@@ -1115,15 +1136,38 @@ const FlightsScreen = ({ navigation }) => {
                           <Ionicons name="location-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
                           <TextInput
                             style={styles.input}
-                            placeholder="Mumbai or BOM"
+                            placeholder="City or airport code"
                             placeholderTextColor={Colors.textMuted}
                             value={route.to}
-                            onChangeText={(value) => updateRoute(index, 'to', value)}
-                            autoCapitalize="characters"
+                            onChangeText={(value) => {
+                              updateRoute(index, 'to', value);
+                              setAirportSuggestFor({ routeIndex: index, field: 'to' });
+                            }}
+                            onFocus={() => setAirportSuggestFor({ routeIndex: index, field: 'to' })}
                           />
                         </View>
                       </View>
                     </View>
+
+                    {airportSuggestFor?.routeIndex === index ? (() => {
+                      const suggestions = getAirportSuggestions(route[airportSuggestFor.field]);
+                      if (!suggestions.length) return null;
+                      return (
+                        <View style={styles.airportSuggestBox}>
+                          {suggestions.map((option) => (
+                            <TouchableOpacity
+                              key={option.code}
+                              style={styles.airportSuggestRow}
+                              onPress={() => chooseAirportSuggestion(index, airportSuggestFor.field, option)}
+                            >
+                              <Ionicons name="location-outline" size={15} color={Colors.primaryDark} />
+                              <Text style={styles.airportSuggestCity}>{option.city}</Text>
+                              <Text style={styles.airportSuggestCode}>{option.code}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      );
+                    })() : null}
 
                     <View style={styles.inputContainer}>
                       <Text style={styles.inputLabel}>Departure</Text>
@@ -1760,6 +1804,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     marginBottom: 14,
+  },
+  airportSuggestBox: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#F3D4C2',
+    marginTop: -6,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  airportSuggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.background,
+  },
+  airportSuggestCity: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  airportSuggestCode: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
   },
   inputContainer: {
     marginBottom: 0,
