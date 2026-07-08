@@ -56,4 +56,7 @@ __pycache__/
 *.py[cod]
 .venv/
 .venv-ai/
+
+# TripJack UAT certification test logs - local only, not for commit
+certification-logs/
 venv/
