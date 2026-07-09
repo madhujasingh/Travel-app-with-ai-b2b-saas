@@ -53,6 +53,13 @@ public class TripJackClient {
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "TripJack service is unavailable"
             );
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
+            );
         }
     }
 
@@ -74,6 +81,13 @@ public class TripJackClient {
             throw new ResponseStatusException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "TripJack service is unavailable"
+            );
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
             );
         }
     }
