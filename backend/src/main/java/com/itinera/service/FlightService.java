@@ -81,6 +81,26 @@ public class FlightService {
         return tripJackClient.post("/oms/v1/air/amendment/add/ssr", payload);
     }
 
+    // Auto Reissue - reschedules one trip of an already-ticketed booking to a
+    // new date. Only one trip can be reissued at a time (partial reissue is
+    // supported for multi-trip bookings), and a booking can only be reissued
+    // once ever, per TripJack's docs.
+    public JsonNode reissueSearchQueryList(JsonNode payload) {
+        return tripJackClient.post("/fms/v1/reissue/poll/searchquery-list", payload);
+    }
+
+    public JsonNode reissueSearch(JsonNode payload) {
+        return tripJackClient.post("/fms/v1/reissue/poll/search", payload);
+    }
+
+    public JsonNode reissueReview(JsonNode payload) {
+        return tripJackClient.post("/fms/v1/reissue/review", payload);
+    }
+
+    public JsonNode reissueBook(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/amendment/auto-reissue", payload);
+    }
+
     public JsonNode userBalance() {
         return tripJackClient.get("/ums/v1/user-detail");
     }

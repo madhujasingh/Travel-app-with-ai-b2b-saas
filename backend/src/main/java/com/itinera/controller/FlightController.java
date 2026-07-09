@@ -99,6 +99,26 @@ public class FlightController {
         return ResponseEntity.ok(flightService.addAncillarySsr(payload));
     }
 
+    @PostMapping("/reissue/searchquery-list")
+    public ResponseEntity<JsonNode> reissueSearchQueryList(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.reissueSearchQueryList(payload));
+    }
+
+    @PostMapping("/reissue/search")
+    public ResponseEntity<JsonNode> reissueSearch(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.reissueSearch(payload));
+    }
+
+    @PostMapping("/reissue/review")
+    public ResponseEntity<JsonNode> reissueReview(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.reissueReview(payload));
+    }
+
+    @PostMapping("/reissue/book")
+    public ResponseEntity<JsonNode> reissueBook(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.reissueBook(payload));
+    }
+
     @GetMapping("/user-balance")
     public ResponseEntity<JsonNode> userBalance() {
         return ResponseEntity.ok(flightService.userBalance());
