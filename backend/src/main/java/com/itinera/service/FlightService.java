@@ -68,6 +68,19 @@ public class FlightService {
         return tripJackClient.post("/oms/v1/air/amendment/amendment-details", payload);
     }
 
+    // Post-booking ancillaries - only callable once a booking is SUCCESS.
+    public JsonNode fetchAncillarySsr(JsonNode payload) {
+        return tripJackClient.post("/fms/v1/ancillaries/fetch/ssr", payload);
+    }
+
+    public JsonNode fetchAncillarySeat(JsonNode payload) {
+        return tripJackClient.post("/fms/v1/ancillaries/fetch/seat", payload);
+    }
+
+    public JsonNode addAncillarySsr(JsonNode payload) {
+        return tripJackClient.post("/oms/v1/air/amendment/add/ssr", payload);
+    }
+
     public JsonNode userBalance() {
         return tripJackClient.get("/ums/v1/user-detail");
     }

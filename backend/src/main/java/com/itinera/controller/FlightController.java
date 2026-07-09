@@ -84,6 +84,21 @@ public class FlightController {
         return ResponseEntity.ok(flightService.amendmentDetails(payload));
     }
 
+    @PostMapping("/ancillaries/fetch-ssr")
+    public ResponseEntity<JsonNode> fetchAncillarySsr(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.fetchAncillarySsr(payload));
+    }
+
+    @PostMapping("/ancillaries/fetch-seat")
+    public ResponseEntity<JsonNode> fetchAncillarySeat(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.fetchAncillarySeat(payload));
+    }
+
+    @PostMapping("/ancillaries/add-ssr")
+    public ResponseEntity<JsonNode> addAncillarySsr(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(flightService.addAncillarySsr(payload));
+    }
+
     @GetMapping("/user-balance")
     public ResponseEntity<JsonNode> userBalance() {
         return ResponseEntity.ok(flightService.userBalance());
