@@ -6,6 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class TripJackConfig {
 
     private String baseUrl = "https://apitest.tripjack.com";
+    private String hotelBaseUrl = "https://apitest-hms.tripjack.com";
     private String apiKey;
 
     public String getBaseUrl() {
@@ -14,6 +15,14 @@ public class TripJackConfig {
 
     public void setBaseUrl(String baseUrl) {
         this.baseUrl = baseUrl;
+    }
+
+    public String getHotelBaseUrl() {
+        return hotelBaseUrl;
+    }
+
+    public void setHotelBaseUrl(String hotelBaseUrl) {
+        this.hotelBaseUrl = hotelBaseUrl;
     }
 
     public String getApiKey() {

@@ -17,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class TripJackClient {
 
     private final RestClient restClient;
+    private final RestClient hotelRestClient;
     private final TripJackConfig tripJackConfig;
 
     public TripJackClient(TripJackConfig tripJackConfig) {
@@ -31,13 +32,27 @@ public class TripJackClient {
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+
+        this.hotelRestClient = RestClient.builder()
+                .baseUrl(trimTrailingSlash(tripJackConfig.getHotelBaseUrl()))
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
     }
 
     public JsonNode post(String path, JsonNode payload) {
+        return post(restClient, path, payload);
+    }
+
+    public JsonNode postHotel(String path, JsonNode payload) {
+        return post(hotelRestClient, path, payload);
+    }
+
+    private JsonNode post(RestClient client, String path, JsonNode payload) {
         requireApiKey();
 
         try {
-            return restClient.post()
+            return client.post()
                     .uri(path)
                     .header("apikey", tripJackConfig.getApiKey())
                     .body(payload)
