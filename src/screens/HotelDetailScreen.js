@@ -220,9 +220,20 @@ const HotelDetailScreen = ({ route, navigation }) => {
                   On-hold allowed: {String(reviewResult.onholdAllowed)}
                 </Text>
               )}
-              <Text style={styles.reviewResultNote}>
-                Booking (step 4) will be wired up once that part of the API is documented.
-              </Text>
+              <TouchableOpacity
+                style={styles.continueButton}
+                onPress={() =>
+                  navigation.navigate('HotelBooking', {
+                    tjHotelId,
+                    hotelName: detail.hotelName,
+                    searchContext,
+                    reviewResult,
+                  })
+                }
+              >
+                <Text style={styles.continueButtonText}>Continue to Book</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.secondary} />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -430,6 +441,21 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 6,
     fontStyle: 'italic',
+  },
+  continueButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+  continueButtonText: {
+    color: Colors.secondary,
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   optionCard: {
     backgroundColor: Colors.card,

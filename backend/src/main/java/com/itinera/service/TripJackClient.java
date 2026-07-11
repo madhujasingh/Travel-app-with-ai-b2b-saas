@@ -18,6 +18,7 @@ public class TripJackClient {
 
     private final RestClient restClient;
     private final RestClient hotelRestClient;
+    private final RestClient hotelBookerRestClient;
     private final TripJackConfig tripJackConfig;
 
     public TripJackClient(TripJackConfig tripJackConfig) {
@@ -38,6 +39,12 @@ public class TripJackClient {
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+
+        this.hotelBookerRestClient = RestClient.builder()
+                .baseUrl(trimTrailingSlash(tripJackConfig.getHotelBookerBaseUrl()))
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
     }
 
     public JsonNode post(String path, JsonNode payload) {
@@ -46,6 +53,42 @@ public class TripJackClient {
 
     public JsonNode postHotel(String path, JsonNode payload) {
         return post(hotelRestClient, path, payload);
+    }
+
+    public JsonNode postHotelBooker(String path, JsonNode payload) {
+        return post(hotelBookerRestClient, path, payload);
+    }
+
+    // Cancel Booking takes the bookingId as a URL path segment with no request body.
+    // Uses a URI template + variable (rather than string concatenation) so the
+    // bookingId is properly percent-encoded and can't inject extra path segments.
+    public JsonNode postHotelBookerNoBody(String pathTemplate, Object... uriVariables) {
+        requireApiKey();
+
+        try {
+            return hotelBookerRestClient.post()
+                    .uri(pathTemplate, uriVariables)
+                    .header("apikey", tripJackConfig.getApiKey())
+                    .retrieve()
+                    .body(JsonNode.class);
+        } catch (HttpStatusCodeException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed with status " + ex.getStatusCode().value() + ": " + ex.getResponseBodyAsString()
+            );
+        } catch (ResourceAccessException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "TripJack service is unavailable"
+            );
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
+            );
+        }
     }
 
     private JsonNode post(RestClient client, String path, JsonNode payload) {

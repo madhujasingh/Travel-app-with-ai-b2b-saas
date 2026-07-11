@@ -34,4 +34,24 @@ public class HotelService {
     public JsonNode staticDetail(JsonNode payload) {
         return tripJackClient.postHotel("/hms/v3/hotel/static-detail", payload);
     }
+
+    // Step 4 - Book: instant (paymentInfos present) or hold (paymentInfos omitted) -
+    // same endpoint either way. Uses the bookingId from Review.
+    public JsonNode book(JsonNode payload) {
+        return tripJackClient.postHotelBooker("/oms/v3/hotel/book", payload);
+    }
+
+    // Confirms a held booking before its ddt (deadline) deadline.
+    public JsonNode confirmBook(JsonNode payload) {
+        return tripJackClient.postHotelBooker("/oms/v3/hotel/confirm-book", payload);
+    }
+
+    // Poll after Book (every 5s, up to 180s) until a terminal status is reached.
+    public JsonNode bookingDetails(JsonNode payload) {
+        return tripJackClient.postHotelBooker("/oms/v3/hotel/booking-details", payload);
+    }
+
+    public JsonNode cancelBooking(String bookingId) {
+        return tripJackClient.postHotelBookerNoBody("/oms/v3/hotel/cancel-booking/{bookingId}", bookingId);
+    }
 }
