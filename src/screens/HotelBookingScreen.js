@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
-import { parseHotelError } from '../utils/hotelApiErrors';
+import { fetchHotelJson } from '../utils/hotelApiErrors';
 
 const TITLES = ['Mr', 'Mrs', 'Ms', 'Miss', 'Master'];
 
@@ -154,17 +154,16 @@ const HotelBookingScreen = ({ route, navigation }) => {
       setSubmitting(true);
       const payload = buildBookPayload();
       console.log('[hotel book] REQUEST', JSON.stringify(payload));
-      const response = await fetch(`${API_CONFIG.BASE_URL}/hotels/book`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/book`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        'Unable to submit this booking right now.'
+      );
       console.log('[hotel book] RESPONSE', JSON.stringify(data));
-      if (!response.ok) {
-        throw new Error(parseHotelError(data, 'Unable to submit this booking right now.').message);
-      }
 
       setBookResponse(data);
       pollBookingStatus(data.bookingId || reviewResult.bookingId, 1);
@@ -178,16 +177,15 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const pollBookingStatus = async (bookingId, attempt) => {
     setPolling(true);
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/hotels/booking-details`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(parseHotelError(data, 'Unable to check booking status.').message);
-      }
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/booking-details`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId }),
+        },
+        'Unable to check booking status.'
+      );
 
       setBookingDetails(data);
       const status = data?.order?.status;
@@ -214,13 +212,11 @@ const HotelBookingScreen = ({ route, navigation }) => {
         onPress: async () => {
           try {
             setCancelling(true);
-            const response = await fetch(`${API_CONFIG.BASE_URL}/hotels/cancel-booking/${bookingId}`, {
-              method: 'POST',
-            });
-            const data = await response.json();
-            if (!response.ok) {
-              throw new Error(parseHotelError(data, 'Unable to cancel this booking.').message);
-            }
+            await fetchHotelJson(
+              `${API_CONFIG.BASE_URL}/hotels/cancel-booking/${bookingId}`,
+              { method: 'POST' },
+              'Unable to cancel this booking.'
+            );
             Alert.alert('Cancellation requested', 'Checking the latest status now.');
             pollBookingStatus(bookingId, 1);
           } catch (err) {

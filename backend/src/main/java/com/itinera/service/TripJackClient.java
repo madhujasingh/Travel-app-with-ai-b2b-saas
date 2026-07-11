@@ -12,6 +12,10 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriBuilder;
+
+import java.net.URI;
+import java.util.function.Function;
 
 @Service
 public class TripJackClient {
@@ -122,11 +126,26 @@ public class TripJackClient {
     }
 
     public JsonNode get(String path) {
+        return get(restClient, uriBuilder -> uriBuilder.path(path).build());
+    }
+
+    public JsonNode getHotel(String path) {
+        return get(hotelRestClient, uriBuilder -> uriBuilder.path(path).build());
+    }
+
+    // Query-param variant (e.g. City Region IDs' limit/cursor) - building the URI
+    // through Spring's UriBuilder rather than string concatenation ensures values
+    // like a base64 cursor are properly percent-encoded.
+    public JsonNode getHotel(Function<UriBuilder, URI> uriFunction) {
+        return get(hotelRestClient, uriFunction);
+    }
+
+    private JsonNode get(RestClient client, Function<UriBuilder, URI> uriFunction) {
         requireApiKey();
 
         try {
-            return restClient.get()
-                    .uri(path)
+            return client.get()
+                    .uri(uriFunction)
                     .header("apikey", tripJackConfig.getApiKey())
                     .retrieve()
                     .body(JsonNode.class);

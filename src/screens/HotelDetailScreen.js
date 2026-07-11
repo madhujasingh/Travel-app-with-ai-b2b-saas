@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
-import { parseHotelError } from '../utils/hotelApiErrors';
+import { fetchHotelJson } from '../utils/hotelApiErrors';
 
 const formatPenaltyDate = (isoDateTime) => {
   if (!isoDateTime) return '';
@@ -90,17 +90,16 @@ const HotelDetailScreen = ({ route, navigation }) => {
       };
 
       console.log('[hotel detail] REQUEST', JSON.stringify(payload));
-      const response = await fetch(`${API_CONFIG.BASE_URL}/hotels/detail`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/detail`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        'Unable to load hotel options right now.'
+      );
       console.log('[hotel detail] RESPONSE', JSON.stringify(data));
-      if (!response.ok) {
-        throw new Error(parseHotelError(data, 'Unable to load hotel options right now.').message);
-      }
 
       setDetail(data);
     } catch (err) {
@@ -129,24 +128,22 @@ const HotelDetailScreen = ({ route, navigation }) => {
       };
 
       console.log('[hotel review] REQUEST', JSON.stringify(payload));
-      const response = await fetch(`${API_CONFIG.BASE_URL}/hotels/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/review`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        'Unable to review this option right now.'
+      );
       console.log('[hotel review] RESPONSE', JSON.stringify(data));
-      if (!response.ok) {
-        const parsed = parseHotelError(data, 'Unable to review this option right now.');
-        if (parsed.soldOut) {
-          setSoldOutOptionIds((current) => new Set(current).add(option.optionId));
-        }
-        throw new Error(parsed.message);
-      }
 
       setReviewResult(data);
     } catch (err) {
+      if (err.soldOut) {
+        setSoldOutOptionIds((current) => new Set(current).add(option.optionId));
+      }
       Alert.alert('Review', err.message || 'Unable to review this option right now.');
     } finally {
       setReviewingOptionId(null);
@@ -237,7 +234,9 @@ const HotelDetailScreen = ({ route, navigation }) => {
             </View>
           )}
 
-          {(detail.options || []).map((option) => {
+          {(detail.options || [])
+            .filter((option) => option.inventory?.available !== false)
+            .map((option) => {
             const cancellation = cancellationSummary(option.cancellation);
             const isSoldOut = soldOutOptionIds.has(option.optionId);
             const isReviewing = reviewingOptionId === option.optionId;

@@ -2,6 +2,8 @@ package com.itinera.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.util.UriBuilder;
 
 @Service
 public class HotelService {
@@ -10,6 +12,36 @@ public class HotelService {
 
     public HotelService(TripJackClient tripJackClient) {
         this.tripJackClient = tripJackClient;
+    }
+
+    // Same host as flights (apitest.tripjack.com), despite the /hms/v3 path.
+    public JsonNode nationalities() {
+        return tripJackClient.get("/hms/v3/nationality-info");
+    }
+
+    public JsonNode countries() {
+        return tripJackClient.getHotel("/hms/v3/content/fetch-countries");
+    }
+
+    // regionIds from here feed into hotelMapping() to look up hotels by city.
+    public JsonNode cityRegionIds(int limit, String cursor) {
+        return tripJackClient.getHotel(uriBuilder -> {
+            UriBuilder builder = uriBuilder.path("/hms/v3/content/fetch-city-regionIds").queryParam("limit", limit);
+            if (StringUtils.hasText(cursor)) {
+                builder = builder.queryParam("cursor", cursor);
+            }
+            return builder.build();
+        });
+    }
+
+    // Maps tjHotelId/unicaId by countryName or regionIds (city region IDs).
+    public JsonNode hotelMapping(JsonNode payload) {
+        return tripJackClient.postHotel("/hms/v3/content/fetch-hotel-mapping", payload);
+    }
+
+    // Batched static content (name, images, rating, address) for up to 100 hotelIds.
+    public JsonNode hotelContent(JsonNode payload) {
+        return tripJackClient.postHotel("/hms/v3/content/fetch-hotel-content", payload);
     }
 
     // Step 1 - Listing: search criteria in, hotel list with cheapest rate each.

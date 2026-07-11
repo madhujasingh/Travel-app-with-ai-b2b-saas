@@ -3,10 +3,12 @@ package com.itinera.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.itinera.service.HotelService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -57,5 +59,33 @@ public class HotelController {
     @PostMapping("/cancel-booking/{bookingId}")
     public ResponseEntity<JsonNode> cancelBooking(@PathVariable String bookingId) {
         return ResponseEntity.ok(hotelService.cancelBooking(bookingId));
+    }
+
+    @GetMapping("/nationalities")
+    public ResponseEntity<JsonNode> nationalities() {
+        return ResponseEntity.ok(hotelService.nationalities());
+    }
+
+    @GetMapping("/countries")
+    public ResponseEntity<JsonNode> countries() {
+        return ResponseEntity.ok(hotelService.countries());
+    }
+
+    @GetMapping("/city-region-ids")
+    public ResponseEntity<JsonNode> cityRegionIds(
+            @RequestParam int limit,
+            @RequestParam(required = false) String cursor
+    ) {
+        return ResponseEntity.ok(hotelService.cityRegionIds(limit, cursor));
+    }
+
+    @PostMapping("/hotel-mapping")
+    public ResponseEntity<JsonNode> hotelMapping(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(hotelService.hotelMapping(payload));
+    }
+
+    @PostMapping("/hotel-content")
+    public ResponseEntity<JsonNode> hotelContent(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(hotelService.hotelContent(payload));
     }
 }
