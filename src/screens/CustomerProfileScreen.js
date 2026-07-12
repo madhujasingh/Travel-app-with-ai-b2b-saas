@@ -8,13 +8,13 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Image,
-  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
+
+const BOOKING_TABS = new Set(['bookings', 'transactions']);
 
 const CustomerProfileScreen = ({ navigation }) => {
   const { user, token, logout } = useAuth();
@@ -22,43 +22,9 @@ const CustomerProfileScreen = ({ navigation }) => {
   const [groupTrips, setGroupTrips] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
 
-  // Mock data for demonstration
-  const travelPreferences = {
-    style: 'Adventure',
-    weather: 'Warm',
-    favoriteDestinations: ['Goa', 'Bali', 'Maldives'],
-    frequency: 'Monthly',
-  };
-
-  const aiInsights = [
-    { id: 1, text: 'You prefer beach destinations', icon: 'water-outline' },
-    { id: 2, text: 'Recommended: Goa, Bali, Phuket', icon: 'location-outline' },
-    { id: 3, text: 'Best time to travel: Oct-Mar', icon: 'calendar-outline' },
-  ];
-
-  const bookingHistory = [
-    { id: 1, destination: 'Goa Beach Package', date: '15 Mar 2026', price: '₹45,000', status: 'Completed' },
-    { id: 2, destination: 'Kerala Backwaters', date: '20 Apr 2026', price: '₹62,000', status: 'Upcoming' },
-    { id: 3, destination: 'Rajasthan Heritage', date: '10 Feb 2026', price: '₹38,000', status: 'Completed' },
-  ];
-
-  const savedTrips = [
-    { id: 1, destination: 'Maldives Paradise', price: '₹1,20,000', image: '🏝️' },
-    { id: 2, destination: 'Swiss Alps', price: '₹2,50,000', image: '🏔️' },
-    { id: 3, destination: 'Tokyo Adventure', price: '₹1,80,000', image: '🗼' },
-  ];
-
-  const transactions = [
-    { id: 1, description: 'Goa Beach Package', amount: '₹45,000', date: '15 Mar 2026', status: 'Paid' },
-    { id: 2, description: 'Kerala Backwaters', amount: '₹62,000', date: '20 Mar 2026', status: 'Pending' },
-    { id: 3, description: 'Refund - Cancelled Trip', amount: '₹15,000', date: '10 Mar 2026', status: 'Refunded' },
-  ];
-
-  const notifications = [
-    { id: 1, title: 'Booking Confirmed', message: 'Your Kerala trip is confirmed!', time: '2h ago', read: false },
-    { id: 2, title: 'Group Trip Update', message: 'New member joined your Goa trip', time: '5h ago', read: true },
-    { id: 3, title: 'Price Drop Alert', message: 'Maldives package now 20% off!', time: '1d ago', read: true },
-  ];
+  const [bookings, setBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [bookingsLoaded, setBookingsLoaded] = useState(false);
 
   useEffect(() => {
     if (activeTab !== 'groups' || !token) {
@@ -97,110 +63,144 @@ const CustomerProfileScreen = ({ navigation }) => {
     };
   }, [activeTab, token]);
 
+  useEffect(() => {
+    if (!BOOKING_TABS.has(activeTab) || !token || !user?.id || bookingsLoaded) {
+      return;
+    }
+
+    let active = true;
+
+    const loadBookings = async () => {
+      setBookingsLoading(true);
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/bookings/user/${user.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || data?.error || 'Unable to load bookings');
+        }
+        if (active) {
+          setBookings(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (active) {
+          setBookings([]);
+        }
+      } finally {
+        if (active) {
+          setBookingsLoading(false);
+          setBookingsLoaded(true);
+        }
+      }
+    };
+
+    loadBookings();
+    return () => {
+      active = false;
+    };
+  }, [activeTab, token, user?.id, bookingsLoaded]);
+
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'Completed': return '#4CAF50';
-      case 'Upcoming': return '#2196F3';
-      case 'Cancelled': return '#F44336';
-      case 'Paid': return '#4CAF50';
-      case 'Pending': return '#FF9800';
-      case 'Refunded': return '#9C27B0';
-      case 'Active': return '#4CAF50';
-      case 'Planning': return '#2196F3';
+    switch ((status || '').toUpperCase()) {
+      case 'COMPLETED': return '#4CAF50';
+      case 'CONFIRMED': return '#4CAF50';
+      case 'UPCOMING': return '#2196F3';
+      case 'CANCELLED': return '#F44336';
+      case 'PAID': return '#4CAF50';
+      case 'PENDING': return '#FF9800';
+      case 'REFUNDED': return '#9C27B0';
+      case 'FAILED': return '#F44336';
+      case 'ACTIVE': return '#4CAF50';
+      case 'PLANNING': return '#2196F3';
       default: return '#757575';
     }
   };
+
+  const formatDate = (isoDate) => {
+    if (!isoDate) return '';
+    const date = new Date(isoDate);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const formatCurrency = (amount) => `₹${Number(amount || 0).toLocaleString('en-IN')}`;
+
+  const renderEmptyState = (icon, title, subtitle, actionLabel, onAction) => (
+    <View style={styles.emptyState}>
+      <Ionicons name={icon} size={36} color="#B0B0B0" />
+      <Text style={styles.emptyStateTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.emptyStateSubtitle}>{subtitle}</Text> : null}
+      {actionLabel && onAction ? (
+        <TouchableOpacity style={styles.emptyStateAction} onPress={onAction}>
+          <Text style={styles.emptyStateActionText}>{actionLabel}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
 
   const renderTabContent = () => {
     switch (activeTab) {
       case 'preferences':
         return (
           <View style={styles.tabContent}>
-            <View style={styles.preferenceCard}>
-              <Text style={styles.preferenceTitle}>Travel Style</Text>
-              <View style={styles.preferenceItem}>
-                <Ionicons name="compass-outline" size={20} color={Colors.primary} />
-                <Text style={styles.preferenceText}>{travelPreferences.style}</Text>
-              </View>
-            </View>
-            <View style={styles.preferenceCard}>
-              <Text style={styles.preferenceTitle}>Preferred Weather</Text>
-              <View style={styles.preferenceItem}>
-                <Ionicons name="sunny-outline" size={20} color={Colors.primary} />
-                <Text style={styles.preferenceText}>{travelPreferences.weather}</Text>
-              </View>
-            </View>
-            <View style={styles.preferenceCard}>
-              <Text style={styles.preferenceTitle}>Favorite Destinations</Text>
-              <View style={styles.destinationsList}>
-                {travelPreferences.favoriteDestinations.map((dest, index) => (
-                  <View key={index} style={styles.destinationChip}>
-                    <Text style={styles.destinationChipText}>{dest}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-            <View style={styles.preferenceCard}>
-              <Text style={styles.preferenceTitle}>Travel Frequency</Text>
-              <View style={styles.preferenceItem}>
-                <Ionicons name="calendar-outline" size={20} color={Colors.primary} />
-                <Text style={styles.preferenceText}>{travelPreferences.frequency}</Text>
-              </View>
-            </View>
+            {renderEmptyState(
+              'options-outline',
+              'No travel preferences yet',
+              "Preferences you set will show up here to personalize your recommendations."
+            )}
           </View>
         );
 
       case 'insights':
         return (
           <View style={styles.tabContent}>
-            {aiInsights.map((insight) => (
-              <View key={insight.id} style={styles.insightCard}>
-                <Ionicons name={insight.icon} size={24} color={Colors.primary} />
-                <Text style={styles.insightText}>{insight.text}</Text>
-              </View>
-            ))}
+            {renderEmptyState(
+              'bulb-outline',
+              'No AI insights yet',
+              'Get personalized destination picks based on your budget and mood.',
+              'Open AI Picks',
+              () => navigation.navigate('AITab')
+            )}
           </View>
         );
 
       case 'bookings':
         return (
           <View style={styles.tabContent}>
-            {bookingHistory.map((booking) => (
-              <View key={booking.id} style={styles.bookingCard}>
-                <View style={styles.bookingHeader}>
-                  <Text style={styles.bookingDestination}>{booking.destination}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(booking.status) + '20' }]}>
-                    <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>{booking.status}</Text>
+            {bookingsLoading ? (
+              <ActivityIndicator size="small" color={Colors.primary} style={styles.tabLoader} />
+            ) : bookings.length === 0 ? (
+              renderEmptyState('calendar-outline', 'No bookings yet', 'Trips you book will show up here.')
+            ) : (
+              bookings.map((booking) => (
+                <View key={booking.id} style={styles.bookingCard}>
+                  <View style={styles.bookingHeader}>
+                    <Text style={styles.bookingDestination}>{booking.itinerary?.title || booking.itinerary?.destination || 'Trip'}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(booking.status) + '20' }]}>
+                      <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>{booking.status}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.bookingDetails}>
+                    <View style={styles.bookingDetailItem}>
+                      <Ionicons name="calendar-outline" size={14} color="#666" />
+                      <Text style={styles.bookingDetailText}>{formatDate(booking.travelDate || booking.bookingDate)}</Text>
+                    </View>
+                    <View style={styles.bookingDetailItem}>
+                      <Ionicons name="cash-outline" size={14} color="#666" />
+                      <Text style={styles.bookingDetailText}>{formatCurrency(booking.amount)}</Text>
+                    </View>
                   </View>
                 </View>
-                <View style={styles.bookingDetails}>
-                  <View style={styles.bookingDetailItem}>
-                    <Ionicons name="calendar-outline" size={14} color="#666" />
-                    <Text style={styles.bookingDetailText}>{booking.date}</Text>
-                  </View>
-                  <View style={styles.bookingDetailItem}>
-                    <Ionicons name="cash-outline" size={14} color="#666" />
-                    <Text style={styles.bookingDetailText}>{booking.price}</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         );
 
       case 'saved':
         return (
           <View style={styles.tabContent}>
-            {savedTrips.map((trip) => (
-              <TouchableOpacity key={trip.id} style={styles.savedTripCard}>
-                <Text style={styles.savedTripImage}>{trip.image}</Text>
-                <View style={styles.savedTripInfo}>
-                  <Text style={styles.savedTripDestination}>{trip.destination}</Text>
-                  <Text style={styles.savedTripPrice}>{trip.price}</Text>
-                </View>
-                <Ionicons name="heart" size={20} color="#F44336" />
-              </TouchableOpacity>
-            ))}
+            {renderEmptyState('heart-outline', 'No saved trips yet', 'Tap the heart icon on a trip to save it here.')}
           </View>
         );
 
@@ -262,40 +262,40 @@ const CustomerProfileScreen = ({ navigation }) => {
       case 'transactions':
         return (
           <View style={styles.tabContent}>
-            {transactions.map((transaction) => (
-              <View key={transaction.id} style={styles.transactionCard}>
-                <View style={styles.transactionHeader}>
-                  <Text style={styles.transactionDescription}>{transaction.description}</Text>
-                  <Text style={[styles.transactionAmount, { color: transaction.status === 'Refunded' ? '#4CAF50' : '#333' }]}>
-                    {transaction.amount}
-                  </Text>
-                </View>
-                <View style={styles.transactionDetails}>
-                  <View style={styles.transactionDetailItem}>
-                    <Ionicons name="calendar-outline" size={14} color="#666" />
-                    <Text style={styles.transactionDetailText}>{transaction.date}</Text>
+            {bookingsLoading ? (
+              <ActivityIndicator size="small" color={Colors.primary} style={styles.tabLoader} />
+            ) : bookings.length === 0 ? (
+              renderEmptyState('card-outline', 'No payments yet', 'Payments for your bookings will show up here.')
+            ) : (
+              bookings.map((booking) => (
+                <View key={booking.id} style={styles.transactionCard}>
+                  <View style={styles.transactionHeader}>
+                    <Text style={styles.transactionDescription}>
+                      {booking.itinerary?.title || booking.itinerary?.destination || 'Trip'}
+                    </Text>
+                    <Text style={styles.transactionAmount}>{formatCurrency(booking.amount)}</Text>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(transaction.status) + '20' }]}>
-                    <Text style={[styles.statusText, { color: getStatusColor(transaction.status) }]}>{transaction.status}</Text>
+                  <View style={styles.transactionDetails}>
+                    <View style={styles.transactionDetailItem}>
+                      <Ionicons name="calendar-outline" size={14} color="#666" />
+                      <Text style={styles.transactionDetailText}>{formatDate(booking.bookingDate)}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(booking.paymentStatus) + '20' }]}>
+                      <Text style={[styles.statusText, { color: getStatusColor(booking.paymentStatus) }]}>
+                        {booking.paymentStatus}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         );
 
       case 'notifications':
         return (
           <View style={styles.tabContent}>
-            {notifications.map((notification) => (
-              <View key={notification.id} style={[styles.notificationCard, !notification.read && styles.unreadNotification]}>
-                <View style={styles.notificationHeader}>
-                  <Text style={styles.notificationTitle}>{notification.title}</Text>
-                  <Text style={styles.notificationTime}>{notification.time}</Text>
-                </View>
-                <Text style={styles.notificationMessage}>{notification.message}</Text>
-              </View>
-            ))}
+            {renderEmptyState('notifications-outline', 'No notifications yet', "You're all caught up.")}
           </View>
         );
 
@@ -466,66 +466,41 @@ const styles = StyleSheet.create({
   tabContent: {
     padding: 15,
   },
-  preferenceCard: {
+  tabLoader: {
+    marginVertical: 30,
+  },
+  emptyState: {
+    alignItems: 'center',
     backgroundColor: Colors.secondary,
     borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingVertical: 36,
+    paddingHorizontal: 20,
   },
-  preferenceTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+  emptyStateTitle: {
+    marginTop: 12,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
     color: '#666',
-    marginBottom: 10,
+    textAlign: 'center',
+    lineHeight: 18,
   },
-  preferenceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  emptyStateAction: {
+    marginTop: 16,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
-  preferenceText: {
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 10,
-  },
-  destinationsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  destinationChip: {
-    backgroundColor: Colors.primary + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  destinationChipText: {
-    fontSize: 14,
-    color: Colors.primary,
-  },
-  insightCard: {
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  insightText: {
-    fontSize: 14,
-    color: '#333',
-    marginLeft: 10,
-    flex: 1,
+  emptyStateActionText: {
+    color: Colors.secondary,
+    fontWeight: '700',
+    fontSize: 13,
   },
   bookingCard: {
     backgroundColor: Colors.secondary,
@@ -570,35 +545,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginLeft: 5,
-  },
-  savedTripCard: {
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  savedTripImage: {
-    fontSize: 30,
-    marginRight: 15,
-  },
-  savedTripInfo: {
-    flex: 1,
-  },
-  savedTripDestination: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  savedTripPrice: {
-    fontSize: 14,
-    color: '#666',
   },
   groupPlannerLaunchCard: {
     backgroundColor: '#FFF3EA',
@@ -730,40 +676,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     marginLeft: 5,
-  },
-  notificationCard: {
-    backgroundColor: Colors.secondary,
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  unreadNotification: {
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.primary,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#999',
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: '#666',
   },
   logoutButton: {
     flexDirection: 'row',

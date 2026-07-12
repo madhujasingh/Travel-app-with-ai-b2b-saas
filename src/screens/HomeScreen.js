@@ -16,7 +16,7 @@ import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 
 const HomeScreen = ({ navigation }) => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [budget, setBudget] = useState('');
   const [destination, setDestination] = useState('');
   const [adults, setAdults] = useState('');
@@ -140,9 +140,6 @@ const HomeScreen = ({ navigation }) => {
                 onPress={() => navigation.navigate('ChatInbox')}
               >
                 <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.secondary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-                <Text style={styles.logoutText}>Logout</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -405,19 +402,6 @@ const styles = StyleSheet.create({
     padding: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.35)',
-  },
-  logoutButton: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  logoutText: {
-    color: Colors.secondary,
-    fontWeight: '600',
-    fontSize: 12,
   },
   roleBadge: {
     marginTop: 12,

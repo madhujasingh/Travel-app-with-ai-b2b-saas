@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/bookings")
@@ -27,8 +28,21 @@ public class BookingController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // A user can only list their own bookings unless they're an admin - otherwise
+    // any logged-in customer could read anyone else's booking history just by
+    // changing the userId in the URL.
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<Booking>> getBookingsByUserId(@PathVariable Long userId) {
+    public ResponseEntity<?> getBookingsByUserId(
+            @PathVariable Long userId,
+            @RequestAttribute(name = "userId", required = false) Long requesterId,
+            @RequestAttribute(name = "role", required = false) String requesterRole
+    ) {
+        if (requesterId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+        if (!requesterId.equals(userId) && !"ADMIN".equals(requesterRole)) {
+            return ResponseEntity.status(403).body(Map.of("error", "You can only view your own bookings"));
+        }
         return ResponseEntity.ok(bookingService.getBookingsByUserId(userId));
     }
 
