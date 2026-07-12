@@ -12,7 +12,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriBuilder;
 
@@ -108,10 +107,7 @@ public class TripJackClient {
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, describeUnexpected(ex));
         }
     }
 
@@ -138,10 +134,7 @@ public class TripJackClient {
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, describeUnexpected(ex));
         }
     }
 
@@ -182,11 +175,23 @@ public class TripJackClient {
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, describeUnexpected(ex));
         }
+    }
+
+    // Walks the cause chain so errors like "no suitable converter" don't hide
+    // the actual underlying parse failure (e.g. a body that isn't valid UTF-8).
+    private String describeUnexpected(Exception ex) {
+        StringBuilder sb = new StringBuilder("TripJack request failed unexpectedly: ")
+                .append(ex.getClass().getSimpleName()).append(": ").append(ex.getMessage());
+        Throwable cause = ex.getCause();
+        int depth = 0;
+        while (cause != null && depth < 3) {
+            sb.append(" | caused by ").append(cause.getClass().getSimpleName()).append(": ").append(cause.getMessage());
+            cause = cause.getCause();
+            depth++;
+        }
+        return sb.toString();
     }
 
     private void requireApiKey() {
