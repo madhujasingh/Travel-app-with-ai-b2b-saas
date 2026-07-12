@@ -86,12 +86,6 @@ public class GlobalExceptionHandler {
         response.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
         response.put("error", "Internal Server Error");
         response.put("message", "An unexpected error occurred");
-        // TEMPORARY debug instrumentation - remove once the flight-bookings
-        // 500 is diagnosed.
-        response.put("debugExceptionClass", ex.getClass().getName());
-        response.put("debugExceptionMessage", ex.getMessage());
-        response.put("debugCauseClass", ex.getCause() != null ? ex.getCause().getClass().getName() : null);
-        response.put("debugCauseMessage", ex.getCause() != null ? ex.getCause().getMessage() : null);
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
