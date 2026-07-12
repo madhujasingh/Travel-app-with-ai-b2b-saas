@@ -29,6 +29,7 @@ import AIPlaceInsightScreen from './src/screens/AIPlaceInsightScreen';
 import ChatInboxScreen from './src/screens/ChatInboxScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AdminItineraryUploadScreen from './src/screens/AdminItineraryUploadScreen';
+import ManageSuppliersScreen from './src/screens/ManageSuppliersScreen';
 import GroupTripPlannerScreen from './src/screens/GroupTripPlannerScreen';
 import AdminPosterStudioScreen from './src/screens/AdminPosterStudioScreen';
 import RequestDetailScreen from './src/screens/RequestDetailScreen';
@@ -291,6 +292,7 @@ export default function App() {
               <Stack.Screen name="ChatInbox" component={ChatInboxScreen} />
               <Stack.Screen name="ChatScreen" component={ChatScreen} />
               <Stack.Screen name="AdminItineraryUpload" component={AdminItineraryUploadScreen} />
+              <Stack.Screen name="SupplierNetwork" component={ManageSuppliersScreen} />
               <Stack.Screen name="AdminPosterStudio" component={AdminPosterStudioScreen} />
               <Stack.Screen name="GroupTripPlanner" component={GroupTripPlannerScreen} />
               <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
