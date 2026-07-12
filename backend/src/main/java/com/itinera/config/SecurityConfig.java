@@ -33,6 +33,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 // Context path is already /api, so matchers should use app-relative routes.
+                // Must come before the /auth/** permitAll below - first match wins.
+                .requestMatchers(HttpMethod.PUT, "/auth/change-password").authenticated()
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/ai/**").permitAll()

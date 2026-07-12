@@ -278,6 +278,40 @@ public class AuthController {
         }
     }
 
+    @PutMapping("/change-password")
+    public ResponseEntity<?> changePassword(
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestBody ChangePasswordRequest request
+    ) {
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+        if (request.getOldPassword() == null || request.getNewPassword() == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Current and new password are required"));
+        }
+        if (request.getNewPassword().length() < MIN_PASSWORD_LENGTH) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Password too short",
+                    "message", "Password must be at least " + MIN_PASSWORD_LENGTH + " characters"
+            ));
+        }
+
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        }
+
+        User user = userOpt.get();
+        if (!user.checkPassword(request.getOldPassword())) {
+            return ResponseEntity.status(401).body(Map.of("error", "Current password is incorrect"));
+        }
+
+        user.setPassword(request.getNewPassword());
+        userRepository.save(user);
+
+        return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@RequestAttribute(name = "userId", required = false) Long userId) {
         if (userId == null) {
@@ -414,6 +448,27 @@ public class AuthController {
 
         public void setIdToken(String idToken) {
             this.idToken = idToken;
+        }
+    }
+
+    public static class ChangePasswordRequest {
+        private String oldPassword;
+        private String newPassword;
+
+        public String getOldPassword() {
+            return oldPassword;
+        }
+
+        public void setOldPassword(String oldPassword) {
+            this.oldPassword = oldPassword;
+        }
+
+        public String getNewPassword() {
+            return newPassword;
+        }
+
+        public void setNewPassword(String newPassword) {
+            this.newPassword = newPassword;
         }
     }
 }
