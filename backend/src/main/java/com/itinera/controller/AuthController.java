@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @RestController
@@ -54,11 +55,32 @@ public class AuthController {
     @Value("${google.android-client-id:}")
     private String googleAndroidClientId;
 
+    private static final int MIN_PASSWORD_LENGTH = 6;
+
+    // Simple in-memory brute-force guard for login - fine for this app's single-instance
+    // deployment. Keyed by email (not IP) so it can't be sidestepped by rotating IPs
+    // against one target account.
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
+    private static final long LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+    private final Map<String, FailedLoginState> failedLoginAttempts = new ConcurrentHashMap<>();
+
+    private static class FailedLoginState {
+        int count;
+        long lockedUntil;
+    }
+
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         if (request.getEmail() == null || request.getEmail().isBlank()
                 || request.getPassword() == null || request.getPassword().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Email and password are required"));
+        }
+
+        if (request.getPassword().length() < MIN_PASSWORD_LENGTH) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Password too short",
+                    "message", "Password must be at least " + MIN_PASSWORD_LENGTH + " characters"
+            ));
         }
 
         String email = request.getEmail().trim().toLowerCase();
@@ -148,15 +170,29 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "Email and password are required"));
         }
 
-        Optional<User> userOpt = userRepository.findByEmail(email.trim().toLowerCase());
+        String normalizedEmail = email.trim().toLowerCase();
+
+        FailedLoginState state = failedLoginAttempts.get(normalizedEmail);
+        if (state != null && state.lockedUntil > System.currentTimeMillis()) {
+            return ResponseEntity.status(429).body(Map.of(
+                    "error", "Too many attempts",
+                    "message", "Too many failed login attempts. Please try again in a few minutes."
+            ));
+        }
+
+        Optional<User> userOpt = userRepository.findByEmail(normalizedEmail);
         if (userOpt.isEmpty()) {
+            recordFailedLogin(normalizedEmail);
             return ResponseEntity.status(401).body(Map.of("error", "Invalid email or password"));
         }
 
         User user = userOpt.get();
         if (!user.checkPassword(password)) {
+            recordFailedLogin(normalizedEmail);
             return ResponseEntity.status(401).body(Map.of("error", "Invalid email or password"));
         }
+
+        failedLoginAttempts.remove(normalizedEmail);
 
         // Generate JWT token
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name());
@@ -262,6 +298,15 @@ public class AuthController {
         response.put("role", user.getRole());
 
         return ResponseEntity.ok(response);
+    }
+
+    private void recordFailedLogin(String normalizedEmail) {
+        FailedLoginState state = failedLoginAttempts.computeIfAbsent(normalizedEmail, k -> new FailedLoginState());
+        state.count++;
+        if (state.count >= MAX_FAILED_LOGIN_ATTEMPTS) {
+            state.lockedUntil = System.currentTimeMillis() + LOGIN_LOCKOUT_MS;
+            state.count = 0;
+        }
     }
 
     private GoogleIdToken.Payload verifyGoogleIdToken(String idTokenString, List<String> audiences) throws GeneralSecurityException, IOException {

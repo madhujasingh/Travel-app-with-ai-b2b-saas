@@ -40,7 +40,6 @@ const LoginScreen = () => {
   const [signUpForm, setSignUpForm] = useState(INITIAL_SIGN_UP);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [showStaffRoles, setShowStaffRoles] = useState(false);
   const googleWebClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
     process.env.REACT_APP_GOOGLE_WEB_CLIENT_ID ||
@@ -223,21 +222,6 @@ const LoginScreen = () => {
     }
   };
 
-  const applyStaffDemoUser = (role) => {
-    const presets = {
-      SUPPLIER: { email: 'supplier@itinera.com', password: 'Supplier@123' },
-      ADMIN: { email: 'admin@itinera.com', password: 'Admin@123' },
-    };
-
-    const preset = presets[role];
-    if (!preset) {
-      return;
-    }
-
-    setMode('signin');
-    setSignInForm(preset);
-  };
-
   const renderSignInForm = () => (
     <>
       <Text style={styles.sectionTitle}>Welcome back</Text>
@@ -385,37 +369,6 @@ const LoginScreen = () => {
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             )}
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.staffToggle}
-            onPress={() => setShowStaffRoles((current) => !current)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.staffToggleText}>
-              {showStaffRoles ? 'Hide staff login' : 'Staff login'}
-            </Text>
-          </TouchableOpacity>
-
-          {showStaffRoles ? (
-            <View style={styles.staffRow}>
-              <TouchableOpacity
-                style={[styles.staffCard, styles.staffCardLeft]}
-                onPress={() => applyStaffDemoUser('SUPPLIER')}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.staffCardTitle}>Supplier</Text>
-                <Text style={styles.staffCardText}>Fill demo supplier credentials</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.staffCard, styles.staffCardRight]}
-                onPress={() => applyStaffDemoUser('ADMIN')}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.staffCardTitle}>Admin</Text>
-                <Text style={styles.staffCardText}>Fill demo admin credentials</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -574,47 +527,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: 15,
     fontWeight: '600',
-  },
-  staffToggle: {
-    alignSelf: 'center',
-    marginTop: 14,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  staffToggleText: {
-    color: Colors.textLight,
-    fontSize: 12,
-    textDecorationLine: 'underline',
-  },
-  staffRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  staffCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: '#FFFDFC',
-  },
-  staffCardLeft: {
-    marginRight: 5,
-  },
-  staffCardRight: {
-    marginLeft: 5,
-  },
-  staffCardTitle: {
-    color: Colors.text,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  staffCardText: {
-    marginTop: 4,
-    color: Colors.textLight,
-    fontSize: 12,
-    lineHeight: 17,
   },
 });
 

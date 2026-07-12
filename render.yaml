@@ -17,6 +17,8 @@ services:
         generateValue: true
       - key: JPA_DDL_AUTO
         value: update
+      - key: SEED_DEMO_USERS
+        value: "false"
       - key: AI_SERVICE_URL
         fromService:
           name: itinera-ai
