@@ -32,14 +32,21 @@ public class TripJackClient {
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(10000);
-        requestFactory.setReadTimeout(20000);
+        // v1 hotel city search ("sync": true) aggregates live supplier responses
+        // across a whole city (potentially thousands of hotels) and can genuinely
+        // take longer than a typical API call - a 20s read timeout was firing as a
+        // SocketTimeoutException before the response ever arrived, which is what
+        // was actually behind the "octet-stream" errors below (a misleading
+        // symptom of the connection being cut mid-response, not a real
+        // content-type mismatch).
+        requestFactory.setReadTimeout(60000);
 
-        // TripJack's v1 hotel search sometimes responds with Content-Type:
-        // application/octet-stream for a genuinely JSON body (confirmed via a real
-        // city search - see docu/tripjack-support-message.md history). The default
-        // Jackson converter refuses to parse a body whose declared content type
-        // isn't JSON, throwing an uncaught RestClientException. Widening the
-        // converter's supported media types fixes this without weakening anything
+        // Kept as a genuine (if secondary) fix: TripJack's v1 hotel search can
+        // still respond with Content-Type: application/octet-stream for a JSON
+        // body. The default Jackson converter refuses to parse a body whose
+        // declared content type isn't JSON, throwing an uncaught
+        // RestClientException. Widening the converter's supported media types
+        // fixes this without weakening anything
         // else - we still fail loudly if the body genuinely isn't JSON.
         MappingJackson2HttpMessageConverter jsonConverter = new MappingJackson2HttpMessageConverter();
         jsonConverter.setSupportedMediaTypes(List.of(
