@@ -73,6 +73,13 @@ const HotelsScreen = ({ navigation }) => {
   const [loadingBrowseHotels, setLoadingBrowseHotels] = useState(false);
   const [selectedBrowseIds, setSelectedBrowseIds] = useState(new Set());
 
+  const [cityModal, setCityModal] = useState(false);
+  const [cityResults, setCityResults] = useState([]);
+  const [cityCursor, setCityCursor] = useState(null);
+  const [cityHasMore, setCityHasMore] = useState(true);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [selectedCity, setSelectedCity] = useState(null);
+
   const adjustRoomCount = (index, field, delta, min, max) => {
     setRooms((current) =>
       current.map((room, i) => {
@@ -169,10 +176,10 @@ const HotelsScreen = ({ navigation }) => {
 
     try {
       const hids = buildHotelIds();
-      if (hids.length === 0) {
+      if (hids.length === 0 && !selectedCity) {
         Alert.alert(
-          'Hotel IDs required',
-          'Use "Browse by country" to pick real hotels, or enter TripJack hotel IDs directly.'
+          'Destination required',
+          'Pick a city, use "Browse by country" to pick real hotels, or enter TripJack hotel IDs directly.'
         );
         return;
       }
@@ -186,7 +193,13 @@ const HotelsScreen = ({ navigation }) => {
         currency: currency.trim().toUpperCase(),
         correlationId,
         nationality: nationality.trim(),
-        hids,
+        ...(hids.length > 0 ? { hids } : {}),
+        // Experimental: field name/format isn't documented, best guess based on
+        // the rest of v3's city-region terminology - hids-only search returns
+        // success:true but totalResults:0 for every real hotel ID tried, so this
+        // is an attempt to trigger an actual live supplier search instead of a
+        // cache-only hotel-ID lookup.
+        ...(selectedCity ? { cityCode: String(selectedCity.cityRegionId) } : {}),
       };
 
       setLoading(true);
@@ -369,6 +382,40 @@ const HotelsScreen = ({ navigation }) => {
     name.toLowerCase().includes(countrySearch.trim().toLowerCase())
   );
 
+  // ---- City picker (GET /hotels/city-region-ids) - paginated browse, not search,
+  // since the API only offers a raw cursor-paginated dump with no text query. ----
+
+  const openCityModal = () => {
+    setCityModal(true);
+    if (cityResults.length === 0) {
+      loadCityPage(null);
+    }
+  };
+
+  const loadCityPage = async (cursor) => {
+    try {
+      setLoadingCities(true);
+      const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+      const url = `${API_CONFIG.BASE_URL}/hotels/city-region-ids?limit=50${cursorParam}`;
+
+      const data = await fetchHotelJson(url, { method: 'GET' }, 'Unable to load cities right now.');
+      setCityResults((current) => [...current, ...(data.hotelCityRegionIds || [])]);
+      setCityCursor(data.nextCursor || null);
+      setCityHasMore(Boolean(data.hasMore));
+    } catch (error) {
+      Alert.alert('Cities', error.message || 'Unable to load cities right now.');
+    } finally {
+      setLoadingCities(false);
+    }
+  };
+
+  const selectCity = (item) => {
+    setSelectedCity(item);
+    setCityModal(false);
+  };
+
+  const clearSelectedCity = () => setSelectedCity(null);
+
   const renderHotel = ({ item }) => {
     // Best practice from the docs: filter out options where inventory.available
     // is explicitly false before picking what to display.
@@ -457,13 +504,31 @@ const HotelsScreen = ({ navigation }) => {
           </View>
 
           <Text style={styles.fieldLabel}>Destination</Text>
+          {selectedCity ? (
+            <View style={styles.selectedCityRow}>
+              <Ionicons name="location" size={16} color={Colors.primary} />
+              <Text style={styles.selectedCityText} numberOfLines={1}>
+                {selectedCity.fullRegionName}
+              </Text>
+              <TouchableOpacity onPress={clearSelectedCity}>
+                <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.browseButton} onPress={openCityModal}>
+              <Ionicons name="location-outline" size={18} color={Colors.primary} />
+              <Text style={styles.browseButtonText}>Pick a city (experimental)</Text>
+              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={styles.browseButton} onPress={openBrowseModal}>
             <Ionicons name="earth-outline" size={18} color={Colors.primary} />
             <Text style={styles.browseButtonText}>Browse hotels by country</Text>
             <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
           </TouchableOpacity>
 
-          <Text style={styles.fieldLabel}>Hotel IDs (comma separated)</Text>
+          <Text style={styles.fieldLabel}>Hotel IDs (comma separated, optional if a city is picked)</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. 1234, 5464 - or use Browse above"
@@ -730,6 +795,44 @@ const HotelsScreen = ({ navigation }) => {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal visible={cityModal} transparent animationType="fade" onRequestClose={() => setCityModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setCityModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pick a city</Text>
+              <TouchableOpacity onPress={() => setCityModal(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalHint}>
+              TripJack only exposes city browsing as a raw paginated list (no text search) - tap Load More to page
+              through.
+            </Text>
+            <FlatList
+              data={cityResults}
+              keyExtractor={(item, index) => `${item.cityRegionId}-${index}`}
+              style={styles.modalList}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.modalListRow} onPress={() => selectCity(item)}>
+                  <Text style={styles.modalListRowText} numberOfLines={1}>
+                    {item.fullRegionName}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              ListFooterComponent={
+                loadingCities ? (
+                  <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+                ) : cityHasMore ? (
+                  <TouchableOpacity style={styles.loadMoreButton} onPress={() => loadCityPage(cityCursor)}>
+                    <Text style={styles.loadMoreButtonText}>Load more cities</Text>
+                  </TouchableOpacity>
+                ) : null
+              }
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -808,6 +911,23 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
     fontWeight: '600',
     fontSize: 14,
+  },
+  selectedCityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    marginBottom: 10,
+  },
+  selectedCityText: {
+    flex: 1,
+    color: Colors.primaryDark,
+    fontWeight: '600',
+    fontSize: 13,
   },
   roomCard: {
     backgroundColor: Colors.background,
@@ -1056,6 +1176,20 @@ const styles = StyleSheet.create({
   },
   modalLoading: {
     marginVertical: 30,
+  },
+  modalHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 10,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  loadMoreButtonText: {
+    color: Colors.primary,
+    fontWeight: '600',
+    fontSize: 13,
   },
   modalEmptyText: {
     textAlign: 'center',
