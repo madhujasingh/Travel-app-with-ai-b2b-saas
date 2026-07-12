@@ -1,5 +1,6 @@
 package com.itinera.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -27,8 +28,13 @@ public class FlightBooking {
     // Not @NotNull: this is always resolved server-side from the requester's
     // JWT (see FlightBookingService.upsert), never supplied by the client -
     // a @Valid check here would reject every legitimate request body.
+    // @JsonIgnore: the client already knows who it is and never needs this
+    // nested object - also avoids Jackson choking on the unwrapped Hibernate
+    // lazy proxy when serializing a list (no serializer for
+    // ByteBuddyInterceptor/hibernateLazyInitializer).
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private User user;
 
     @Column(name = "tripjack_booking_id", nullable = false)
