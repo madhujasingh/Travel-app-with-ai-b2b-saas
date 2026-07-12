@@ -123,4 +123,10 @@ public class HotelService {
     public JsonNode cancelBookingV1(String bookingId) {
         return tripJackClient.postHotelBookerNoBody("/oms/v1/hotel/cancel-booking/{bookingId}", bookingId);
     }
+
+    // v1's own static catalog - a source of real hids that v1 Search actually
+    // recognizes (v1 and v3 hotel IDs appear to be different ID spaces).
+    public JsonNode fetchStaticHotelsV1(JsonNode payload) {
+        return tripJackClient.post("/hms/v1/fetch-static-hotels", payload);
+    }
 }

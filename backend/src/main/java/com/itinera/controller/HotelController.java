@@ -130,4 +130,9 @@ public class HotelController {
     public ResponseEntity<JsonNode> cancelBookingV1(@PathVariable String bookingId) {
         return ResponseEntity.ok(hotelService.cancelBookingV1(bookingId));
     }
+
+    @PostMapping("/v1/fetch-static-hotels")
+    public ResponseEntity<JsonNode> fetchStaticHotelsV1(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(hotelService.fetchStaticHotelsV1(payload));
+    }
 }
