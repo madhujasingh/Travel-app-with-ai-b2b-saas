@@ -6,7 +6,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -16,7 +15,6 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriBuilder;
 
 import java.net.URI;
-import java.util.List;
 import java.util.function.Function;
 
 @Service
@@ -32,48 +30,23 @@ public class TripJackClient {
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(10000);
-        // v1 hotel city search ("sync": true) aggregates live supplier responses
-        // across a whole city (potentially thousands of hotels) and can genuinely
-        // take a long time - a 20s read timeout was firing as a
-        // SocketTimeoutException before the response ever arrived, which is what
-        // was actually behind the "octet-stream" errors below (a misleading
-        // symptom of the connection being cut mid-response, not a real
-        // content-type mismatch). Confirmed via timing that 60s still isn't
-        // enough for a real city-wide search - bumped further.
-        requestFactory.setReadTimeout(120000);
-
-        // Kept as a genuine (if secondary) fix: TripJack's v1 hotel search can
-        // still respond with Content-Type: application/octet-stream for a JSON
-        // body. The default Jackson converter refuses to parse a body whose
-        // declared content type isn't JSON, throwing an uncaught
-        // RestClientException. Widening the converter's supported media types
-        // fixes this without weakening anything
-        // else - we still fail loudly if the body genuinely isn't JSON.
-        MappingJackson2HttpMessageConverter jsonConverter = new MappingJackson2HttpMessageConverter();
-        jsonConverter.setSupportedMediaTypes(List.of(
-                MediaType.APPLICATION_JSON,
-                MediaType.APPLICATION_OCTET_STREAM,
-                new MediaType("text", "plain")
-        ));
+        requestFactory.setReadTimeout(20000);
 
         this.restClient = RestClient.builder()
                 .baseUrl(trimTrailingSlash(tripJackConfig.getBaseUrl()))
                 .requestFactory(requestFactory)
-                .messageConverters(converters -> converters.add(0, jsonConverter))
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
 
         this.hotelRestClient = RestClient.builder()
                 .baseUrl(trimTrailingSlash(tripJackConfig.getHotelBaseUrl()))
                 .requestFactory(requestFactory)
-                .messageConverters(converters -> converters.add(0, jsonConverter))
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
 
         this.hotelBookerRestClient = RestClient.builder()
                 .baseUrl(trimTrailingSlash(tripJackConfig.getHotelBookerBaseUrl()))
                 .requestFactory(requestFactory)
-                .messageConverters(converters -> converters.add(0, jsonConverter))
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
@@ -115,7 +88,10 @@ public class TripJackClient {
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, describeUnexpected(ex));
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
+            );
         }
     }
 
@@ -142,7 +118,10 @@ public class TripJackClient {
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, describeUnexpected(ex));
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
+            );
         }
     }
 
@@ -183,23 +162,11 @@ public class TripJackClient {
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, describeUnexpected(ex));
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
+            );
         }
-    }
-
-    // Walks the cause chain so errors like "no suitable converter" don't hide
-    // the actual underlying parse failure (e.g. a body that isn't valid UTF-8).
-    private String describeUnexpected(Exception ex) {
-        StringBuilder sb = new StringBuilder("TripJack request failed unexpectedly: ")
-                .append(ex.getClass().getSimpleName()).append(": ").append(ex.getMessage());
-        Throwable cause = ex.getCause();
-        int depth = 0;
-        while (cause != null && depth < 3) {
-            sb.append(" | caused by ").append(cause.getClass().getSimpleName()).append(": ").append(cause.getMessage());
-            cause = cause.getCause();
-            depth++;
-        }
-        return sb.toString();
     }
 
     private void requireApiKey() {

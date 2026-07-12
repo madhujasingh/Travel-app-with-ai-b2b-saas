@@ -86,47 +86,4 @@ public class HotelService {
     public JsonNode cancelBooking(String bookingId) {
         return tripJackClient.postHotelBookerNoBody("/oms/v3/hotel/cancel-booking/{bookingId}", bookingId);
     }
-
-    // --- v1 (legacy) hotel API - same hosts as v3, different paths. This is the
-    // version proven to have live inventory on this account (see hotel-sample-logs
-    // and hotel-v2/v2-doc.md), kept as a fallback while v3 dynamic search/pricing
-    // returns no results for every hotel ID tested. ---
-
-    public JsonNode searchV1(JsonNode payload) {
-        return tripJackClient.post("/hms/v1/hotel-searchquery-list", payload);
-    }
-
-    public JsonNode detailSearchV1(JsonNode payload) {
-        return tripJackClient.post("/hms/v1/hotelDetail-search", payload);
-    }
-
-    public JsonNode cancellationPolicyV1(JsonNode payload) {
-        return tripJackClient.post("/hms/v1/hotel-cancellation-policy", payload);
-    }
-
-    public JsonNode reviewV1(JsonNode payload) {
-        return tripJackClient.post("/hms/v1/hotel-review", payload);
-    }
-
-    public JsonNode bookV1(JsonNode payload) {
-        return tripJackClient.postHotelBooker("/oms/v1/hotel/book", payload);
-    }
-
-    public JsonNode confirmBookV1(JsonNode payload) {
-        return tripJackClient.postHotelBooker("/oms/v1/hotel/confirm-book", payload);
-    }
-
-    public JsonNode bookingDetailsV1(JsonNode payload) {
-        return tripJackClient.postHotelBooker("/oms/v1/hotel/booking-details", payload);
-    }
-
-    public JsonNode cancelBookingV1(String bookingId) {
-        return tripJackClient.postHotelBookerNoBody("/oms/v1/hotel/cancel-booking/{bookingId}", bookingId);
-    }
-
-    // v1's own static catalog - a source of real hids that v1 Search actually
-    // recognizes (v1 and v3 hotel IDs appear to be different ID spaces).
-    public JsonNode fetchStaticHotelsV1(JsonNode payload) {
-        return tripJackClient.post("/hms/v1/fetch-static-hotels", payload);
-    }
 }
