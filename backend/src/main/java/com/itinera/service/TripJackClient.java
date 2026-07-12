@@ -34,12 +34,13 @@ public class TripJackClient {
         requestFactory.setConnectTimeout(10000);
         // v1 hotel city search ("sync": true) aggregates live supplier responses
         // across a whole city (potentially thousands of hotels) and can genuinely
-        // take longer than a typical API call - a 20s read timeout was firing as a
+        // take a long time - a 20s read timeout was firing as a
         // SocketTimeoutException before the response ever arrived, which is what
         // was actually behind the "octet-stream" errors below (a misleading
         // symptom of the connection being cut mid-response, not a real
-        // content-type mismatch).
-        requestFactory.setReadTimeout(60000);
+        // content-type mismatch). Confirmed via timing that 60s still isn't
+        // enough for a real city-wide search - bumped further.
+        requestFactory.setReadTimeout(120000);
 
         // Kept as a genuine (if secondary) fix: TripJack's v1 hotel search can
         // still respond with Content-Type: application/octet-stream for a JSON
