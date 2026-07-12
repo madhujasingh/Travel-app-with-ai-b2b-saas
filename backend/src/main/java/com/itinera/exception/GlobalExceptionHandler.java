@@ -86,6 +86,14 @@ public class GlobalExceptionHandler {
         response.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
         response.put("error", "Internal Server Error");
         response.put("message", "An unexpected error occurred");
+        // TEMPORARY diagnostic detail - revert once the v1 hotel endpoint 500 is
+        // root-caused, don't leave exception internals exposed in production.
+        response.put("debugExceptionClass", ex.getClass().getName());
+        response.put("debugExceptionMessage", ex.getMessage());
+        if (ex.getCause() != null) {
+            response.put("debugCauseClass", ex.getCause().getClass().getName());
+            response.put("debugCauseMessage", ex.getCause().getMessage());
+        }
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
     }
