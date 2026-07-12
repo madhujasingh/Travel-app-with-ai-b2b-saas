@@ -44,6 +44,60 @@ const generateCorrelationId = () =>
 
 const createEmptyRoom = () => ({ adults: 2, children: 0, childAge: [] });
 
+// TripJack's v3 sandbox key has no live pricing/availability for any hotel
+// we've tested (see docu/tripjack-support-message.md) - Listing/Detail always
+// return an empty, successful response. This builds a Detail-shaped payload
+// from real Hotel Content data (name/rating/address) so the booking flow's UI
+// can still be previewed end to end while that's unresolved. Every price here
+// is fabricated and clearly labelled as such - never sent to Book.
+const buildDemoDetail = (hotel) => {
+  const isInternational = hotel.locale?.address?.countrycode && hotel.locale.address.countrycode !== 'IN';
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+
+  const makeOption = (id, roomName, mealBasis, basePrice) => {
+    const taxes = Math.round(basePrice * 0.12);
+    const mf = Math.round(basePrice * 0.02);
+    return {
+      optionId: id,
+      optionType: 'SRSM',
+      roomInfo: [{ id, name: roomName }],
+      inclusions: [],
+      mealBasis,
+      bookingNotes: 'Sample data for preview only - not a live TripJack rate.',
+      pricing: {
+        totalPrice: basePrice + taxes + mf,
+        basePrice,
+        discount: 0,
+        taxes,
+        mf,
+        mft: 0,
+        currency: 'INR',
+      },
+      commercial: { type: 'NET', commission: 0 },
+      compliance: { gstType: 'NA', panRequired: false, passportRequired: isInternational },
+      cancellation: {
+        isRefundable: true,
+        penalties: [
+          { from: new Date(now).toISOString(), to: new Date(now + 7 * dayMs).toISOString(), amount: 0 },
+          { from: new Date(now + 7 * dayMs).toISOString(), to: new Date(now + 14 * dayMs).toISOString(), amount: basePrice },
+        ],
+      },
+      inventory: { available: true },
+    };
+  };
+
+  return {
+    hotelName: hotel.name,
+    tjHotelId: hotel.tjHotelId,
+    reviewHash: 'demo-review-hash',
+    options: [
+      makeOption('demo-deluxe', 'Deluxe Room', 'Breakfast', 8500),
+      makeOption('demo-standard', 'Standard Room', 'Room Only', 5200),
+    ],
+  };
+};
+
 const HotelsScreen = ({ navigation }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -344,6 +398,22 @@ const HotelsScreen = ({ navigation }) => {
         next.add(tjHotelId);
       }
       return next;
+    });
+  };
+
+  const openDemoPreview = (hotel) => {
+    setBrowseModal(false);
+    navigation.navigate('HotelDetail', {
+      tjHotelId: hotel.tjHotelId,
+      hotelName: hotel.name,
+      searchContext: {
+        checkIn: formatDateForApi(checkIn) || '2026-10-10',
+        checkOut: formatDateForApi(checkOut) || '2026-10-12',
+        rooms: [{ adults: 2 }],
+        currency: 'INR',
+        nationality: nationality.trim() || '106',
+      },
+      demoDetail: buildDemoDetail(hotel),
     });
   };
 
@@ -711,6 +781,16 @@ const HotelsScreen = ({ navigation }) => {
                               {item.star_rating ? ` · ${item.star_rating}★` : ''}
                             </Text>
                           </View>
+                          <TouchableOpacity
+                            style={styles.previewButton}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              openDemoPreview(item);
+                            }}
+                          >
+                            <Ionicons name="eye-outline" size={16} color={Colors.primary} />
+                            <Text style={styles.previewButtonText}>Preview</Text>
+                          </TouchableOpacity>
                         </TouchableOpacity>
                       );
                     }}
@@ -1104,6 +1184,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 2,
+  },
+  previewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  previewButtonText: {
+    fontSize: 11,
+    color: Colors.primary,
+    fontWeight: '600',
   },
   confirmBrowseButton: {
     backgroundColor: Colors.primary,

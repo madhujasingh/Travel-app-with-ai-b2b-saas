@@ -50,11 +50,11 @@ const cancellationSummary = (cancellation) => {
 };
 
 const HotelDetailScreen = ({ route, navigation }) => {
-  const { tjHotelId, hotelName, searchContext } = route.params;
+  const { tjHotelId, hotelName, searchContext, demoDetail } = route.params;
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!demoDetail);
   const [error, setError] = useState(null);
-  const [detail, setDetail] = useState(null);
+  const [detail, setDetail] = useState(demoDetail || null);
 
   const [reviewingOptionId, setReviewingOptionId] = useState(null);
   const [soldOutOptionIds, setSoldOutOptionIds] = useState(new Set());
@@ -62,7 +62,9 @@ const HotelDetailScreen = ({ route, navigation }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    fetchDetail();
+    if (!demoDetail) {
+      fetchDetail();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -112,6 +114,14 @@ const HotelDetailScreen = ({ route, navigation }) => {
   // Step 3 - Review: re-validates price + availability. Must be called immediately
   // before Book, with the same correlationId used in Listing/Detail.
   const reviewOption = async (option) => {
+    if (demoDetail) {
+      Alert.alert(
+        'Demo data',
+        'This hotel and its rates are sample data for preview only - TripJack has no live inventory activated for this account yet, so Review/Book can\'t be completed here.'
+      );
+      return;
+    }
+
     if (sessionExpired) {
       Alert.alert('Search expired', 'Your search session has expired. Please go back and search again.');
       return;
@@ -182,6 +192,15 @@ const HotelDetailScreen = ({ route, navigation }) => {
 
       {!loading && !error && detail && (
         <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
+          {demoDetail && (
+            <View style={styles.demoBanner}>
+              <Ionicons name="information-circle" size={18} color={Colors.warning} />
+              <Text style={styles.demoBannerText}>
+                Demo data - real hotel, sample rates. TripJack has no live inventory activated for this account yet.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.stayInfoRow}>
             <Text style={styles.stayInfo}>
               {searchContext.checkIn} → {searchContext.checkOut}
@@ -391,6 +410,23 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 15,
+  },
+  demoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFF7E0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.warning,
+  },
+  demoBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: '600',
   },
   stayInfoRow: {
     flexDirection: 'row',
