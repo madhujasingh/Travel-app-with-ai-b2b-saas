@@ -39,6 +39,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/ai/**").permitAll()
                 .requestMatchers("/flights/**").permitAll()
+                // Persisted flight bookings are account-scoped (ownership enforced
+                // in FlightBookingController/-Service) - unlike the TripJack
+                // passthrough endpoints above, these need a real logged-in user.
+                .requestMatchers("/flight-bookings/**").authenticated()
                 .requestMatchers("/hotels/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/itineraries/**").hasRole("ADMIN")

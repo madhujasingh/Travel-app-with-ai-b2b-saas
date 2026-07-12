@@ -22,6 +22,7 @@ import HotelDetailScreen from './src/screens/HotelDetailScreen';
 import HotelBookingScreen from './src/screens/HotelBookingScreen';
 import FlightsScreen from './src/screens/FlightsScreen';
 import FlightBookingScreen from './src/screens/FlightBookingScreen';
+import FlightReissueScreen from './src/screens/FlightReissueScreen';
 import MyFlightBookingsScreen from './src/screens/MyFlightBookingsScreen';
 import B2BDashboard from './src/screens/B2BDashboard';
 import AIRecommendationsScreen from './src/screens/AIRecommendationsScreen';
@@ -286,6 +287,7 @@ export default function App() {
               <Stack.Screen name="HotelBooking" component={HotelBookingScreen} />
               <Stack.Screen name="Flights" component={FlightsScreen} />
               <Stack.Screen name="FlightBooking" component={FlightBookingScreen} />
+              <Stack.Screen name="FlightReissue" component={FlightReissueScreen} />
               <Stack.Screen name="MyFlightBookings" component={MyFlightBookingsScreen} />
               <Stack.Screen name="AIRecommendations" component={AIRecommendationsScreen} />
               <Stack.Screen name="AIPlaceInsight" component={AIPlaceInsightScreen} />

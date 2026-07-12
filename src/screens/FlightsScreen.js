@@ -55,6 +55,25 @@ const PASSENGER_FARE_TYPES = [
   { label: 'Senior', value: 'SENIOR_CITIZEN' },
 ];
 
+const SORT_OPTIONS = [
+  { label: 'Best', value: 'BEST', icon: 'sparkles-outline' },
+  { label: 'Cheapest', value: 'CHEAPEST', icon: 'cash-outline' },
+  { label: 'Fastest', value: 'FASTEST', icon: 'flash-outline' },
+  { label: 'Earliest', value: 'EARLIEST', icon: 'time-outline' },
+];
+
+const STOPS_FILTERS = [
+  { label: 'All stops', value: 'ALL' },
+  { label: 'Non-stop', value: 'NONSTOP' },
+  { label: '1+ stop', value: 'ONE_PLUS' },
+];
+
+const SORT_COMPARATORS = {
+  CHEAPEST: (a, b) => a.price - b.price,
+  FASTEST: (a, b) => (a.durationMinutes || 0) - (b.durationMinutes || 0),
+  EARLIEST: (a, b) => new Date(a.departureRaw || 0) - new Date(b.departureRaw || 0),
+};
+
 const createEmptyRoute = (from = '', to = '', travelDate = '') => ({
   from,
   to,
@@ -402,10 +421,13 @@ const mapFlightsFromResponse = (data) => {
         from: firstSegment?.da?.code || firstSegment?.da?.city || '--',
         to: lastSegment?.aa?.code || lastSegment?.aa?.city || '--',
         departure: formatTime(firstSegment?.dt),
+        departureRaw: firstSegment?.dt || null,
         arrival: formatTime(lastSegment?.at),
         duration: formatDuration(totalDuration || firstSegment?.duration),
+        durationMinutes: Number(totalDuration || firstSegment?.duration || 0),
         price: Number(adultFare?.fC?.TF || 0),
         stops: totalStops === 0 ? 'Non-stop' : `${totalStops} stop`,
+        stopsCount: totalStops,
         image: 'airplane',
         checkInBaggage: baggage.checkIn,
         cabinBaggage: baggage.carry,
@@ -431,6 +453,8 @@ const FlightsScreen = ({ navigation }) => {
   const [infants, setInfants] = useState('0');
   const [cabinClass, setCabinClass] = useState('ECONOMY');
   const [connectionFilter, setConnectionFilter] = useState('BOTH');
+  const [sortBy, setSortBy] = useState('BEST');
+  const [stopsFilter, setStopsFilter] = useState('ALL');
   const [fareType, setFareType] = useState('REGULAR');
   const [preferredAirlines, setPreferredAirlines] = useState('');
   const [loading, setLoading] = useState(false);
@@ -636,7 +660,10 @@ const FlightsScreen = ({ navigation }) => {
       setSearched(true);
       setReviewedFare(null);
       setSelectedByGroup({});
+      setSortBy('BEST');
+      setStopsFilter('ALL');
 
+      console.log('[search] REQUEST', JSON.stringify(payload));
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -644,6 +671,7 @@ const FlightsScreen = ({ navigation }) => {
       });
 
       const data = await response.json();
+      console.log('[search] RESPONSE', JSON.stringify(data));
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to search flights right now.');
       }
@@ -676,6 +704,31 @@ const FlightsScreen = ({ navigation }) => {
   const isMultiLeg = groupKeys.length > 1;
   const allLegsSelected = isMultiLeg && groupKeys.every((key) => selectedByGroup[key]);
 
+  // Sort/stop-filter the already-fetched results client-side (no re-search
+  // round trip). Sorted within each group so leg ordering (ONWARD before
+  // RETURN, leg 1 before leg 2, ...) is preserved for the multi-leg picker.
+  const visibleFlights = useMemo(() => {
+    let list = flights;
+    if (stopsFilter === 'NONSTOP') {
+      list = list.filter((flight) => flight.stopsCount === 0);
+    } else if (stopsFilter === 'ONE_PLUS') {
+      list = list.filter((flight) => flight.stopsCount > 0);
+    }
+
+    const comparator = SORT_COMPARATORS[sortBy];
+    if (!comparator) {
+      return list;
+    }
+
+    const byGroup = {};
+    list.forEach((flight) => {
+      if (!byGroup[flight.groupKey]) byGroup[flight.groupKey] = [];
+      byGroup[flight.groupKey].push(flight);
+    });
+    return groupKeys.flatMap((key) => [...(byGroup[key] || [])].sort(comparator));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flights, sortBy, stopsFilter, groupKeys]);
+
   const runReview = async (legs) => {
     const priceIds = legs.flatMap((leg) => leg.priceIds || []);
     if (!priceIds.length) {
@@ -685,6 +738,7 @@ const FlightsScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
+      console.log('[review] REQUEST', JSON.stringify({ priceIds }));
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -692,6 +746,7 @@ const FlightsScreen = ({ navigation }) => {
       });
 
       const data = await response.json();
+      console.log('[review] RESPONSE', JSON.stringify(data));
       if (!response.ok) {
         throw new Error(data?.message || 'Unable to review this fare right now.');
       }
@@ -836,7 +891,7 @@ const FlightsScreen = ({ navigation }) => {
     });
   };
 
-  const holdThisFareSandbox = () => {
+  const holdThisFare = () => {
     if (!reviewedFare) {
       return;
     }
@@ -943,6 +998,19 @@ const FlightsScreen = ({ navigation }) => {
       );
     }
 
+    if (flights.length > 0 && stopsFilter !== 'ALL') {
+      return (
+        <View style={styles.emptyState}>
+          <Ionicons name="filter-outline" size={34} color={Colors.textMuted} />
+          <Text style={styles.emptyTitle}>No {stopsFilter === 'NONSTOP' ? 'non-stop' : '1+ stop'} flights</Text>
+          <Text style={styles.emptySubtitle}>Clear the stops filter to see all {flights.length} result{flights.length === 1 ? '' : 's'}.</Text>
+          <TouchableOpacity style={styles.clearFilterButton} onPress={() => setStopsFilter('ALL')}>
+            <Text style={styles.clearFilterButtonText}>Clear Filter</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.emptyState}>
         <Ionicons name="search-outline" size={34} color={Colors.textMuted} />
@@ -1043,7 +1111,7 @@ const FlightsScreen = ({ navigation }) => {
       </View>
 
       <FlatList
-        data={flights}
+        data={visibleFlights}
         renderItem={renderFlight}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
@@ -1273,6 +1341,43 @@ const FlightsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
               </>
+            ) : null}
+
+            {searched && flights.length > 0 ? (
+              <View style={styles.resultsToolbar}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
+                  {SORT_OPTIONS.map((option) => {
+                    const active = sortBy === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.pill, styles.sortPill, active && styles.pillActive]}
+                        onPress={() => setSortBy(option.value)}
+                      >
+                        <Ionicons name={option.icon} size={13} color={active ? Colors.secondary : Colors.primaryDark} />
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
+                  {STOPS_FILTERS.map((option) => {
+                    const active = stopsFilter === option.value;
+                    return (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.pill, styles.sortPill, active && styles.pillActive]}
+                        onPress={() => setStopsFilter(option.value)}
+                      >
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <Text style={styles.resultsCount}>
+                  {visibleFlights.length} of {flights.length} option{flights.length === 1 ? '' : 's'}
+                </Text>
+              </View>
             ) : null}
 
             {isMultiLeg && searched ? (
@@ -1520,11 +1625,11 @@ const FlightsScreen = ({ navigation }) => {
                   ) : null}
                 </View>
 
-                <TouchableOpacity style={styles.bookCtaButton} onPress={holdThisFareSandbox} activeOpacity={0.85}>
+                <TouchableOpacity style={styles.bookCtaButton} onPress={holdThisFare} activeOpacity={0.85}>
                   <View>
                     <Text style={styles.bookCtaTitle}>Book This Fare</Text>
                     <Text style={styles.bookCtaSubtitle}>
-                      TripJack sandbox · ₹{Math.round(reviewedFare.cartItem.lineTotal).toLocaleString()}
+                      ₹{Math.round(reviewedFare.cartItem.lineTotal).toLocaleString()} total
                     </Text>
                   </View>
                   <Ionicons name="arrow-forward-circle" size={30} color={Colors.secondary} />
@@ -1932,6 +2037,37 @@ const styles = StyleSheet.create({
   },
   pillTextActive: {
     color: Colors.secondary,
+  },
+  resultsToolbar: {
+    marginBottom: 14,
+  },
+  resultsToolbarRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  sortPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  resultsCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    marginTop: 4,
+  },
+  clearFilterButton: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: Colors.primary,
+  },
+  clearFilterButtonText: {
+    color: Colors.secondary,
+    fontWeight: '700',
+    fontSize: 13,
   },
   tripTypeRow: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
 package com.itinera.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -29,7 +30,12 @@ public class User {
     @Column(nullable = false)
     private String phone;
 
+    // Any endpoint that serializes a User (directly, or nested via
+    // Booking.user / FlightBooking.user) must never leak this - Jackson
+    // honors @JsonIgnore on the field for both the Lombok-generated and the
+    // manually-declared getter below.
     @Column(nullable = false)
+    @JsonIgnore
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)

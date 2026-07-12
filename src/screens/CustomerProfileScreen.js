@@ -26,6 +26,10 @@ const CustomerProfileScreen = ({ navigation }) => {
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [bookingsLoaded, setBookingsLoaded] = useState(false);
 
+  const [flightBookings, setFlightBookings] = useState([]);
+  const [flightBookingsLoading, setFlightBookingsLoading] = useState(false);
+  const [flightBookingsLoaded, setFlightBookingsLoaded] = useState(false);
+
   useEffect(() => {
     if (activeTab !== 'groups' || !token) {
       return;
@@ -101,14 +105,58 @@ const CustomerProfileScreen = ({ navigation }) => {
     };
   }, [activeTab, token, user?.id, bookingsLoaded]);
 
+  // Flight bookings live in their own table (see FlightBooking backend
+  // entity) since TripJack's status vocabulary and lack of an Itinerary
+  // don't fit the package-booking model - only merged into the "bookings"
+  // tab, not "transactions" (flights have no paymentStatus equivalent).
+  useEffect(() => {
+    if (activeTab !== 'bookings' || !token || flightBookingsLoaded) {
+      return;
+    }
+
+    let active = true;
+
+    const loadFlightBookings = async () => {
+      setFlightBookingsLoading(true);
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/flight-bookings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || data?.error || 'Unable to load flight bookings');
+        }
+        if (active) {
+          setFlightBookings(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (active) {
+          setFlightBookings([]);
+        }
+      } finally {
+        if (active) {
+          setFlightBookingsLoading(false);
+          setFlightBookingsLoaded(true);
+        }
+      }
+    };
+
+    loadFlightBookings();
+    return () => {
+      active = false;
+    };
+  }, [activeTab, token, flightBookingsLoaded]);
+
   const getStatusColor = (status) => {
     switch ((status || '').toUpperCase()) {
       case 'COMPLETED': return '#4CAF50';
       case 'CONFIRMED': return '#4CAF50';
+      case 'SUCCESS': return '#4CAF50';
       case 'UPCOMING': return '#2196F3';
       case 'CANCELLED': return '#F44336';
       case 'PAID': return '#4CAF50';
       case 'PENDING': return '#FF9800';
+      case 'ON_HOLD': return '#FF9800';
       case 'REFUNDED': return '#9C27B0';
       case 'FAILED': return '#F44336';
       case 'ACTIVE': return '#4CAF50';
@@ -165,37 +213,69 @@ const CustomerProfileScreen = ({ navigation }) => {
           </View>
         );
 
-      case 'bookings':
+      case 'bookings': {
+        const combinedLoading = bookingsLoading || flightBookingsLoading;
+        const combinedBookings = [
+          ...bookings.map((booking) => ({
+            key: `itinerary-${booking.id}`,
+            kind: 'itinerary',
+            icon: 'briefcase-outline',
+            title: booking.itinerary?.title || booking.itinerary?.destination || 'Trip',
+            status: booking.status,
+            date: booking.travelDate || booking.bookingDate,
+            amount: booking.amount,
+          })),
+          ...flightBookings.map((flight) => ({
+            key: `flight-${flight.id}`,
+            kind: 'flight',
+            icon: 'airplane-outline',
+            title: flight.routeSummary || 'Flight',
+            status: flight.status,
+            date: flight.createdAt,
+            amount: flight.totalFare,
+          })),
+        ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
         return (
           <View style={styles.tabContent}>
-            {bookingsLoading ? (
+            {combinedLoading ? (
               <ActivityIndicator size="small" color={Colors.primary} style={styles.tabLoader} />
-            ) : bookings.length === 0 ? (
+            ) : combinedBookings.length === 0 ? (
               renderEmptyState('calendar-outline', 'No bookings yet', 'Trips you book will show up here.')
             ) : (
-              bookings.map((booking) => (
-                <View key={booking.id} style={styles.bookingCard}>
-                  <View style={styles.bookingHeader}>
-                    <Text style={styles.bookingDestination}>{booking.itinerary?.title || booking.itinerary?.destination || 'Trip'}</Text>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(booking.status) + '20' }]}>
-                      <Text style={[styles.statusText, { color: getStatusColor(booking.status) }]}>{booking.status}</Text>
+              combinedBookings.map((item) => {
+                const CardWrapper = item.kind === 'flight' ? TouchableOpacity : View;
+                const wrapperProps = item.kind === 'flight'
+                  ? { activeOpacity: 0.7, onPress: () => navigation.navigate('MyFlightBookings') }
+                  : {};
+                return (
+                  <CardWrapper key={item.key} style={styles.bookingCard} {...wrapperProps}>
+                    <View style={styles.bookingHeader}>
+                      <View style={styles.bookingTitleRow}>
+                        <Ionicons name={item.icon} size={14} color={Colors.primary} style={styles.bookingTitleIcon} />
+                        <Text style={styles.bookingDestination}>{item.title}</Text>
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '20' }]}>
+                        <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{item.status}</Text>
+                      </View>
                     </View>
-                  </View>
-                  <View style={styles.bookingDetails}>
-                    <View style={styles.bookingDetailItem}>
-                      <Ionicons name="calendar-outline" size={14} color="#666" />
-                      <Text style={styles.bookingDetailText}>{formatDate(booking.travelDate || booking.bookingDate)}</Text>
+                    <View style={styles.bookingDetails}>
+                      <View style={styles.bookingDetailItem}>
+                        <Ionicons name="calendar-outline" size={14} color="#666" />
+                        <Text style={styles.bookingDetailText}>{formatDate(item.date)}</Text>
+                      </View>
+                      <View style={styles.bookingDetailItem}>
+                        <Ionicons name="cash-outline" size={14} color="#666" />
+                        <Text style={styles.bookingDetailText}>{formatCurrency(item.amount)}</Text>
+                      </View>
                     </View>
-                    <View style={styles.bookingDetailItem}>
-                      <Ionicons name="cash-outline" size={14} color="#666" />
-                      <Text style={styles.bookingDetailText}>{formatCurrency(booking.amount)}</Text>
-                    </View>
-                  </View>
-                </View>
-              ))
+                  </CardWrapper>
+                );
+              })
             )}
           </View>
         );
+      }
 
       case 'saved':
         return (
@@ -518,6 +598,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+  },
+  bookingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  bookingTitleIcon: {
+    marginRight: 6,
   },
   bookingDestination: {
     fontSize: 16,
