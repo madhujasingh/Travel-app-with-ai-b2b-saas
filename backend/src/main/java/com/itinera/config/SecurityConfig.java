@@ -43,6 +43,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/itineraries/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/itineraries/**").hasRole("ADMIN")
                 .requestMatchers("/suppliers/verified").permitAll()
+                // Supplier records gate who can register with role=SUPPLIER (see
+                // AuthController) - creating/verifying/deleting them (or reading
+                // supplier business data like commission rates) must be admin-only.
+                .requestMatchers("/suppliers/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
