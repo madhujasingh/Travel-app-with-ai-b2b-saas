@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -71,6 +71,31 @@ const B2BDashboard = ({ navigation }) => {
   }, [isAdmin, token]);
 
   usePolling(loadIncomingRequests, INCOMING_REQUESTS_POLL_INTERVAL_MS);
+
+  // TripJack's own agent wallet balance (/ums/v1/user-detail passthrough) -
+  // one shared platform-level balance, not per-user, so shown to both admin
+  // and supplier roles rather than gated like the admin-only stats below.
+  const [wallet, setWallet] = useState(null);
+  const [walletLoading, setWalletLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/flights/user-balance`);
+        const data = await response.json();
+        const bs = data?.user?.bs || data?.bs || null;
+        if (active) setWallet(bs);
+      } catch (error) {
+        if (active) setWallet(null);
+      } finally {
+        if (active) setWalletLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const recentBookings = [
     {
@@ -344,6 +369,32 @@ const B2BDashboard = ({ navigation }) => {
           <Text style={styles.planBadge}>{isAdmin ? 'Admin Access' : 'Supplier Access'}</Text>
         </View>
 
+        {/* TripJack Wallet Balance */}
+        <View style={styles.walletCard}>
+          <View style={styles.walletIconWrap}>
+            <Ionicons name="wallet-outline" size={22} color={Colors.secondary} />
+          </View>
+          <View style={styles.walletInfo}>
+            <Text style={styles.walletLabel}>TripJack Wallet Balance</Text>
+            {walletLoading ? (
+              <ActivityIndicator size="small" color={Colors.secondary} style={styles.walletLoader} />
+            ) : wallet ? (
+              <>
+                <Text style={styles.walletAmount}>
+                  ₹{Number(wallet.walletBalance || 0).toLocaleString('en-IN')}
+                </Text>
+                {wallet.totalOutStanding ? (
+                  <Text style={styles.walletSubtext}>
+                    Outstanding: ₹{Number(wallet.totalOutStanding).toLocaleString('en-IN')}
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={styles.walletSubtext}>Unable to load balance right now</Text>
+            )}
+          </View>
+        </View>
+
         {/* Stats Section - Admin only */}
         {isAdmin && (
           <View style={styles.statsSection}>
@@ -496,6 +547,47 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  walletCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+    marginHorizontal: 20,
+    marginTop: 15,
+    padding: 16,
+    borderRadius: 14,
+  },
+  walletIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  walletInfo: {
+    flex: 1,
+  },
+  walletLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '600',
+  },
+  walletAmount: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  walletSubtext: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
+  },
+  walletLoader: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
   },
   statsSection: {
     padding: 20,
