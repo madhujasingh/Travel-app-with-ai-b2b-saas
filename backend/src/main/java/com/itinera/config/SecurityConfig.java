@@ -44,6 +44,11 @@ public class SecurityConfig {
                 // passthrough endpoints above, these need a real logged-in user.
                 .requestMatchers("/flight-bookings/**").authenticated()
                 .requestMatchers("/hotels/**").permitAll()
+                // Syncing costs real TripJack API calls and writes to our DB -
+                // admin-triggered only. Reading the cached catalog is public,
+                // same as /hotels/** above.
+                .requestMatchers(HttpMethod.POST, "/hotel-catalog/sync").hasRole("ADMIN")
+                .requestMatchers("/hotel-catalog/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/itineraries/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/itineraries/**").hasRole("ADMIN")

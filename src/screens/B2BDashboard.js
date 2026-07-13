@@ -142,6 +142,13 @@ const B2BDashboard = ({ navigation }) => {
       icon: 'megaphone-outline',
       screen: 'MarketingTools',
     },
+    {
+      id: 7,
+      title: 'Hotel Catalog',
+      description: 'Sync TripJack hotel static content',
+      icon: 'business-outline',
+      screen: 'HotelCatalogAdmin',
+    },
   ];
 
   const renderStatCard = (stat) => (

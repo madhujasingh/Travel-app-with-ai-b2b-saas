@@ -98,6 +98,23 @@ const buildDemoDetail = (hotel) => {
   };
 };
 
+// Our /hotel-catalog GET returns a flattened shape (Hotel entity fields);
+// reshape it to match what buildDemoDetail() and the browse-list renderer
+// already expect from a live TripJack fetch-hotel-content hotel object, so
+// both sources are interchangeable to the rest of this screen.
+const adaptCatalogHotel = (h) => ({
+  tjHotelId: h.tjHotelId,
+  name: h.name,
+  star_rating: h.starRating,
+  locale: {
+    address: {
+      city: h.city,
+      countryname: h.countryName,
+      countrycode: h.countryCode,
+    },
+  },
+});
+
 const HotelsScreen = ({ navigation }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -355,6 +372,21 @@ const HotelsScreen = ({ navigation }) => {
 
     try {
       setLoadingBrowseHotels(true);
+
+      // Prefer our own synced catalogue (HotelCatalogService) - instant,
+      // no live TripJack calls needed. Falls back to the live
+      // hotel-mapping + hotel-content flow for countries not synced yet.
+      const cached = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotel-catalog?country=${encodeURIComponent(countryName)}`,
+        { method: 'GET' },
+        'Unable to load hotels for this country right now.'
+      ).catch(() => null);
+
+      if (Array.isArray(cached) && cached.length > 0) {
+        setBrowseHotels(cached.map(adaptCatalogHotel));
+        return;
+      }
+
       const mapping = await fetchHotelJson(
         `${API_CONFIG.BASE_URL}/hotels/hotel-mapping`,
         {
