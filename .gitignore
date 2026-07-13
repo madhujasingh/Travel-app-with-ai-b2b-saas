@@ -60,3 +60,6 @@ __pycache__/
 # TripJack UAT certification test logs - local only, not for commit
 certification-logs/
 venv/
+
+# TripJack support correspondence - can contain the live API key, never commit
+docu/
