@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   View,
@@ -10,6 +10,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
@@ -29,6 +30,18 @@ const CustomerProfileScreen = ({ navigation }) => {
   const [flightBookings, setFlightBookings] = useState([]);
   const [flightBookingsLoading, setFlightBookingsLoading] = useState(false);
   const [flightBookingsLoaded, setFlightBookingsLoaded] = useState(false);
+
+  // This screen stays mounted across navigations (pushed on top of
+  // CustomerTabs), so the "loaded once" flags below would otherwise cache a
+  // stale/empty result forever - e.g. visiting Bookings before making a
+  // booking, then never seeing it after. Reset on focus so the tab effects
+  // below actually refetch next time they're viewed.
+  useFocusEffect(
+    useCallback(() => {
+      setBookingsLoaded(false);
+      setFlightBookingsLoaded(false);
+    }, [])
+  );
 
   useEffect(() => {
     if (activeTab !== 'groups' || !token) {
