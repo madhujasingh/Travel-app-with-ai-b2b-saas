@@ -36,6 +36,18 @@ public class HotelCatalogController {
         return ResponseEntity.ok(Map.of("synced", count));
     }
 
+    // Admin-only (see SecurityConfig) - full hotel-mapping + hotel-content
+    // sync for a whole country, per TripJack support's instruction to
+    // download and store all TJ Hotel IDs before Listing/Search will work.
+    @PostMapping("/sync-country")
+    public ResponseEntity<?> syncCountry(
+            @RequestParam String countryName,
+            @RequestParam(defaultValue = "1") int maxPages
+    ) {
+        int count = hotelCatalogService.syncCountry(countryName, maxPages);
+        return ResponseEntity.ok(Map.of("synced", count));
+    }
+
     @GetMapping
     public ResponseEntity<List<Hotel>> list(
             @RequestParam(required = false) String country,

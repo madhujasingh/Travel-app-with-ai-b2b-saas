@@ -48,6 +48,7 @@ public class SecurityConfig {
                 // admin-triggered only. Reading the cached catalog is public,
                 // same as /hotels/** above.
                 .requestMatchers(HttpMethod.POST, "/hotel-catalog/sync").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/hotel-catalog/sync-country").hasRole("ADMIN")
                 .requestMatchers("/hotel-catalog/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/itineraries/**").hasRole("ADMIN")
