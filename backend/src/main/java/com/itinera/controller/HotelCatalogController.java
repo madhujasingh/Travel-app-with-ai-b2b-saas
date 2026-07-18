@@ -48,6 +48,14 @@ public class HotelCatalogController {
         return ResponseEntity.ok(Map.of("synced", count));
     }
 
+    // Public - powers the "search by city" picker on the frontend. Only
+    // returns cities that actually have synced hotels, so every result is
+    // guaranteed to resolve to real, searchable hotel IDs.
+    @GetMapping("/cities")
+    public ResponseEntity<List<HotelRepository.CityCount>> cities() {
+        return ResponseEntity.ok(hotelRepository.findCityCounts());
+    }
+
     @GetMapping
     public ResponseEntity<List<Hotel>> list(
             @RequestParam(required = false) String country,
