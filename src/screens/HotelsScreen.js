@@ -18,25 +18,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson, SEARCH_SESSION_MS } from '../utils/hotelApiErrors';
+import DatePickerModal from '../components/DatePickerModal';
 
-const pad = (value) => String(value).padStart(2, '0');
+// checkIn/checkOut are always set via DatePickerModal in YYYY-MM-DD, so this
+// only needs to go the other way, for display.
+const parseDateValue = (value) => {
+  const match = (value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
+};
 
-// Accepts YYYY-MM-DD (TripJack format) or DD/MM/YYYY (easier to type), returns YYYY-MM-DD or null.
-const formatDateForApi = (value) => {
-  if (!value) return null;
-  const trimmed = value.trim();
+const formatDisplayDate = (value) => {
+  const date = parseDateValue(value);
+  if (!date) return null;
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  const dmy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (dmy) {
-    const [, day, month, year] = dmy;
-    return `${year}-${pad(month)}-${pad(day)}`;
-  }
-
-  return null;
+const startOfTomorrow = () => {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  date.setHours(0, 0, 0, 0);
+  return date;
 };
 
 const generateCorrelationId = () =>
@@ -70,6 +73,25 @@ const HotelsScreen = ({ navigation }) => {
   const [loadingCities, setLoadingCities] = useState(false);
   const [selectingCity, setSelectingCity] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState('');
+
+  const [datePickerField, setDatePickerField] = useState(null); // 'checkIn' | 'checkOut' | null
+
+  const openDatePicker = (field) => setDatePickerField(field);
+  const closeDatePicker = () => setDatePickerField(null);
+
+  const chooseDate = (dateString) => {
+    if (datePickerField === 'checkIn') {
+      setCheckIn(dateString);
+      // Keep check-out valid relative to the new check-in - clear it if it
+      // no longer makes sense rather than silently sending a bad search.
+      if (checkOut && checkOut <= dateString) {
+        setCheckOut('');
+      }
+    } else if (datePickerField === 'checkOut') {
+      setCheckOut(dateString);
+    }
+    closeDatePicker();
+  };
 
   const adjustRoomCount = (index, field, delta, min, max) => {
     setRooms((current) =>
@@ -149,15 +171,8 @@ const HotelsScreen = ({ navigation }) => {
   };
 
   const searchHotels = async () => {
-    const checkInDate = formatDateForApi(checkIn);
-    const checkOutDate = formatDateForApi(checkOut);
-
-    if (!checkInDate || !checkOutDate) {
-      Alert.alert('Dates required', 'Enter check-in and check-out as DD/MM/YYYY or YYYY-MM-DD.');
-      return;
-    }
-    if (checkOutDate <= checkInDate) {
-      Alert.alert('Invalid dates', 'Check-out must be after check-in.');
+    if (!checkIn || !checkOut) {
+      Alert.alert('Dates required', 'Choose your check-in and check-out dates.');
       return;
     }
     if (!nationality.trim()) {
@@ -168,18 +183,15 @@ const HotelsScreen = ({ navigation }) => {
     try {
       const hids = buildHotelIds();
       if (hids.length === 0) {
-        Alert.alert(
-          'Destination required',
-          'Choose a city to search, or enter TripJack hotel IDs directly.'
-        );
+        Alert.alert('Destination required', 'Choose a city to search.');
         return;
       }
 
       const roomsPayload = buildRoomsPayload();
       const correlationId = generateCorrelationId();
       const payload = {
-        checkIn: checkInDate,
-        checkOut: checkOutDate,
+        checkIn,
+        checkOut,
         rooms: roomsPayload,
         currency: currency.trim().toUpperCase(),
         correlationId,
@@ -210,8 +222,8 @@ const HotelsScreen = ({ navigation }) => {
       // for Detail and Review - the session is valid ~15 minutes from Listing.
       setSearchSession({
         correlationId,
-        checkIn: checkInDate,
-        checkOut: checkOutDate,
+        checkIn,
+        checkOut,
         rooms: roomsPayload,
         currency: currency.trim().toUpperCase(),
         nationality: nationality.trim(),
@@ -395,23 +407,23 @@ const HotelsScreen = ({ navigation }) => {
           <View style={styles.dateRow}>
             <View style={styles.dateField}>
               <Text style={styles.fieldLabel}>Check-in</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor={Colors.textMuted}
-                value={checkIn}
-                onChangeText={setCheckIn}
-              />
+              <TouchableOpacity style={styles.input} onPress={() => openDatePicker('checkIn')}>
+                <Text style={checkIn ? styles.pickerText : styles.pickerPlaceholder}>
+                  {formatDisplayDate(checkIn) || 'Select date'}
+                </Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.dateField}>
               <Text style={styles.fieldLabel}>Check-out</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor={Colors.textMuted}
-                value={checkOut}
-                onChangeText={setCheckOut}
-              />
+              <TouchableOpacity
+                style={[styles.input, !checkIn && styles.inputDisabled]}
+                onPress={() => checkIn && openDatePicker('checkOut')}
+                disabled={!checkIn}
+              >
+                <Text style={checkOut ? styles.pickerText : styles.pickerPlaceholder}>
+                  {formatDisplayDate(checkOut) || 'Select date'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -427,19 +439,6 @@ const HotelsScreen = ({ navigation }) => {
               <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
             )}
           </TouchableOpacity>
-
-          <Text style={styles.fieldLabel}>Or enter hotel IDs directly (advanced)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 1234, 5464 - filled in automatically by Destination above"
-            placeholderTextColor={Colors.textMuted}
-            value={hotelIdsInput}
-            onChangeText={(value) => {
-              setHotelIdsInput(value);
-              setDestinationLabel('');
-            }}
-            keyboardType="numbers-and-punctuation"
-          />
 
           <View style={styles.dateRow}>
             <View style={styles.dateField}>
@@ -646,6 +645,19 @@ const HotelsScreen = ({ navigation }) => {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <DatePickerModal
+        visible={datePickerField !== null}
+        title={datePickerField === 'checkOut' ? 'Check-out date' : 'Check-in date'}
+        initialDate={parseDateValue(datePickerField === 'checkOut' ? checkOut : checkIn)}
+        minDate={
+          datePickerField === 'checkOut' && checkIn
+            ? new Date(parseDateValue(checkIn).getTime() + 24 * 60 * 60 * 1000)
+            : startOfTomorrow()
+        }
+        onSelect={chooseDate}
+        onClose={closeDatePicker}
+      />
     </SafeAreaView>
   );
 };
@@ -704,6 +716,13 @@ const styles = StyleSheet.create({
     color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  inputDisabled: {
+    opacity: 0.5,
+  },
+  pickerPlaceholder: {
+    fontSize: 15,
+    color: Colors.textMuted,
   },
   pickerText: {
     fontSize: 15,
