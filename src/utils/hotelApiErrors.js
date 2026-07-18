@@ -1,6 +1,8 @@
-// Friendlier text for TripJack Hotel v3's standardised error envelope
-// ({ status: { success: false }, error: { code, message, requestId } }) - see
-// hotel-review-api/review-api.docx "Error Codes" section.
+// Friendlier text for TripJack Hotel v3 error codes. Two vocabularies are in
+// play: enum-style codes (OPTION_SOLD_OUT, INVALID_DATE_RANGE, ...) from the
+// docs' error tables for Search/Review, and short numeric errCode strings
+// (e.g. "2520", "2502") actually observed from the Book/Cancel endpoints in
+// production - see docu/ for real captured examples of both.
 const HOTEL_ERROR_MESSAGES = {
   INVALID_HOTEL_ID: 'This hotel is no longer available. Please search again.',
   INVALID_SEARCH_ID: 'This search session is no longer valid. Please search again.',
@@ -11,18 +13,23 @@ const HOTEL_ERROR_MESSAGES = {
   SUPPLIER_UNAVAILABLE: 'The hotel supplier is temporarily unavailable. Please try again shortly.',
   UNAUTHORIZED: 'Unable to authenticate with the hotel supplier.',
   RATE_LIMITED: 'Too many requests - please wait a moment and try again.',
+  '2520': 'This booking session has expired or was already processed. Please review the option again.',
+  '2502': 'This booking has already been placed. Check your bookings before trying again.',
+  '401': 'Unable to authenticate with the hotel supplier. Please try again shortly.',
 };
 
-// The v3 API returns its error envelope directly, but our backend's
-// GlobalExceptionHandler wraps non-2xx TripJack responses as
-// { message: "TripJack request failed with status 409: {...raw body...}" } -
-// handle both shapes rather than assuming one.
+// TripJack's own error envelope uses "errCode" (e.g. { "errors": [{ "errCode":
+// "2520", "message": "..." }] }), not "code" - confirmed against real
+// production responses. Our backend's GlobalExceptionHandler wraps non-2xx
+// TripJack responses as { message: "TripJack request failed with status 400:
+// {...raw body...}" }, so the raw envelope usually arrives embedded as text
+// inside data.message rather than as a nested object - handle both shapes.
 export const parseHotelError = (data, fallback) => {
-  let code = data?.error?.code;
-  let message = data?.error?.message;
+  let code = data?.error?.errCode || data?.errors?.[0]?.errCode;
+  let message = data?.error?.message || data?.errors?.[0]?.message;
 
   if (!code && typeof data?.message === 'string') {
-    const codeMatch = data.message.match(/"code"\s*:\s*"([A-Z_]+)"/);
+    const codeMatch = data.message.match(/"errCode"\s*:\s*"([^"]+)"/);
     const messageMatch = data.message.match(/"message"\s*:\s*"([^"]+)"/);
     if (codeMatch) code = codeMatch[1];
     if (messageMatch) message = messageMatch[1];

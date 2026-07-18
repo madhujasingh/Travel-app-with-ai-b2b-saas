@@ -44,77 +44,6 @@ const generateCorrelationId = () =>
 
 const createEmptyRoom = () => ({ adults: 2, children: 0, childAge: [] });
 
-// TripJack's v3 sandbox key has no live pricing/availability for any hotel
-// we've tested (see docu/tripjack-support-message.md) - Listing/Detail always
-// return an empty, successful response. This builds a Detail-shaped payload
-// from real Hotel Content data (name/rating/address) so the booking flow's UI
-// can still be previewed end to end while that's unresolved. Every price here
-// is fabricated and clearly labelled as such - never sent to Book.
-const buildDemoDetail = (hotel) => {
-  const isInternational = hotel.locale?.address?.countrycode && hotel.locale.address.countrycode !== 'IN';
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-
-  const makeOption = (id, roomName, mealBasis, basePrice) => {
-    const taxes = Math.round(basePrice * 0.12);
-    const mf = Math.round(basePrice * 0.02);
-    return {
-      optionId: id,
-      optionType: 'SRSM',
-      roomInfo: [{ id, name: roomName }],
-      inclusions: [],
-      mealBasis,
-      bookingNotes: 'Sample data for preview only - not a live TripJack rate.',
-      pricing: {
-        totalPrice: basePrice + taxes + mf,
-        basePrice,
-        discount: 0,
-        taxes,
-        mf,
-        mft: 0,
-        currency: 'INR',
-      },
-      commercial: { type: 'NET', commission: 0 },
-      compliance: { gstType: 'NA', panRequired: false, passportRequired: isInternational },
-      cancellation: {
-        isRefundable: true,
-        penalties: [
-          { from: new Date(now).toISOString(), to: new Date(now + 7 * dayMs).toISOString(), amount: 0 },
-          { from: new Date(now + 7 * dayMs).toISOString(), to: new Date(now + 14 * dayMs).toISOString(), amount: basePrice },
-        ],
-      },
-      inventory: { available: true },
-    };
-  };
-
-  return {
-    hotelName: hotel.name,
-    tjHotelId: hotel.tjHotelId,
-    reviewHash: 'demo-review-hash',
-    options: [
-      makeOption('demo-deluxe', 'Deluxe Room', 'Breakfast', 8500),
-      makeOption('demo-standard', 'Standard Room', 'Room Only', 5200),
-    ],
-  };
-};
-
-// Our /hotel-catalog GET returns a flattened shape (Hotel entity fields);
-// reshape it to match what buildDemoDetail() and the browse-list renderer
-// already expect from a live TripJack fetch-hotel-content hotel object, so
-// both sources are interchangeable to the rest of this screen.
-const adaptCatalogHotel = (h) => ({
-  tjHotelId: h.tjHotelId,
-  name: h.name,
-  star_rating: h.starRating,
-  locale: {
-    address: {
-      city: h.city,
-      countryname: h.countryName,
-      countrycode: h.countryCode,
-    },
-  },
-});
-
 const HotelsScreen = ({ navigation }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -135,14 +64,12 @@ const HotelsScreen = ({ navigation }) => {
   const [nationalitySearch, setNationalitySearch] = useState('');
   const [loadingNationalities, setLoadingNationalities] = useState(false);
 
-  const [countries, setCountries] = useState(null);
-  const [browseModal, setBrowseModal] = useState(false);
-  const [browseStage, setBrowseStage] = useState('countries');
-  const [countrySearch, setCountrySearch] = useState('');
-  const [loadingCountries, setLoadingCountries] = useState(false);
-  const [browseHotels, setBrowseHotels] = useState([]);
-  const [loadingBrowseHotels, setLoadingBrowseHotels] = useState(false);
-  const [selectedBrowseIds, setSelectedBrowseIds] = useState(new Set());
+  const [cities, setCities] = useState(null);
+  const [cityModal, setCityModal] = useState(false);
+  const [citySearch, setCitySearch] = useState('');
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [selectingCity, setSelectingCity] = useState(false);
+  const [destinationLabel, setDestinationLabel] = useState('');
 
   const adjustRoomCount = (index, field, delta, min, max) => {
     setRooms((current) =>
@@ -242,8 +169,8 @@ const HotelsScreen = ({ navigation }) => {
       const hids = buildHotelIds();
       if (hids.length === 0) {
         Alert.alert(
-          'Hotel IDs required',
-          'Use "Browse by country" to pick real hotels, or enter TripJack hotel IDs directly.'
+          'Destination required',
+          'Choose a city to search, or enter TripJack hotel IDs directly.'
         );
         return;
       }
@@ -305,7 +232,11 @@ const HotelsScreen = ({ navigation }) => {
     }
 
     navigation.navigate('HotelDetail', {
-      tjHotelId: hotel.tjHotelId,
+      // Listing/Detail responses use "hotelId", not the "tjHotelId" the docs
+      // describe - confirmed against real captured responses. Only the
+      // static-content endpoints (hotel-mapping/hotel-content, used by
+      // selectCity below) actually use tjHotelId.
+      tjHotelId: hotel.hotelId,
       hotelName: hotel.name,
       searchContext: searchSession,
     });
@@ -343,132 +274,58 @@ const HotelsScreen = ({ navigation }) => {
     item.countryName.toLowerCase().includes(nationalitySearch.trim().toLowerCase())
   );
 
-  // ---- Browse by country -> real hotels (fetch-countries -> hotel-mapping -> hotel-content) ----
+  // ---- Search by city -> resolves to real hotel IDs from our own synced
+  // catalogue (GET /hotel-catalog/cities, GET /hotel-catalog?city=X). No
+  // manual per-hotel picking - selecting a city searches every synced hotel
+  // in it, up to TripJack's 100-hids-per-request limit, same as a real OTA.
 
-  const openBrowseModal = async () => {
-    setBrowseModal(true);
-    setBrowseStage('countries');
-    if (countries) return;
+  const openCityModal = async () => {
+    setCityModal(true);
+    if (cities) return;
 
     try {
-      setLoadingCountries(true);
+      setLoadingCities(true);
       const data = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotels/countries`,
+        `${API_CONFIG.BASE_URL}/hotel-catalog/cities`,
         { method: 'GET' },
-        'Unable to load countries right now.'
+        'Unable to load cities right now.'
       );
-      setCountries(data.hotelCountries || []);
+      setCities(data || []);
     } catch (error) {
-      Alert.alert('Countries', error.message || 'Unable to load countries right now.');
+      Alert.alert('Cities', error.message || 'Unable to load cities right now.');
     } finally {
-      setLoadingCountries(false);
+      setLoadingCities(false);
     }
   };
 
-  const selectCountry = async (countryName) => {
-    setBrowseStage('hotels');
-    setBrowseHotels([]);
-    setSelectedBrowseIds(new Set());
-
+  const selectCity = async (cityEntry) => {
     try {
-      setLoadingBrowseHotels(true);
-
-      // Prefer our own synced catalogue (HotelCatalogService) - instant,
-      // no live TripJack calls needed. Falls back to the live
-      // hotel-mapping + hotel-content flow for countries not synced yet.
-      const cached = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotel-catalog?country=${encodeURIComponent(countryName)}`,
+      setSelectingCity(true);
+      const hotelsInCity = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotel-catalog?city=${encodeURIComponent(cityEntry.city)}`,
         { method: 'GET' },
-        'Unable to load hotels for this country right now.'
-      ).catch(() => null);
-
-      if (Array.isArray(cached) && cached.length > 0) {
-        setBrowseHotels(cached.map(adaptCatalogHotel));
-        return;
-      }
-
-      const mapping = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotels/hotel-mapping`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ countryName, page: 0, size: 40 }),
-        },
-        'Unable to load hotels for this country right now.'
+        'Unable to load hotels for this city right now.'
       );
 
-      const ids = (mapping.hotels || []).map((h) => h.tjHotelId).slice(0, 40);
+      const ids = hotelsInCity.map((h) => h.tjHotelId).filter(Boolean).slice(0, 100);
       if (ids.length === 0) {
-        setBrowseHotels([]);
+        Alert.alert('No hotels', 'No synced hotels found for this city.');
         return;
       }
 
-      const content = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotels/hotel-content`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hotelIds: ids }),
-        },
-        'Unable to load hotel details right now.'
-      );
-      setBrowseHotels(content.hotels || []);
+      setHotelIdsInput(ids.join(', '));
+      setDestinationLabel(`${cityEntry.city}, ${cityEntry.countryName} · ${ids.length} hotel${ids.length === 1 ? '' : 's'}`);
+      setCityModal(false);
+      setCitySearch('');
     } catch (error) {
-      Alert.alert('Browse Hotels', error.message || 'Unable to load hotels for this country right now.');
-      setBrowseStage('countries');
+      Alert.alert('City Search', error.message || 'Unable to load hotels for this city right now.');
     } finally {
-      setLoadingBrowseHotels(false);
+      setSelectingCity(false);
     }
   };
 
-  const toggleBrowseSelection = (tjHotelId) => {
-    setSelectedBrowseIds((current) => {
-      const next = new Set(current);
-      if (next.has(tjHotelId)) {
-        next.delete(tjHotelId);
-      } else {
-        next.add(tjHotelId);
-      }
-      return next;
-    });
-  };
-
-  const openDemoPreview = (hotel) => {
-    setBrowseModal(false);
-    navigation.navigate('HotelDetail', {
-      tjHotelId: hotel.tjHotelId,
-      hotelName: hotel.name,
-      searchContext: {
-        checkIn: formatDateForApi(checkIn) || '2026-10-10',
-        checkOut: formatDateForApi(checkOut) || '2026-10-12',
-        rooms: [{ adults: 2 }],
-        currency: 'INR',
-        nationality: nationality.trim() || '106',
-      },
-      demoDetail: buildDemoDetail(hotel),
-    });
-  };
-
-  const confirmBrowseSelection = () => {
-    const existingIds = hotelIdsInput
-      .split(',')
-      .map((token) => token.trim())
-      .filter(Boolean);
-    const merged = Array.from(new Set([...existingIds, ...selectedBrowseIds]));
-    setHotelIdsInput(merged.join(', '));
-    closeBrowseModal();
-  };
-
-  const closeBrowseModal = () => {
-    setBrowseModal(false);
-    setBrowseStage('countries');
-    setCountrySearch('');
-    setBrowseHotels([]);
-    setSelectedBrowseIds(new Set());
-  };
-
-  const filteredCountries = (countries || []).filter((name) =>
-    name.toLowerCase().includes(countrySearch.trim().toLowerCase())
+  const filteredCities = (cities || []).filter((c) =>
+    `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
   );
 
   const renderHotel = ({ item }) => {
@@ -486,7 +343,7 @@ const HotelsScreen = ({ navigation }) => {
 
         <View style={styles.hotelContent}>
           <Text style={styles.hotelName}>{item.name}</Text>
-          <Text style={styles.hotelId}>ID: {item.tjHotelId}</Text>
+          <Text style={styles.hotelId}>ID: {item.hotelId}</Text>
 
           {topOption && (
             <>
@@ -559,19 +416,28 @@ const HotelsScreen = ({ navigation }) => {
           </View>
 
           <Text style={styles.fieldLabel}>Destination</Text>
-          <TouchableOpacity style={styles.browseButton} onPress={openBrowseModal}>
-            <Ionicons name="earth-outline" size={18} color={Colors.primary} />
-            <Text style={styles.browseButtonText}>Browse hotels by country</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+          <TouchableOpacity style={styles.browseButton} onPress={openCityModal} disabled={selectingCity}>
+            <Ionicons name="location-outline" size={18} color={Colors.primary} />
+            <Text style={styles.browseButtonText}>
+              {selectingCity ? 'Loading hotels...' : destinationLabel || 'Choose a city'}
+            </Text>
+            {selectingCity ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+            )}
           </TouchableOpacity>
 
-          <Text style={styles.fieldLabel}>Hotel IDs (comma separated)</Text>
+          <Text style={styles.fieldLabel}>Or enter hotel IDs directly (advanced)</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. 1234, 5464 - or use Browse above"
+            placeholder="e.g. 1234, 5464 - filled in automatically by Destination above"
             placeholderTextColor={Colors.textMuted}
             value={hotelIdsInput}
-            onChangeText={setHotelIdsInput}
+            onChangeText={(value) => {
+              setHotelIdsInput(value);
+              setDestinationLabel('');
+            }}
             keyboardType="numbers-and-punctuation"
           />
 
@@ -698,7 +564,7 @@ const HotelsScreen = ({ navigation }) => {
         <FlatList
           data={hotels}
           renderItem={renderHotel}
-          keyExtractor={(item) => item.tjHotelId}
+          keyExtractor={(item) => item.hotelId}
           contentContainerStyle={styles.listContainer}
           scrollEnabled={false}
         />
@@ -739,105 +605,43 @@ const HotelsScreen = ({ navigation }) => {
         </Pressable>
       </Modal>
 
-      <Modal visible={browseModal} transparent animationType="fade" onRequestClose={closeBrowseModal}>
-        <Pressable style={styles.modalOverlay} onPress={closeBrowseModal}>
+      <Modal visible={cityModal} transparent animationType="fade" onRequestClose={() => setCityModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setCityModal(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <View style={styles.modalHeader}>
-              {browseStage === 'hotels' && (
-                <TouchableOpacity onPress={() => setBrowseStage('countries')} style={styles.modalBackButton}>
-                  <Ionicons name="chevron-back" size={20} color={Colors.text} />
-                </TouchableOpacity>
-              )}
-              <Text style={styles.modalTitle}>{browseStage === 'countries' ? 'Choose a country' : 'Choose hotels'}</Text>
-              <TouchableOpacity onPress={closeBrowseModal}>
+              <Text style={styles.modalTitle}>Choose a city</Text>
+              <TouchableOpacity onPress={() => setCityModal(false)}>
                 <Ionicons name="close" size={20} color={Colors.text} />
               </TouchableOpacity>
             </View>
-
-            {browseStage === 'countries' && (
-              <>
-                <TextInput
-                  style={styles.modalSearchInput}
-                  placeholder="Search country..."
-                  placeholderTextColor={Colors.textMuted}
-                  value={countrySearch}
-                  onChangeText={setCountrySearch}
-                />
-                {loadingCountries ? (
-                  <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
-                ) : (
-                  <FlatList
-                    data={filteredCountries}
-                    keyExtractor={(item) => item}
-                    style={styles.modalList}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity style={styles.modalListRow} onPress={() => selectCountry(item)}>
-                        <Text style={styles.modalListRowText}>{item}</Text>
-                        <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                      </TouchableOpacity>
-                    )}
-                  />
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder="Search city..."
+              placeholderTextColor={Colors.textMuted}
+              value={citySearch}
+              onChangeText={setCitySearch}
+            />
+            {loadingCities ? (
+              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+            ) : filteredCities.length === 0 ? (
+              <Text style={styles.modalEmptyText}>No synced cities match your search.</Text>
+            ) : (
+              <FlatList
+                data={filteredCities}
+                keyExtractor={(item) => `${item.city}-${item.countryName}`}
+                style={styles.modalList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectCity(item)} disabled={selectingCity}>
+                    <View>
+                      <Text style={styles.modalListRowText}>{item.city}</Text>
+                      <Text style={styles.modalListRowMeta}>{item.countryName}</Text>
+                    </View>
+                    <Text style={styles.modalListRowMeta}>
+                      {item.hotelCount} hotel{item.hotelCount === 1 ? '' : 's'}
+                    </Text>
+                  </TouchableOpacity>
                 )}
-              </>
-            )}
-
-            {browseStage === 'hotels' && (
-              <>
-                {loadingBrowseHotels ? (
-                  <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
-                ) : browseHotels.length === 0 ? (
-                  <Text style={styles.modalEmptyText}>No hotels found for this country in the catalogue.</Text>
-                ) : (
-                  <FlatList
-                    data={browseHotels}
-                    keyExtractor={(item) => item.tjHotelId}
-                    style={styles.modalList}
-                    renderItem={({ item }) => {
-                      const selected = selectedBrowseIds.has(item.tjHotelId);
-                      return (
-                        <TouchableOpacity
-                          style={[styles.browseHotelRow, selected && styles.browseHotelRowSelected]}
-                          onPress={() => toggleBrowseSelection(item.tjHotelId)}
-                        >
-                          <Ionicons
-                            name={selected ? 'checkbox' : 'square-outline'}
-                            size={20}
-                            color={selected ? Colors.primary : Colors.textMuted}
-                          />
-                          <View style={styles.browseHotelInfo}>
-                            <Text style={styles.browseHotelName} numberOfLines={1}>
-                              {item.name}
-                            </Text>
-                            <Text style={styles.browseHotelMeta}>
-                              {item.locale?.address?.city || item.locale?.address?.countryname}
-                              {item.star_rating ? ` · ${item.star_rating}★` : ''}
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.previewButton}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              openDemoPreview(item);
-                            }}
-                          >
-                            <Ionicons name="eye-outline" size={16} color={Colors.primary} />
-                            <Text style={styles.previewButtonText}>Preview</Text>
-                          </TouchableOpacity>
-                        </TouchableOpacity>
-                      );
-                    }}
-                  />
-                )}
-                <TouchableOpacity
-                  style={[styles.confirmBrowseButton, selectedBrowseIds.size === 0 && styles.confirmBrowseButtonDisabled]}
-                  onPress={confirmBrowseSelection}
-                  disabled={selectedBrowseIds.size === 0}
-                >
-                  <Text style={styles.confirmBrowseButtonText}>
-                    Add {selectedBrowseIds.size || ''} hotel{selectedBrowseIds.size === 1 ? '' : 's'} to search
-                  </Text>
-                </TouchableOpacity>
-              </>
+              />
             )}
           </Pressable>
         </Pressable>
@@ -1147,9 +951,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  modalBackButton: {
-    marginRight: 8,
-  },
   modalTitle: {
     flex: 1,
     fontSize: 16,
@@ -1192,60 +993,6 @@ const styles = StyleSheet.create({
   modalListRowMeta: {
     fontSize: 13,
     color: Colors.textMuted,
-  },
-  browseHotelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  browseHotelRowSelected: {
-    backgroundColor: Colors.primarySoft,
-  },
-  browseHotelInfo: {
-    flex: 1,
-  },
-  browseHotelName: {
-    fontSize: 14,
-    color: Colors.text,
-    fontWeight: '600',
-  },
-  browseHotelMeta: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  previewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  previewButtonText: {
-    fontSize: 11,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  confirmBrowseButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  confirmBrowseButtonDisabled: {
-    backgroundColor: Colors.textMuted,
-  },
-  confirmBrowseButtonText: {
-    color: Colors.secondary,
-    fontWeight: 'bold',
-    fontSize: 14,
   },
 });
 
