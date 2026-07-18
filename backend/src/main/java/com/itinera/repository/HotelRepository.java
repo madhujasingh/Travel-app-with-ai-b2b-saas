@@ -14,10 +14,14 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
 
     // Powers the city picker in the search UI - only cities with hotels
     // actually synced into our catalog are offered, so a selection always
-    // resolves to real, searchable hotel IDs.
-    @Query("SELECT h.city AS city, h.countryName AS countryName, COUNT(h) AS hotelCount " +
-           "FROM Hotel h WHERE h.city IS NOT NULL AND h.city <> '' " +
-           "GROUP BY h.city, h.countryName ORDER BY h.city ASC")
+    // resolves to real, searchable hotel IDs. Native query + INITCAP:
+    // different sync batches stored city/country in inconsistent casing
+    // (e.g. "AGRA" vs "Agra"), which JPQL's plain GROUP BY would keep as
+    // separate duplicate rows - normalizing case in the query itself merges
+    // them into one real entry with a combined count.
+    @Query(value = "SELECT INITCAP(city) AS city, INITCAP(country_name) AS countryName, COUNT(*) AS hotelCount " +
+           "FROM hotels WHERE city IS NOT NULL AND city <> '' " +
+           "GROUP BY INITCAP(city), INITCAP(country_name) ORDER BY INITCAP(city) ASC", nativeQuery = true)
     List<CityCount> findCityCounts();
 
     interface CityCount {
