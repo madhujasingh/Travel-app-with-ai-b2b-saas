@@ -26,6 +26,13 @@ const BOOKING_POLL_INTERVAL_MS = 5000;
 const MAX_BOOKING_POLL_ATTEMPTS = 36;
 const TERMINAL_STATUSES = new Set(['SUCCESS', 'ON_HOLD', 'ABORTED', 'FAILED', 'CANCELLED']);
 
+// Doc: CANCELLATION_PENDING is a distinct "Post-Booking" state, not
+// Terminal - "TripJack Ops handles offline. Poll once daily." The 5s/180s
+// loop above is the wrong strategy for it, so it's tracked separately: stop
+// the aggressive polling immediately rather than burning all 36 attempts in
+// 3 minutes for a status that can take a day to resolve.
+const SLOW_POLL_STATUS = 'CANCELLATION_PENDING';
+
 const buildInitialTravelers = (rooms) => {
   return (rooms || []).map((room) => {
     const travelers = [];
@@ -190,7 +197,9 @@ const HotelBookingScreen = ({ route, navigation }) => {
       setBookingDetails(data);
       const status = data?.order?.status;
 
-      if (!TERMINAL_STATUSES.has(status) && attempt < MAX_BOOKING_POLL_ATTEMPTS) {
+      const shouldKeepPolling =
+        !TERMINAL_STATUSES.has(status) && status !== SLOW_POLL_STATUS && attempt < MAX_BOOKING_POLL_ATTEMPTS;
+      if (shouldKeepPolling) {
         await wait(BOOKING_POLL_INTERVAL_MS);
         return pollBookingStatus(bookingId, attempt + 1);
       }
@@ -230,6 +239,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
   };
 
   const status = bookingDetails?.order?.status;
+  const isSlowPending = status === SLOW_POLL_STATUS;
   const isTerminal = status ? TERMINAL_STATUSES.has(status) : false;
   const canCancel = status === 'SUCCESS' || status === 'ON_HOLD';
 
@@ -431,7 +441,14 @@ const HotelBookingScreen = ({ route, navigation }) => {
               <Text style={styles.statusRow}>Amount: {Number(bookingDetails.order.amount).toLocaleString()}</Text>
             )}
 
-            {isTerminal && !polling && (
+            {isSlowPending && (
+              <Text style={styles.pendingNote}>
+                Your cancellation was received. TripJack processes this offline and it can take up to a day to
+                confirm - check back later rather than expecting an instant update.
+              </Text>
+            )}
+
+            {(isTerminal || isSlowPending) && !polling && (
               <TouchableOpacity style={styles.refreshButton} onPress={() => pollBookingStatus(bookingDetails?.order?.bookingId || reviewResult.bookingId, 1)}>
                 <Text style={styles.refreshButtonText}>Refresh status</Text>
               </TouchableOpacity>
@@ -637,6 +654,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.text,
     marginBottom: 4,
+  },
+  pendingNote: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
+    marginTop: 8,
+    marginBottom: 4,
+    lineHeight: 17,
   },
   pollingRow: {
     flexDirection: 'row',
