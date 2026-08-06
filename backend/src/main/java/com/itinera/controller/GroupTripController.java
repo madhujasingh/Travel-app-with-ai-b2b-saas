@@ -72,6 +72,51 @@ public class GroupTripController {
         return ResponseEntity.ok(groupTripService.lockWinner(tripId, optionId, userId));
     }
 
+    @PostMapping("/{tripId}/options/{optionId}/unlock")
+    public ResponseEntity<GroupTripService.GroupTripDetailResponse> unlockWinner(
+            @PathVariable Long tripId,
+            @PathVariable Long optionId,
+            @RequestAttribute Long userId
+    ) {
+        return ResponseEntity.ok(groupTripService.unlockWinner(tripId, optionId, userId));
+    }
+
+    @DeleteMapping("/{tripId}/options/{optionId}")
+    public ResponseEntity<GroupTripService.GroupTripDetailResponse> deleteOption(
+            @PathVariable Long tripId,
+            @PathVariable Long optionId,
+            @RequestAttribute Long userId
+    ) {
+        return ResponseEntity.ok(groupTripService.deleteOption(tripId, optionId, userId));
+    }
+
+    @DeleteMapping("/{tripId}/options/{optionId}/vote")
+    public ResponseEntity<GroupTripService.GroupTripOptionResponse> retractVote(
+            @PathVariable Long tripId,
+            @PathVariable Long optionId,
+            @RequestAttribute Long userId
+    ) {
+        return ResponseEntity.ok(groupTripService.retractVote(tripId, optionId, userId));
+    }
+
+    @PostMapping("/{tripId}/leave")
+    public ResponseEntity<Void> leaveTrip(
+            @PathVariable Long tripId,
+            @RequestAttribute Long userId
+    ) {
+        groupTripService.leaveTrip(tripId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/{tripId}")
+    public ResponseEntity<Void> deleteTrip(
+            @PathVariable Long tripId,
+            @RequestAttribute Long userId
+    ) {
+        groupTripService.deleteTrip(tripId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{tripId}/finalize")
     public ResponseEntity<GroupTripService.GroupTripDetailResponse> finalizeTrip(
             @PathVariable Long tripId,

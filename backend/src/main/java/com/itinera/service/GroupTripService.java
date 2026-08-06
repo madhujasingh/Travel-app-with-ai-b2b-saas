@@ -225,6 +225,85 @@ public class GroupTripService {
         return getTrip(tripId, userId);
     }
 
+    // Only ever clears the flag on this one option - since lockWinner already
+    // enforces "at most one locked option per category", there's never a case
+    // where unlocking one option needs to touch its siblings.
+    public GroupTripDetailResponse unlockWinner(Long tripId, Long optionId, Long userId) {
+        GroupTrip trip = getTripEntity(tripId);
+        requireOrganizer(trip, userId);
+        GroupTripOption option = getOption(optionId, tripId);
+
+        option.setLockedWinner(false);
+        groupTripOptionRepository.save(option);
+
+        return getTrip(tripId, userId);
+    }
+
+    // Members can remove their own suggestion; the organizer can remove anyone's
+    // (e.g. cleaning up spam/duplicates). A locked winner can't be deleted out
+    // from under the group silently - it has to be unlocked first, so the
+    // "current winner" the group sees never disappears without warning.
+    public GroupTripDetailResponse deleteOption(Long tripId, Long optionId, Long userId) {
+        GroupTrip trip = getTripEntity(tripId);
+        requireMembership(tripId, userId);
+        GroupTripOption option = getOption(optionId, tripId);
+
+        boolean isOwnOption = option.getAddedByUserId().equals(userId);
+        boolean isOrganizer = trip.getCreatedByUserId().equals(userId);
+        if (!isOwnOption && !isOrganizer) {
+            throw new AccessDeniedException("You can only remove options you added");
+        }
+        if (Boolean.TRUE.equals(option.getLockedWinner())) {
+            throw new IllegalArgumentException("Unlock this option before removing it");
+        }
+
+        groupTripOptionRepository.delete(option);
+        return getTrip(tripId, userId);
+    }
+
+    // Retracting a vote is distinct from voting the opposite way - it removes
+    // the user's influence on the score entirely rather than flipping it.
+    public GroupTripOptionResponse retractVote(Long tripId, Long optionId, Long userId) {
+        requireMembership(tripId, userId);
+        GroupTripOption option = getOption(optionId, tripId);
+
+        groupTripVoteRepository.findByOptionIdAndUserId(optionId, userId)
+                .ifPresent(groupTripVoteRepository::delete);
+
+        option.setScore(recalculateScore(optionId));
+        GroupTripOption saved = groupTripOptionRepository.save(option);
+        return toOptionResponse(saved, userId);
+    }
+
+    // Any member can leave except the organizer, who has no one to hand the
+    // trip off to - they must delete the trip outright instead (deleteTrip).
+    // Leaving cascades the member's own votes off naturally: recalculateScore
+    // is only ever called for other members' subsequent actions, so a stale
+    // score briefly reflecting a departed member's vote is possible but
+    // self-corrects on the next vote/lock/finalize - not worth an extra
+    // rescore-everything pass for a one-member edge case.
+    public void leaveTrip(Long tripId, Long userId) {
+        GroupTrip trip = getTripEntity(tripId);
+        if (trip.getCreatedByUserId().equals(userId)) {
+            throw new IllegalArgumentException("The organizer can't leave - delete the trip instead if you want to end it");
+        }
+
+        GroupTripMember member = groupTripMemberRepository.findByGroupTripIdAndUserId(tripId, userId)
+                .orElseThrow(() -> new AccessDeniedException("You are not a member of this trip"));
+        groupTripMemberRepository.delete(member);
+    }
+
+    // Organizer-only, cascades members/options/votes via GroupTrip's
+    // orphanRemoval - the finalized Itinerary (if any) is deliberately left in
+    // place rather than deleted, since it's already isActive=false/invisible
+    // to the public catalog and deleting it would break anyone who still has
+    // it open.
+    public void deleteTrip(Long tripId, Long userId) {
+        GroupTrip trip = getTripEntity(tripId);
+        requireOrganizer(trip, userId);
+        groupTripRepository.delete(trip);
+    }
+
     public GroupTripDetailResponse finalizeTrip(Long tripId, Long userId) {
         GroupTrip trip = getTripEntity(tripId);
         requireOrganizer(trip, userId);
@@ -363,7 +442,14 @@ public class GroupTripService {
         itinerary.setImageUrl(null);
         itinerary.setType(resolveType(activity, stay));
         itinerary.setCategory(resolveCategory(trip.getDestination()));
-        itinerary.setIsActive(true);
+        // Group-generated itineraries are synthetic (templated text, formula-based
+        // price, no real supplier/pricing tie-in) and should never appear in the
+        // public itinerary catalog/search/category browse alongside admin-curated
+        // packages - only this group's own members should ever see it, via the
+        // GroupTripDetailResponse.finalizedItinerary link and its direct
+        // GET /itineraries/{id} fetch (which doesn't filter on isActive).
+        itinerary.setIsActive(false);
+        itinerary.setSourceGroupTripId(trip.getId());
         itinerary.setUpdatedAt(LocalDateTime.now());
         itinerary.setHighlights(buildHighlights(winners));
         itinerary.setInclusions(buildInclusions(stay, activity, restaurant));
@@ -566,6 +652,7 @@ public class GroupTripService {
                 option.getDescription(),
                 option.getLocation(),
                 option.getAddedByName(),
+                option.getAddedByUserId().equals(currentUserId),
                 option.getScore(),
                 option.getLockedWinner(),
                 currentUserVote,
@@ -639,6 +726,7 @@ public class GroupTripService {
             String description,
             String location,
             String addedByName,
+            boolean mine,
             Integer score,
             Boolean lockedWinner,
             Integer currentUserVote,

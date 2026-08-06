@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
+  Modal,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -105,6 +108,7 @@ const buildSeedOptionsFromItinerary = (itinerary) => {
 const GroupTripPlannerScreen = ({ navigation, route }) => {
   const { token } = useAuth();
   const seedItinerary = route?.params?.seedItinerary || null;
+  const requestedTripId = route?.params?.tripId || null;
   const [activeSection, setActiveSection] = useState(seedItinerary ? 'NEW' : 'CURRENT');
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -112,7 +116,8 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
   const [joiningTrip, setJoiningTrip] = useState(false);
   const [addingOption, setAddingOption] = useState(false);
   const [finalizingTrip, setFinalizingTrip] = useState(false);
-  const [selectedTripId, setSelectedTripId] = useState(null);
+  const [leavingTrip, setLeavingTrip] = useState(false);
+  const [selectedTripId, setSelectedTripId] = useState(requestedTripId);
   const [trips, setTrips] = useState([]);
   const [tripDetail, setTripDetail] = useState(null);
   const [createForm, setCreateForm] = useState({
@@ -127,6 +132,16 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
     description: '',
     location: '',
   });
+
+  // Destination picker - lets the organizer choose from destinations that
+  // already have a real package/itinerary in the app, instead of only
+  // free-typing (which is still supported, for trips to places not in the
+  // catalogue yet). Fetched once and cached, same pattern as HotelsScreen's
+  // city picker (GET /hotel-catalog/cities).
+  const [destinations, setDestinations] = useState(null);
+  const [destinationModal, setDestinationModal] = useState(false);
+  const [destinationSearch, setDestinationSearch] = useState('');
+  const [loadingDestinations, setLoadingDestinations] = useState(false);
 
   const getResponsePayload = async (response) => {
     const text = await response.text();
@@ -239,6 +254,23 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
     loadTrips();
   }, [loadTrips]);
 
+  // When opened with a specific tripId (e.g. tapping a trip card in the
+  // Profile screen's Groups tab), jump to whichever section that trip
+  // actually lives in - otherwise the CURRENT/PREVIOUS section-sync effect
+  // below would silently swap the selection back to the first trip in
+  // whatever section is active by default.
+  useEffect(() => {
+    if (!requestedTripId || !trips.length) {
+      return;
+    }
+    const match = trips.find((trip) => trip.id === requestedTripId);
+    if (!match) {
+      return;
+    }
+    setActiveSection(match.finalizedItineraryId ? 'PREVIOUS' : 'CURRENT');
+    setSelectedTripId(match.id);
+  }, [requestedTripId, trips]);
+
   useEffect(() => {
     if (activeTrip?.id) {
       loadTripDetail(activeTrip.id);
@@ -262,6 +294,37 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       setSelectedTripId(visibleTrips[0].id);
     }
   }, [activeSection, selectedTripId, visibleTrips]);
+
+  const openDestinationModal = async () => {
+    setDestinationModal(true);
+    if (destinations) {
+      return;
+    }
+
+    try {
+      setLoadingDestinations(true);
+      const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/destinations`);
+      const data = await getResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to load destinations');
+      }
+      setDestinations(Array.isArray(data) ? data : []);
+    } catch (error) {
+      Alert.alert('Destinations', getFriendlyErrorMessage(error, 'Unable to load destinations right now.'));
+    } finally {
+      setLoadingDestinations(false);
+    }
+  };
+
+  const selectDestination = (destinationEntry) => {
+    setCreateForm((prev) => ({ ...prev, destination: destinationEntry.destination }));
+    setDestinationModal(false);
+    setDestinationSearch('');
+  };
+
+  const filteredDestinations = (destinations || []).filter((d) =>
+    (d.destination || '').toLowerCase().includes(destinationSearch.trim().toLowerCase())
+  );
 
   const createTrip = async () => {
     if (!createForm.title.trim() || !createForm.destination.trim()) {
@@ -392,9 +455,16 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
     }
   };
 
-  const voteOnOption = async (optionId, voteValue) => {
+  // Tapping the vote you already cast retracts it instead of re-sending the
+  // same value - without this, there was no way to change your mind back to
+  // "no opinion" once you'd voted, only to flip to the opposite vote.
+  const voteOnOption = async (optionId, voteValue, currentUserVote) => {
     if (!tripDetail?.id) {
       return;
+    }
+
+    if (currentUserVote === voteValue) {
+      return retractVote(optionId);
     }
 
     try {
@@ -437,6 +507,113 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
     } catch (error) {
       Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to lock winner'));
     }
+  };
+
+  const unlockWinner = async (optionId) => {
+    if (!tripDetail?.id) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/group-trips/${tripDetail.id}/options/${optionId}/unlock`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await getResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to unlock winner');
+      }
+      setTripDetail(data);
+      await loadTrips();
+    } catch (error) {
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to unlock winner'));
+    }
+  };
+
+  const deleteOption = (optionId) => {
+    if (!tripDetail?.id) {
+      return;
+    }
+
+    Alert.alert('Remove option', 'Remove this option and its votes from the trip?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const response = await fetch(
+              `${API_CONFIG.BASE_URL}/group-trips/${tripDetail.id}/options/${optionId}`,
+              { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+            );
+            const data = await getResponsePayload(response);
+            if (!response.ok) {
+              throw new Error(data?.message || 'Unable to remove option');
+            }
+            setTripDetail(data);
+            await loadTrips();
+          } catch (error) {
+            Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to remove option'));
+          }
+        },
+      },
+    ]);
+  };
+
+  const retractVote = async (optionId) => {
+    if (!tripDetail?.id) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}/group-trips/${tripDetail.id}/options/${optionId}/vote`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await getResponsePayload(response);
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to retract vote');
+      }
+      await loadTripDetail(tripDetail.id);
+    } catch (error) {
+      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to retract vote'));
+    }
+  };
+
+  const leaveTrip = () => {
+    if (!tripDetail?.id) {
+      return;
+    }
+
+    Alert.alert('Leave trip', `Leave "${tripDetail.title}"? You'll need the invite code to rejoin.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          setLeavingTrip(true);
+          try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}/group-trips/${tripDetail.id}/leave`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+              const data = await getResponsePayload(response);
+              throw new Error(data?.message || 'Unable to leave trip');
+            }
+            setSelectedTripId(null);
+            setTripDetail(null);
+            await loadTrips();
+          } catch (error) {
+            Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to leave trip'));
+          } finally {
+            setLeavingTrip(false);
+          }
+        },
+      },
+    ]);
   };
 
   const openGeneratedItinerary = async () => {
@@ -490,49 +667,64 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
     }
   };
 
-  const renderOptionCard = (option) => (
-    <View key={option.id} style={styles.optionCard}>
-      <View style={styles.optionHeader}>
-        <View style={styles.optionTitleBlock}>
-          <Text style={styles.optionTitle}>{option.title}</Text>
-          {!!option.location && <Text style={styles.optionMeta}>{option.location}</Text>}
-          {!!option.description && <Text style={styles.optionDescription}>{option.description}</Text>}
-          <Text style={styles.optionByline}>Added by {option.addedByName}</Text>
+  const renderOptionCard = (option) => {
+    const canDelete = !option.lockedWinner && (option.mine || tripDetail?.organizer);
+    return (
+      <View key={option.id} style={styles.optionCard}>
+        <View style={styles.optionHeader}>
+          <View style={styles.optionTitleBlock}>
+            <Text style={styles.optionTitle}>{option.title}</Text>
+            {!!option.location && <Text style={styles.optionMeta}>{option.location}</Text>}
+            {!!option.description && <Text style={styles.optionDescription}>{option.description}</Text>}
+            <Text style={styles.optionByline}>Added by {option.addedByName}</Text>
+          </View>
+          <View style={[styles.scorePill, option.lockedWinner && styles.scorePillActive]}>
+            <Text style={styles.scoreLabel}>{option.lockedWinner ? 'Winner' : 'Score'}</Text>
+            <Text style={styles.scoreValue}>{option.score}</Text>
+          </View>
         </View>
-        <View style={[styles.scorePill, option.lockedWinner && styles.scorePillActive]}>
-          <Text style={styles.scoreLabel}>{option.lockedWinner ? 'Winner' : 'Score'}</Text>
-          <Text style={styles.scoreValue}>{option.score}</Text>
-        </View>
-      </View>
 
-      <View style={styles.voteRow}>
-        <TouchableOpacity
-          style={[styles.voteButton, option.currentUserVote === 1 && styles.voteButtonPositive]}
-          onPress={() => voteOnOption(option.id, 1)}
-        >
-          <Ionicons name="thumbs-up-outline" size={16} color={option.currentUserVote === 1 ? Colors.secondary : Colors.primary} />
-          <Text style={[styles.voteButtonText, option.currentUserVote === 1 && styles.voteButtonTextActive]}>
-            {option.upvotes}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.voteButton, option.currentUserVote === -1 && styles.voteButtonNegative]}
-          onPress={() => voteOnOption(option.id, -1)}
-        >
-          <Ionicons name="thumbs-down-outline" size={16} color={option.currentUserVote === -1 ? Colors.secondary : Colors.textLight} />
-          <Text style={[styles.voteButtonText, option.currentUserVote === -1 && styles.voteButtonTextActive]}>
-            {option.downvotes}
-          </Text>
-        </TouchableOpacity>
-        {tripDetail?.organizer ? (
-          <TouchableOpacity style={styles.lockButton} onPress={() => lockWinner(option.id)}>
-            <Ionicons name="checkmark-circle-outline" size={16} color={Colors.secondary} />
-            <Text style={styles.lockButtonText}>{option.lockedWinner ? 'Locked' : 'Lock Winner'}</Text>
+        <View style={styles.voteRow}>
+          <TouchableOpacity
+            style={[styles.voteButton, option.currentUserVote === 1 && styles.voteButtonPositive]}
+            onPress={() => voteOnOption(option.id, 1, option.currentUserVote)}
+          >
+            <Ionicons name="thumbs-up-outline" size={16} color={option.currentUserVote === 1 ? Colors.secondary : Colors.primary} />
+            <Text style={[styles.voteButtonText, option.currentUserVote === 1 && styles.voteButtonTextActive]}>
+              {option.upvotes}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.voteButton, option.currentUserVote === -1 && styles.voteButtonNegative]}
+            onPress={() => voteOnOption(option.id, -1, option.currentUserVote)}
+          >
+            <Ionicons name="thumbs-down-outline" size={16} color={option.currentUserVote === -1 ? Colors.secondary : Colors.textLight} />
+            <Text style={[styles.voteButtonText, option.currentUserVote === -1 && styles.voteButtonTextActive]}>
+              {option.downvotes}
+            </Text>
+          </TouchableOpacity>
+          {tripDetail?.organizer ? (
+            <TouchableOpacity
+              style={[styles.lockButton, option.lockedWinner && styles.unlockButton]}
+              onPress={() => (option.lockedWinner ? unlockWinner(option.id) : lockWinner(option.id))}
+            >
+              <Ionicons name="checkmark-circle-outline" size={16} color={option.lockedWinner ? Colors.primary : Colors.secondary} />
+              <Text style={[styles.lockButtonText, option.lockedWinner && styles.unlockButtonText]}>
+                {option.lockedWinner ? 'Unlock' : 'Lock Winner'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {canDelete ? (
+          <TouchableOpacity style={styles.removeOptionButton} onPress={() => deleteOption(option.id)}>
+            <Ionicons name="trash-outline" size={13} color={Colors.textMuted} />
+            <Text style={styles.removeOptionText}>Remove</Text>
           </TouchableOpacity>
         ) : null}
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -613,12 +805,18 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
             value={createForm.title}
             onChangeText={(value) => setCreateForm((prev) => ({ ...prev, title: value }))}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Destination"
-            value={createForm.destination}
-            onChangeText={(value) => setCreateForm((prev) => ({ ...prev, destination: value }))}
-          />
+          <View style={styles.destinationRow}>
+            <TextInput
+              style={[styles.input, styles.destinationInput]}
+              placeholder="Destination"
+              value={createForm.destination}
+              onChangeText={(value) => setCreateForm((prev) => ({ ...prev, destination: value }))}
+            />
+            <TouchableOpacity style={styles.browseDestinationButton} onPress={openDestinationModal}>
+              <Ionicons name="compass-outline" size={18} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.destinationHint}>Type a destination, or browse ones with existing packages.</Text>
           <TextInput
             style={[styles.input, styles.multilineInput]}
             placeholder="Optional vibe or notes"
@@ -735,6 +933,12 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
                   </View>
                 ) : null}
               </View>
+              {!tripDetail.organizer ? (
+                <TouchableOpacity style={styles.leaveTripButton} onPress={leaveTrip} disabled={leavingTrip}>
+                  <Ionicons name="exit-outline" size={14} color={Colors.error} />
+                  <Text style={styles.leaveTripText}>{leavingTrip ? 'Leaving...' : 'Leave trip'}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <View style={styles.panel}>
@@ -751,16 +955,28 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
                 ))
               )}
               {tripDetail.organizer ? (
-                <TouchableOpacity
-                  style={[styles.primaryButton, styles.finalizeButton]}
-                  onPress={finalizeTrip}
-                  disabled={finalizingTrip}
-                >
-                  <Ionicons name="sparkles-outline" size={16} color={Colors.secondary} style={styles.finalizeIcon} />
-                  <Text style={styles.primaryButtonText}>
-                    {finalizingTrip ? 'Generating itinerary...' : 'Turn Winners Into Itinerary'}
-                  </Text>
-                </TouchableOpacity>
+                <>
+                  {tripDetail.finalizedItinerary ? (
+                    <Text style={styles.finalizeHelperText}>
+                      An itinerary has already been generated. Keep voting or locking winners, then update it to
+                      reflect the group&apos;s latest picks.
+                    </Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[styles.primaryButton, styles.finalizeButton]}
+                    onPress={finalizeTrip}
+                    disabled={finalizingTrip}
+                  >
+                    <Ionicons name="sparkles-outline" size={16} color={Colors.secondary} style={styles.finalizeIcon} />
+                    <Text style={styles.primaryButtonText}>
+                      {finalizingTrip
+                        ? 'Generating itinerary...'
+                        : tripDetail.finalizedItinerary
+                        ? 'Update Itinerary'
+                        : 'Turn Winners Into Itinerary'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
               ) : null}
             </View>
 
@@ -854,6 +1070,45 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
           </>
         ) : null}
       </ScrollView>
+
+      <Modal visible={destinationModal} transparent animationType="fade" onRequestClose={() => setDestinationModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setDestinationModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose a destination</Text>
+              <TouchableOpacity onPress={() => setDestinationModal(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder="Search destination..."
+              placeholderTextColor={Colors.textMuted}
+              value={destinationSearch}
+              onChangeText={setDestinationSearch}
+            />
+            {loadingDestinations ? (
+              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+            ) : filteredDestinations.length === 0 ? (
+              <Text style={styles.modalEmptyText}>No destinations match your search.</Text>
+            ) : (
+              <FlatList
+                data={filteredDestinations}
+                keyExtractor={(item) => item.destination}
+                style={styles.modalList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectDestination(item)}>
+                    <Text style={styles.modalListRowText}>{item.destination}</Text>
+                    <Text style={styles.modalListRowMeta}>
+                      {item.packageCount} package{item.packageCount === 1 ? '' : 's'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1220,6 +1475,115 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lockButtonText: { color: Colors.secondary, fontWeight: '700', marginLeft: 6 },
+  unlockButton: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  unlockButtonText: { color: Colors.primary },
+  removeOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    marginTop: 10,
+  },
+  removeOptionText: { color: Colors.textMuted, fontSize: 12, marginLeft: 4, fontWeight: '600' },
+  leaveTripButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 12,
+  },
+  leaveTripText: { color: Colors.error, fontWeight: '700', fontSize: 13, marginLeft: 6 },
+  finalizeHelperText: {
+    color: Colors.textLight,
+    lineHeight: 19,
+    marginTop: 6,
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
+  destinationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  destinationInput: { flex: 1 },
+  browseDestinationButton: {
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 14,
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  destinationHint: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginTop: -6,
+    marginBottom: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.text,
+  },
+  modalSearchInput: {
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 14,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 10,
+  },
+  modalLoading: {
+    marginVertical: 30,
+  },
+  modalEmptyText: {
+    textAlign: 'center',
+    color: Colors.textMuted,
+    marginVertical: 30,
+  },
+  modalList: {
+    maxHeight: 380,
+  },
+  modalListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalListRowText: {
+    fontSize: 14,
+    color: Colors.text,
+  },
+  modalListRowMeta: {
+    fontSize: 13,
+    color: Colors.textMuted,
+  },
 });
 
 export default GroupTripPlannerScreen;

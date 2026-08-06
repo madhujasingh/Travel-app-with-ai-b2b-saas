@@ -327,7 +327,7 @@ const CustomerProfileScreen = ({ navigation }) => {
               <TouchableOpacity
                 key={trip.id}
                 style={styles.groupTripCard}
-                onPress={() => navigation.navigate('GroupTripPlanner')}
+                onPress={() => navigation.navigate('GroupTripPlanner', { tripId: trip.id })}
               >
                 <View style={styles.groupTripHeader}>
                   <Text style={styles.groupTripTitle}>{trip.title}</Text>

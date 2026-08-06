@@ -24,22 +24,26 @@ public class ItineraryService {
     }
 
     public List<Itinerary> searchByDestination(String destination) {
-        return itineraryRepository.findByDestinationContainingIgnoreCase(destination);
+        return itineraryRepository.findByDestinationContainingIgnoreCaseAndIsActiveTrue(destination);
     }
 
     public List<Itinerary> searchByDestinationAndCategory(String destination, String category) {
-        return itineraryRepository.findByDestinationContainingIgnoreCaseAndCategory(
+        return itineraryRepository.findByDestinationContainingIgnoreCaseAndCategoryAndIsActiveTrue(
             destination,
             Itinerary.Category.valueOf(category.toUpperCase())
         );
     }
 
     public List<Itinerary> getByCategory(Itinerary.Category category) {
-        return itineraryRepository.findByCategory(category);
+        return itineraryRepository.findByCategoryAndIsActiveTrue(category);
     }
 
     public List<Itinerary> getByType(Itinerary.ItineraryType type) {
-        return itineraryRepository.findByType(type);
+        return itineraryRepository.findByTypeAndIsActiveTrue(type);
+    }
+
+    public List<ItineraryRepository.DestinationCount> getDestinations() {
+        return itineraryRepository.findDestinationCounts();
     }
 
     public Itinerary createItinerary(Itinerary itinerary) {

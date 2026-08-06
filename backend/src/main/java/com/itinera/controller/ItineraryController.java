@@ -1,6 +1,7 @@
 package com.itinera.controller;
 
 import com.itinera.model.Itinerary;
+import com.itinera.repository.ItineraryRepository;
 import com.itinera.service.ItineraryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,14 @@ public class ItineraryController {
         return itineraryService.getItineraryById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    // Public - powers a "pick from known destinations" UI (e.g. the group
+    // trip planner's destination field), same pattern as
+    // HotelCatalogController's /cities endpoint.
+    @GetMapping("/destinations")
+    public ResponseEntity<List<ItineraryRepository.DestinationCount>> getDestinations() {
+        return ResponseEntity.ok(itineraryService.getDestinations());
     }
 
     @GetMapping("/search")
