@@ -314,7 +314,6 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
         preference_warning: data?.insights?.preference_warning || null,
       });
     } catch (error) {
-      Alert.alert('AI Service', 'Using curated fallback recommendations.');
       const fallback = applyMarketFilter(buildFallbackRecommendations({
         destinationInput,
         parsedBudget,
