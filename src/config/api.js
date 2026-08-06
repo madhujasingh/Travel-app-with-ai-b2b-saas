@@ -1,4 +1,4 @@
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules } from 'react-native';
 
 const LOCALHOSTS = new Set(['localhost', '127.0.0.1']);
 
@@ -15,17 +15,19 @@ const extractHostFromScriptUrl = () => {
 const resolveHost = () => {
   const scriptHost = extractHostFromScriptUrl();
 
-  // Android emulator
-  if (Platform.OS === 'android' && scriptHost && LOCALHOSTS.has(scriptHost)) {
-    return '10.0.2.2';
-  }
-
-  // Expo LAN
+  // Expo LAN - a physical device or emulator connecting to Metro over the
+  // local network uses that same host to reach the backend too.
   if (scriptHost && !LOCALHOSTS.has(scriptHost)) {
     return `http://${scriptHost}:8080/api`;
   }
 
-  // APK / production fallback
+  // Metro running on localhost (the default for `npx expo run:android` /
+  // `run:ios` with no LAN config) gives no useful host to redirect to - fall
+  // through to production, same as iOS simulator already does by default.
+  // To point at a local backend from the Android emulator instead, set
+  // EXPO_PUBLIC_API_URL=http://10.0.2.2:8080/api explicitly (10.0.2.2 is the
+  // emulator's alias for the host machine's localhost) rather than relying
+  // on this auto-detection.
   return PRODUCTION_API_URL;
 };
 
