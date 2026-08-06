@@ -386,7 +386,8 @@ public class AuthController {
                 "id", user.getId(),
                 "name", user.getName(),
                 "email", user.getEmail(),
-                "role", user.getRole()
+                "role", user.getRole(),
+                "phone", user.getPhone() == null ? "" : user.getPhone()
         ));
         return response;
     }
