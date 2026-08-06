@@ -36,6 +36,17 @@ const formatCountdown = (remainingMs) => {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 };
 
+// Policy text fields (instructions, mandatory_fees, etc.) can contain HTML.
+const stripHtml = (raw) => {
+  if (!raw) return '';
+  return raw
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .trim();
+};
+
 const cancellationSummary = (cancellation) => {
   if (!cancellation) return null;
   if (!cancellation.isRefundable) {
@@ -55,6 +66,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [staticDetail, setStaticDetail] = useState(null);
 
   const [reviewingOptionId, setReviewingOptionId] = useState(null);
   const [soldOutOptionIds, setSoldOutOptionIds] = useState(new Set());
@@ -63,6 +75,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     fetchDetail();
+    fetchStaticDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -106,6 +119,29 @@ const HotelDetailScreen = ({ route, navigation }) => {
       setError(err.message || 'Unable to load hotel options right now.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Static Detail: property policies, check-in/out times, and mandatory fees
+  // payable at the property. TripJack requires this be considered before
+  // booking (mandatory_fees in particular "must be displayed to users before
+  // booking" per their docs) - fetched alongside Detail, not gating it, since
+  // this endpoint is supplementary/cacheable and shouldn't block the room list
+  // if it's slow or unavailable.
+  const fetchStaticDetail = async () => {
+    try {
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/static-detail`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hid: tjHotelId }),
+        },
+        'Unable to load property policies.'
+      );
+      setStaticDetail(data);
+    } catch (err) {
+      // Silent - policies are supplementary; don't block the booking flow over it.
     }
   };
 
@@ -192,6 +228,32 @@ const HotelDetailScreen = ({ route, navigation }) => {
               </Text>
             )}
           </View>
+
+          {staticDetail?.policies && (
+            <View style={styles.policiesCard}>
+              <Text style={styles.policiesTitle}>Property policies</Text>
+              {staticDetail.policies.checkInCheckOut && (
+                <Text style={styles.policiesRow}>
+                  Check-in {staticDetail.policies.checkInCheckOut.checkin_from}–
+                  {staticDetail.policies.checkInCheckOut.checkin_till} · Check-out{' '}
+                  {staticDetail.policies.checkInCheckOut.checkout_from}–
+                  {staticDetail.policies.checkInCheckOut.checkout_till}
+                </Text>
+              )}
+              {staticDetail.policies.mandatory_fees && (
+                <>
+                  <Text style={styles.policiesLabel}>Mandatory fees (payable at the property)</Text>
+                  <Text style={styles.policiesRow}>{stripHtml(staticDetail.policies.mandatory_fees)}</Text>
+                </>
+              )}
+              {staticDetail.policies.special_instructions && (
+                <>
+                  <Text style={styles.policiesLabel}>Special instructions</Text>
+                  <Text style={styles.policiesRow}>{stripHtml(staticDetail.policies.special_instructions)}</Text>
+                </>
+              )}
+            </View>
+          )}
 
           {reviewResult && (
             <View style={styles.reviewResultCard}>
@@ -409,6 +471,32 @@ const styles = StyleSheet.create({
   countdownExpired: {
     color: Colors.error,
     fontWeight: '600',
+  },
+  policiesCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  policiesTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  policiesLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textLight,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  policiesRow: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    lineHeight: 17,
   },
   reviewResultCard: {
     backgroundColor: Colors.primarySoft,

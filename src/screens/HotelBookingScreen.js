@@ -33,6 +33,24 @@ const TERMINAL_STATUSES = new Set(['SUCCESS', 'ON_HOLD', 'ABORTED', 'FAILED', 'C
 // 3 minutes for a status that can take a day to resolve.
 const SLOW_POLL_STATUS = 'CANCELLATION_PENDING';
 
+// TripJack's authoritative status vocabulary, mapped to user-facing labels.
+// PAYMENT_SUCCESS/PAYMENT_PENDING/PENDING are explicitly "Pending" per their
+// docs, not success - don't relabel them as anything terminal-sounding.
+const STATUS_LABELS = {
+  IN_PROGRESS: 'In Progress',
+  SUCCESS: 'Confirmed',
+  ON_HOLD: 'On Hold',
+  PAYMENT_SUCCESS: 'Payment Received - Confirming',
+  PAYMENT_PENDING: 'Payment Pending',
+  PENDING: 'Pending',
+  ABORTED: 'Booking Failed',
+  FAILED: 'Booking Failed',
+  CANCELLATION_PENDING: 'Cancellation Pending',
+  CANCELLED: 'Cancelled',
+};
+
+const statusLabel = (status) => STATUS_LABELS[status] || status || STATUS_LABELS.IN_PROGRESS;
+
 const buildInitialTravelers = (rooms) => {
   return (rooms || []).map((room) => {
     const travelers = [];
@@ -67,6 +85,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const [bookingDetails, setBookingDetails] = useState(null);
   const [polling, setPolling] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const updateTraveler = (roomIndex, travelerIndex, field, value) => {
     setTravelers((current) =>
@@ -210,6 +229,36 @@ const HotelBookingScreen = ({ route, navigation }) => {
     }
   };
 
+  // Confirms a HOLD before its deadline (ddt). Same as Book's async contract -
+  // response only acknowledges receipt, so Booking Details must be polled
+  // again afterward to learn the real outcome (TripJack: Booking Detail is
+  // mandatory after every Hold, Instant, Confirm and Cancel call).
+  const confirmHold = async () => {
+    const bookingId = bookingDetails?.order?.bookingId || bookResponse?.bookingId || reviewResult.bookingId;
+
+    try {
+      setConfirming(true);
+      const payload = { bookingId, paymentInfos: [{ amount: Number(option?.pricing?.totalPrice || 0) }] };
+      console.log('[hotel confirm-book] REQUEST', JSON.stringify(payload));
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/confirm-book`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+        'Unable to confirm and pay for this booking.'
+      );
+      console.log('[hotel confirm-book] RESPONSE', JSON.stringify(data));
+
+      pollBookingStatus(bookingId, 1);
+    } catch (err) {
+      Alert.alert('Confirm & Pay', err.message || 'Unable to confirm and pay for this booking.');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
   const cancelBooking = () => {
     const bookingId = bookingDetails?.order?.bookingId || bookResponse?.bookingId || reviewResult.bookingId;
 
@@ -242,6 +291,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const isSlowPending = status === SLOW_POLL_STATUS;
   const isTerminal = status ? TERMINAL_STATUSES.has(status) : false;
   const canCancel = status === 'SUCCESS' || status === 'ON_HOLD';
+  const canConfirm = status === 'ON_HOLD';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -425,7 +475,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
         {bookResponse && (
           <View style={styles.statusCard}>
             <Text style={styles.sectionLabel}>Booking status</Text>
-            <Text style={styles.statusValue}>{status || 'IN_PROGRESS'}</Text>
+            <Text style={styles.statusValue}>{statusLabel(status)}</Text>
 
             {polling && !isTerminal && (
               <View style={styles.pollingRow}>
@@ -451,6 +501,18 @@ const HotelBookingScreen = ({ route, navigation }) => {
             {(isTerminal || isSlowPending) && !polling && (
               <TouchableOpacity style={styles.refreshButton} onPress={() => pollBookingStatus(bookingDetails?.order?.bookingId || reviewResult.bookingId, 1)}>
                 <Text style={styles.refreshButtonText}>Refresh status</Text>
+              </TouchableOpacity>
+            )}
+
+            {canConfirm && (
+              <TouchableOpacity style={styles.confirmButton} onPress={confirmHold} disabled={confirming}>
+                {confirming ? (
+                  <ActivityIndicator color={Colors.secondary} />
+                ) : (
+                  <Text style={styles.confirmButtonText}>
+                    Confirm & Pay {option?.pricing?.currency} {Number(option?.pricing?.totalPrice || 0).toLocaleString()}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
 
@@ -681,6 +743,18 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '600',
     fontSize: 13,
+  },
+  confirmButton: {
+    marginTop: 16,
+    backgroundColor: Colors.success,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    color: Colors.secondary,
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   cancelButton: {
     marginTop: 16,
