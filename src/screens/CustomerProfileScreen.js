@@ -1,13 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   View,
   Text,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
   StatusBar,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,8 +22,12 @@ import API_CONFIG from '../config/api';
 const BOOKING_TABS = new Set(['bookings', 'transactions']);
 
 const CustomerProfileScreen = ({ navigation }) => {
-  const { user, token, logout } = useAuth();
+  const { user, token, login, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('preferences');
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
   const [groupTrips, setGroupTrips] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
 
@@ -397,6 +405,46 @@ const CustomerProfileScreen = ({ navigation }) => {
     }
   };
 
+  const openEditProfile = () => {
+    setEditName(user?.name || '');
+    setEditPhone(user?.phone || '');
+    setEditModalVisible(true);
+  };
+
+  const saveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Name required', 'Please enter your name.');
+      return;
+    }
+    if (!editPhone.trim()) {
+      Alert.alert('Phone required', 'Please enter your phone number.');
+      return;
+    }
+
+    try {
+      setSavingProfile(true);
+      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: editName.trim(), phone: editPhone.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || 'Unable to update profile');
+      }
+
+      login({ token, user: { ...user, ...data } });
+      setEditModalVisible(false);
+    } catch (error) {
+      Alert.alert('Profile', error.message || 'Unable to update profile right now.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
@@ -419,7 +467,7 @@ const CustomerProfileScreen = ({ navigation }) => {
             <View style={styles.profileImage}>
               <Ionicons name="person" size={40} color={Colors.secondary} />
             </View>
-            <TouchableOpacity style={styles.editProfileButton}>
+            <TouchableOpacity style={styles.editProfileButton} onPress={openEditProfile}>
               <Ionicons name="pencil" size={16} color={Colors.secondary} />
             </TouchableOpacity>
           </View>
@@ -461,6 +509,46 @@ const CustomerProfileScreen = ({ navigation }) => {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <Modal visible={editModalVisible} transparent animationType="fade" onRequestClose={() => setEditModalVisible(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setEditModalVisible(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit profile</Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalFieldLabel}>Name</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Your name"
+              placeholderTextColor={Colors.textMuted}
+              value={editName}
+              onChangeText={setEditName}
+            />
+
+            <Text style={styles.modalFieldLabel}>Phone number</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Phone number"
+              placeholderTextColor={Colors.textMuted}
+              keyboardType="phone-pad"
+              value={editPhone}
+              onChangeText={setEditPhone}
+            />
+
+            <TouchableOpacity style={styles.modalSaveButton} onPress={saveProfile} disabled={savingProfile}>
+              {savingProfile ? (
+                <ActivityIndicator color={Colors.secondary} />
+              ) : (
+                <Text style={styles.modalSaveButtonText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -799,6 +887,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#F44336',
     marginLeft: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.text,
+  },
+  modalFieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textLight,
+    marginBottom: 6,
+  },
+  modalInput: {
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 14,
+  },
+  modalSaveButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalSaveButtonText: {
+    color: Colors.secondary,
+    fontWeight: 'bold',
+    fontSize: 15,
   },
 });
 

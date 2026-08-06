@@ -334,6 +334,47 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/profile")
+    public ResponseEntity<?> updateProfile(
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestBody UpdateProfileRequest request
+    ) {
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+        }
+
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        }
+
+        User user = userOpt.get();
+
+        if (request.getName() != null) {
+            if (request.getName().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Name cannot be empty"));
+            }
+            user.setName(request.getName().trim());
+        }
+
+        if (request.getPhone() != null) {
+            if (request.getPhone().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Phone number cannot be empty"));
+            }
+            user.setPhone(request.getPhone().trim());
+        }
+
+        userRepository.save(user);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("id", user.getId());
+        response.put("name", user.getName());
+        response.put("email", user.getEmail());
+        response.put("phone", user.getPhone());
+        response.put("role", user.getRole());
+        return ResponseEntity.ok(response);
+    }
+
     private void recordFailedLogin(String normalizedEmail) {
         FailedLoginState state = failedLoginAttempts.computeIfAbsent(normalizedEmail, k -> new FailedLoginState());
         state.count++;
@@ -470,6 +511,27 @@ public class AuthController {
 
         public void setNewPassword(String newPassword) {
             this.newPassword = newPassword;
+        }
+    }
+
+    public static class UpdateProfileRequest {
+        private String name;
+        private String phone;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getPhone() {
+            return phone;
+        }
+
+        public void setPhone(String phone) {
+            this.phone = phone;
         }
     }
 }

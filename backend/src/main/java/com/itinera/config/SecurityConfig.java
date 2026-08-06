@@ -35,6 +35,7 @@ public class SecurityConfig {
                 // Context path is already /api, so matchers should use app-relative routes.
                 // Must come before the /auth/** permitAll below - first match wins.
                 .requestMatchers(HttpMethod.PUT, "/auth/change-password").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/auth/profile").authenticated()
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/ai/**").permitAll()
