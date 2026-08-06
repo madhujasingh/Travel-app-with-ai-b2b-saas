@@ -200,8 +200,8 @@ const LoginScreen = () => {
       (!googleWebClientId && !googleIosClientId && !googleAndroidClientId)
     ) {
       Alert.alert(
-        'Google Sign-In Not Configured',
-        'Please set REACT_APP_GOOGLE_WEB_CLIENT_ID. iOS and Android IDs are recommended for production.'
+        'Google Sign-In Unavailable',
+        'Google Sign-In isn\'t available right now. Please sign in with your email and password instead.'
       );
       return;
     }
@@ -214,18 +214,19 @@ const LoginScreen = () => {
       }
     } catch (error) {
       setGoogleLoading(false);
-        Alert.alert(
-          'Google Sign-In Failed',
-          'Please check your Google Cloud Console OAuth settings. Since your app is published, ensure:\n\n1. Authorized redirect URIs include Expo proxy URLs\n2. Authorized JavaScript origins are set\n3. Your app may need additional Google verification\n\nContact the developer if issues persist.',
-          [{ text: 'OK' }]
-        );
+      console.error('[Google Sign-In]', error);
+      Alert.alert(
+        'Google Sign-In Failed',
+        'We couldn\'t sign you in with Google. Please try again, or sign in with your email and password instead.',
+        [{ text: 'OK' }]
+      );
     }
   };
 
   const renderSignInForm = () => (
     <>
       <Text style={styles.sectionTitle}>Welcome back</Text>
-      <Text style={styles.sectionSubtitle}>Sign in with the email and password saved in PostgreSQL.</Text>
+      <Text style={styles.sectionSubtitle}>Sign in with your email and password.</Text>
 
       <Text style={styles.label}>Email</Text>
       <TextInput
@@ -265,7 +266,7 @@ const LoginScreen = () => {
   const renderSignUpForm = () => (
     <>
       <Text style={styles.sectionTitle}>Create account</Text>
-      <Text style={styles.sectionSubtitle}>No account yet? We’ll create one and store it in the connected database.</Text>
+      <Text style={styles.sectionSubtitle}>No account yet? Fill in your details to get started.</Text>
 
       <Text style={styles.label}>Full Name</Text>
       <TextInput
@@ -328,8 +329,8 @@ const LoginScreen = () => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.title}>Itinera Auth</Text>
-          <Text style={styles.subtitle}>Use email and password to sign in, or create a new customer account.</Text>
+          <Text style={styles.title}>Welcome to Itinera</Text>
+          <Text style={styles.subtitle}>Sign in to your account, or create a new one to get started.</Text>
         </View>
 
         <View style={styles.card}>
