@@ -67,6 +67,7 @@ const emptyTraveller = (ti, pt) => ({
   eD: '',
   pNat: '',
   pid: '',
+  di: '',
 });
 
 const buildDefaultTravellers = (passengerCounts) => {
@@ -276,6 +277,8 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const gstOptional = !gstRequired && !!conditions?.gst?.gstappl;
   const emergencyRequired = !!conditions?.iecr;
   const passportRequired = !!conditions?.pcs?.pm;
+  const documentIdApplicable = !!conditions?.dc?.ida;
+  const documentIdRequired = !!conditions?.dc?.idm;
   const holdAllowed = isResume || conditions?.isBA !== false;
   const ssrSegments = getSsrSegments(reviewResponse);
 
@@ -289,6 +292,30 @@ const FlightBookingScreen = ({ route, navigation }) => {
       };
     });
   };
+
+  // Pre-booking baggage/meal SSR add to the order total (same as post-booking
+  // ancillaries, see computeAncillaryAmount below) - TripJack rejects Book/
+  // Confirm-Book with errCode 1015 ("Total amount passed in payment doesn't
+  // match with total order Amount") if paymentInfos.amount is just the base
+  // fare while ssrBaggageInfos/ssrMealInfos are attached to the same request.
+  const computeSsrAmount = () => {
+    let total = 0;
+    ssrSegments.forEach((segment) => {
+      const selection = ssrSelections[segment.id];
+      if (!selection) return;
+      if (selection.baggage) {
+        const option = segment.baggageOptions.find((o) => o.code === selection.baggage);
+        total += Number(option?.amount || 0);
+      }
+      if (selection.meal) {
+        const option = segment.mealOptions.find((o) => o.code === selection.meal);
+        total += Number(option?.amount || 0);
+      }
+    });
+    return total;
+  };
+
+  const totalWithSsr = totalFare + computeSsrAmount();
 
   const fetchBookingDetails = async (id) => {
     const requestBody = { bookingId: id };
@@ -392,6 +419,9 @@ const FlightBookingScreen = ({ route, navigation }) => {
           traveller.pNat = t.pNat;
           traveller.pid = t.pid;
         }
+        if (documentIdApplicable && t.di) {
+          traveller.di = t.di;
+        }
         return traveller;
       }),
       deliveryInfo: {
@@ -453,7 +483,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       await syncFlightBooking(token, {
         bookingId,
         summary: routeSummary(flights),
-        totalFare,
+        totalFare: totalWithSsr,
         status: 'ON_HOLD',
       });
 
@@ -480,7 +510,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     setBusy(true);
     setPhase('confirming');
     try {
-      const body = { ...buildBookingBody(), paymentInfos: [{ amount: totalFare }] };
+      const body = { ...buildBookingBody(), paymentInfos: [{ amount: totalWithSsr }] };
 
       console.log('[book-instant] REQUEST', JSON.stringify(body));
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/book`, {
@@ -500,7 +530,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       await syncFlightBooking(token, {
         bookingId,
         summary: routeSummary(flights),
-        totalFare,
+        totalFare: details?.order?.amount ?? totalWithSsr,
         status: details?.order?.status || 'SUCCESS',
       });
       setPhase('confirmed');
@@ -529,7 +559,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
         throw parseTripJackError(confirmFareData, 'Fare is no longer available for this held booking.');
       }
 
-      const amount = totalFare || bookingDetails?.order?.amount || 0;
+      const amount = totalWithSsr || bookingDetails?.order?.amount || 0;
       const confirmBookBody = { bookingId, paymentInfos: [{ amount }] };
       console.log('[confirm-book] REQUEST', JSON.stringify(confirmBookBody));
       const confirmBookResponse = await fetch(`${API_CONFIG.BASE_URL}/flights/confirm-book`, {
@@ -549,7 +579,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       await syncFlightBooking(token, {
         bookingId,
         summary: routeSummary(flights),
-        totalFare,
+        totalFare: details?.order?.amount ?? totalWithSsr,
         status: details?.order?.status || 'SUCCESS',
       });
       setPhase('confirmed');
@@ -566,7 +596,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
           await syncFlightBooking(token, {
             bookingId,
             summary: routeSummary(flights),
-            totalFare,
+            totalFare: details?.order?.amount ?? totalWithSsr,
             status: 'SUCCESS',
           });
           setPhase('confirmed');
@@ -620,7 +650,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
         await syncFlightBooking(token, {
           bookingId,
           summary: routeSummary(flights),
-          totalFare,
+          totalFare: bookingDetails?.order?.amount ?? totalWithSsr,
           status: 'CANCELLED',
         });
         Alert.alert(
@@ -861,6 +891,12 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const pnrEntries = Object.entries(bookingDetails?.itemInfos?.AIR?.travellerInfos?.[0]?.pnrDetails || {});
   const ticketEntries = Object.entries(bookingDetails?.itemInfos?.AIR?.travellerInfos?.[0]?.ticketNumberDetails || {});
   const isCancelled = cancelled || bookingDetails?.order?.status === 'CANCELLED';
+  // ABORTED/FAILED are terminal-dead per TripJack's status contract (same
+  // vocabulary as the hotel flow) - distinct from a legitimate ON_HOLD/PENDING
+  // fare, which is recoverable via Confirm & Pay. Without this, a dead order
+  // rendered identically to "held" and offered a Confirm & Pay button that
+  // would just fail again.
+  const isFailed = ['ABORTED', 'FAILED'].includes(bookingDetails?.order?.status);
 
   // Once a Hold/booking actually exists, there's nothing left to "go back" to
   // edit on this screen (the form's already been submitted) - send the user
@@ -992,6 +1028,25 @@ const FlightBookingScreen = ({ route, navigation }) => {
                         {t.eD || 'Expiry Date'}
                       </Text>
                     </Pressable>
+                  </>
+                ) : null}
+                {documentIdApplicable ? (
+                  <>
+                    <View style={styles.subsectionDivider} />
+                    <View style={styles.subsectionLabelRow}>
+                      <Ionicons name="card-outline" size={13} color={Colors.primaryDark} />
+                      <Text style={styles.cardSubtitle}>
+                        Document ID{documentIdRequired ? ' required' : ' (optional)'} for this fare
+                      </Text>
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={t.di}
+                      onChangeText={(v) => updateTraveller(index, 'di', v)}
+                      placeholder="Document ID"
+                      placeholderTextColor={Colors.textMuted}
+                      autoCapitalize="characters"
+                    />
                   </>
                 ) : null}
               </View>
@@ -1160,6 +1215,11 @@ const FlightBookingScreen = ({ route, navigation }) => {
               </View>
             ))}
 
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Total{computeSsrAmount() > 0 ? ' (fare + extras)' : ''}</Text>
+              <Text style={styles.metaValueAccent}>₹{Math.round(totalWithSsr).toLocaleString()}</Text>
+            </View>
+
             <TouchableOpacity style={styles.primaryButton} onPress={handleInstantBook} disabled={busy}>
               <Text style={styles.primaryButtonText}>{busy ? 'Booking & paying…' : 'Book & Pay Now'}</Text>
             </TouchableOpacity>
@@ -1182,7 +1242,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
             <View
               style={[
                 styles.statusHeaderCard,
-                isCancelled
+                isCancelled || isFailed
                   ? styles.statusHeaderCancelled
                   : phase === 'confirmed'
                   ? styles.statusHeaderConfirmed
@@ -1192,21 +1252,29 @@ const FlightBookingScreen = ({ route, navigation }) => {
               <View
                 style={[
                   styles.statusHeaderIconWrap,
-                  { backgroundColor: isCancelled ? '#FBE4E2' : phase === 'confirmed' ? '#E3F5E5' : '#FFF3D6' },
+                  { backgroundColor: isCancelled || isFailed ? '#FBE4E2' : phase === 'confirmed' ? '#E3F5E5' : '#FFF3D6' },
                 ]}
               >
                 <Ionicons
-                  name={isCancelled ? 'close-circle' : phase === 'confirmed' ? 'checkmark-circle' : 'time'}
+                  name={isCancelled || isFailed ? 'close-circle' : phase === 'confirmed' ? 'checkmark-circle' : 'time'}
                   size={26}
-                  color={isCancelled ? Colors.error : phase === 'confirmed' ? Colors.success : '#8A6100'}
+                  color={isCancelled || isFailed ? Colors.error : phase === 'confirmed' ? Colors.success : '#8A6100'}
                 />
               </View>
               <Text style={styles.statusHeaderTitle}>
-                {isCancelled ? 'Booking Cancelled' : phase === 'confirmed' ? 'Booking Confirmed' : 'Fare On Hold'}
+                {isCancelled
+                  ? 'Booking Cancelled'
+                  : isFailed
+                  ? 'Booking Failed'
+                  : phase === 'confirmed'
+                  ? 'Booking Confirmed'
+                  : 'Fare On Hold'}
               </Text>
               <Text style={styles.statusHeaderSubtitle}>
                 {isCancelled
                   ? 'This trip has been cancelled.'
+                  : isFailed
+                  ? 'This booking could not be completed with the supplier. Please search again.'
                   : phase === 'confirmed'
                   ? 'Your tickets are booked and ready.'
                   : phase === 'confirming'
@@ -1227,7 +1295,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Amount</Text>
                 <Text style={styles.metaValueAccent}>
-                  ₹{Math.round(totalFare || bookingDetails?.order?.amount || 0).toLocaleString()}
+                  ₹{Math.round(bookingDetails?.order?.amount ?? totalWithSsr ?? 0).toLocaleString()}
                 </Text>
               </View>
 
@@ -1264,7 +1332,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
               ) : null}
             </View>
 
-            {phase !== 'confirmed' ? (
+            {phase !== 'confirmed' && !isFailed && !isCancelled ? (
               <TouchableOpacity style={styles.primaryButton} onPress={handleConfirmAndPay} disabled={busy}>
                 <Text style={styles.primaryButtonText}>
                   {phase === 'confirming' ? 'Confirming & Paying…' : 'Confirm & Pay'}

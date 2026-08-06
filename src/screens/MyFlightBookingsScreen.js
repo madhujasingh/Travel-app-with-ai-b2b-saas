@@ -16,10 +16,19 @@ import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
 
+// TripJack's authoritative status vocabulary (same set used in
+// HotelBookingScreen.js's STATUS_LABELS) - PENDING/PAYMENT_PENDING/
+// PAYMENT_SUCCESS are non-terminal (still processing), ABORTED/FAILED are
+// terminal-dead and distinct from a recoverable ON_HOLD.
 const STATUS_META = {
   SUCCESS: { label: 'Confirmed', icon: 'checkmark-circle', bg: '#E3F5E5', fg: Colors.success },
   CANCELLED: { label: 'Cancelled', icon: 'close-circle', bg: '#FBE4E2', fg: Colors.error },
   ON_HOLD: { label: 'On Hold', icon: 'time', bg: '#FFF3D6', fg: '#8A6100' },
+  ABORTED: { label: 'Booking Failed', icon: 'close-circle', bg: '#FBE4E2', fg: Colors.error },
+  FAILED: { label: 'Booking Failed', icon: 'close-circle', bg: '#FBE4E2', fg: Colors.error },
+  PENDING: { label: 'Processing', icon: 'time', bg: '#FFF3D6', fg: '#8A6100' },
+  PAYMENT_PENDING: { label: 'Payment Pending', icon: 'time', bg: '#FFF3D6', fg: '#8A6100' },
+  PAYMENT_SUCCESS: { label: 'Payment Received - Confirming', icon: 'time', bg: '#FFF3D6', fg: '#8A6100' },
 };
 
 const statusMeta = (status) => STATUS_META[status] || { label: status, icon: 'ellipse', bg: '#FFF3D6', fg: '#8A6100' };
@@ -161,7 +170,7 @@ const MyFlightBookingsScreen = ({ navigation }) => {
           </View>
         ) : null}
 
-        {item.status === 'CANCELLED' ? (
+        {['CANCELLED', 'ABORTED', 'FAILED'].includes(item.status) ? (
           <View style={styles.cardActions}>
             <TouchableOpacity
               style={styles.cardActionButton}

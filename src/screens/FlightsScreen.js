@@ -636,6 +636,17 @@ const FlightsScreen = ({ navigation }) => {
       return;
     }
 
+    // TripJack error codes 1119/1120: children/infants can't be included in
+    // a Student or Senior Citizen fare search - catch this before the round
+    // trip to the API rather than surfacing their raw error code.
+    if ((fareType === 'STUDENT' || fareType === 'SENIOR_CITIZEN') && (childCount > 0 || infantCount > 0)) {
+      Alert.alert(
+        'Fare type restriction',
+        `${fareType === 'STUDENT' ? 'Student' : 'Senior Citizen'} fares only support adult passengers - remove children/infants or switch to Regular fare.`
+      );
+      return;
+    }
+
     try {
       const routeInfos = buildRouteInfos();
       const payload = {
