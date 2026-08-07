@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Modal,
   Pressable,
   SafeAreaView,
@@ -349,13 +350,16 @@ const HotelsScreen = ({ navigation }) => {
 
     return (
       <TouchableOpacity style={styles.hotelCard} activeOpacity={0.85} onPress={() => openHotelDetail(item)}>
-        <View style={styles.hotelHeader}>
-          <Ionicons name="business" size={44} color={Colors.secondary} />
-        </View>
+        {item.heroImageUrl ? (
+          <Image source={{ uri: item.heroImageUrl }} style={styles.hotelImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.hotelHeader}>
+            <Ionicons name="business" size={44} color={Colors.secondary} />
+          </View>
+        )}
 
         <View style={styles.hotelContent}>
           <Text style={styles.hotelName}>{item.name}</Text>
-          <Text style={styles.hotelId}>ID: {item.hotelId}</Text>
 
           {topOption && (
             <>
@@ -877,6 +881,11 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
   },
+  hotelImage: {
+    width: '100%',
+    height: 160,
+    backgroundColor: Colors.primaryLight,
+  },
   hotelContent: {
     padding: 20,
   },
@@ -885,11 +894,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.text,
     marginBottom: 4,
-  },
-  hotelId: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginBottom: 10,
   },
   tagRow: {
     flexDirection: 'row',

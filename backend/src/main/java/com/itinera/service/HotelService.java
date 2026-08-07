@@ -1,6 +1,8 @@
 package com.itinera.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.itinera.repository.HotelRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriBuilder;
@@ -9,9 +11,11 @@ import org.springframework.web.util.UriBuilder;
 public class HotelService {
 
     private final TripJackClient tripJackClient;
+    private final HotelRepository hotelRepository;
 
-    public HotelService(TripJackClient tripJackClient) {
+    public HotelService(TripJackClient tripJackClient, HotelRepository hotelRepository) {
         this.tripJackClient = tripJackClient;
+        this.hotelRepository = hotelRepository;
     }
 
     // Same host as flights (apitest.tripjack.com), despite the /hms/v3 path.
@@ -45,8 +49,28 @@ public class HotelService {
     }
 
     // Step 1 - Listing: search criteria in, hotel list with cheapest rate each.
+    // TripJack's dynamic Listing response never includes photos - by their own
+    // documented schema, images are static content only, fetched separately
+    // and cached in our own `hotels` table (see HotelCatalogService). Enrich
+    // each result here with heroImageUrl by hotelId so every consumer of this
+    // endpoint gets a photo without needing its own extra round-trip per hotel.
     public JsonNode listing(JsonNode payload) {
-        return tripJackClient.postHotel("/hms/v3/hotel/listing", payload);
+        JsonNode response = tripJackClient.postHotel("/hms/v3/hotel/listing", payload);
+        JsonNode hotels = response.get("hotels");
+        if (hotels != null && hotels.isArray()) {
+            for (JsonNode hotelNode : hotels) {
+                if (!(hotelNode instanceof ObjectNode) || !hotelNode.hasNonNull("hotelId")) {
+                    continue;
+                }
+                String hotelId = hotelNode.get("hotelId").asText();
+                hotelRepository.findById(hotelId).ifPresent(hotel -> {
+                    if (StringUtils.hasText(hotel.getHeroImageUrl())) {
+                        ((ObjectNode) hotelNode).put("heroImageUrl", hotel.getHeroImageUrl());
+                    }
+                });
+            }
+        }
+        return response;
     }
 
     // Step 2 - Detail (Dynamic Pricing): all bookable options for one hotel.

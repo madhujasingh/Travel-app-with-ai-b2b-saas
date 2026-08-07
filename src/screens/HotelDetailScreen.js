@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -14,6 +15,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson } from '../utils/hotelApiErrors';
+
+// imagesJson is the raw fetch-hotel-content images[] array, stored as text -
+// each entry has links keyed by size (Standard/XXL/...), not a flat url.
+const parseGalleryImages = (imagesJson) => {
+  if (!imagesJson) return [];
+  try {
+    const parsed = JSON.parse(imagesJson);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((img) => img?.links?.Standard?.href || img?.links?.XXL?.href || Object.values(img?.links || {})[0]?.href)
+      .filter(Boolean)
+      .slice(0, 10);
+  } catch (err) {
+    return [];
+  }
+};
 
 const formatPenaltyDate = (isoDateTime) => {
   if (!isoDateTime) return '';
@@ -67,6 +84,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
   const [error, setError] = useState(null);
   const [detail, setDetail] = useState(null);
   const [staticDetail, setStaticDetail] = useState(null);
+  const [catalogHotel, setCatalogHotel] = useState(null);
 
   const [reviewingOptionId, setReviewingOptionId] = useState(null);
   const [soldOutOptionIds, setSoldOutOptionIds] = useState(new Set());
@@ -76,6 +94,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
   useEffect(() => {
     fetchDetail();
     fetchStaticDetail();
+    fetchCatalogHotel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -142,6 +161,20 @@ const HotelDetailScreen = ({ route, navigation }) => {
       setStaticDetail(data);
     } catch (err) {
       // Silent - policies are supplementary; don't block the booking flow over it.
+    }
+  };
+
+  // TripJack's dynamic Detail/Static-Detail responses don't carry photos -
+  // images only exist in our own locally-synced catalog (see
+  // HotelCatalogService), so fetch that separately for the hero image/gallery.
+  const fetchCatalogHotel = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/hotel-catalog/${tjHotelId}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      setCatalogHotel(data);
+    } catch (err) {
+      // Silent - photos are supplementary; don't block the booking flow over it.
     }
   };
 
@@ -218,6 +251,21 @@ const HotelDetailScreen = ({ route, navigation }) => {
 
       {!loading && !error && detail && (
         <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
+          {catalogHotel?.heroImageUrl && (
+            <Image source={{ uri: catalogHotel.heroImageUrl }} style={styles.heroImage} resizeMode="cover" />
+          )}
+
+          {(() => {
+            const galleryImages = parseGalleryImages(catalogHotel?.imagesJson);
+            return galleryImages.length > 1 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryRow}>
+                {galleryImages.map((url) => (
+                  <Image key={url} source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
+                ))}
+              </ScrollView>
+            ) : null;
+          })()}
+
           <View style={styles.stayInfoRow}>
             <Text style={styles.stayInfo}>
               {searchContext.checkIn} → {searchContext.checkOut}
@@ -467,6 +515,23 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 15,
+  },
+  heroImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+    marginBottom: 10,
+    backgroundColor: Colors.primaryLight,
+  },
+  galleryRow: {
+    marginBottom: 12,
+  },
+  galleryThumb: {
+    width: 90,
+    height: 70,
+    borderRadius: 10,
+    marginRight: 8,
+    backgroundColor: Colors.primaryLight,
   },
   stayInfoRow: {
     flexDirection: 'row',
