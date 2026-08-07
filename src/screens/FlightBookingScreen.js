@@ -241,7 +241,7 @@ const parseTripJackError = (data, fallback) => {
 };
 
 const FlightBookingScreen = ({ route, navigation }) => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId, openCancel } = route.params || {};
   const isResume = !reviewResponse;
   const autoCancelHandled = useRef(false);
@@ -252,8 +252,11 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const [phase, setPhase] = useState(isResume ? 'loading' : 'form');
   const [bookingId, setBookingId] = useState(resumeBookingId || reviewResponse?.bookingId || null);
   const [travellers, setTravellers] = useState(buildDefaultTravellers(passengerCounts));
-  const [deliveryEmail, setDeliveryEmail] = useState('test@itinera.com');
-  const [deliveryPhone, setDeliveryPhone] = useState('+919500112233');
+  // Default to the logged-in user's own contact details, not a placeholder -
+  // this is where TripJack actually sends the PNR/ticket confirmation, so a
+  // leftover fake address here means the real customer never receives it.
+  const [deliveryEmail, setDeliveryEmail] = useState(user?.email || '');
+  const [deliveryPhone, setDeliveryPhone] = useState(user?.phone && user.phone !== '0000000000' ? user.phone : '');
   const [gstNumber, setGstNumber] = useState('');
   const [gstRegisteredName, setGstRegisteredName] = useState('');
   const [gstEmail, setGstEmail] = useState('');
