@@ -274,6 +274,20 @@ const HotelDetailScreen = ({ route, navigation }) => {
                   Hold deadline: {formatDeadline(reviewResult.option.deadlineDateTime)}
                 </Text>
               )}
+              {(() => {
+                // Cancellation policy can change between browsing and review -
+                // TripJack's docs say to treat the Review response (not the
+                // earlier Detail/Listing one) as the final reference for both
+                // price and cancellation policy before the user commits.
+                const reviewCancellation = cancellationSummary(reviewResult.option?.cancellation);
+                return reviewCancellation ? (
+                  <View style={[styles.reviewResultCancellationBadge, styles[`badge_${reviewCancellation.tone}`]]}>
+                    <Text style={[styles.reviewResultCancellationText, styles[`badgeText_${reviewCancellation.tone}`]]}>
+                      {reviewCancellation.text}
+                    </Text>
+                  </View>
+                ) : null;
+              })()}
               {reviewResult.onholdAllowed !== undefined && (
                 <Text style={styles.reviewResultRow}>
                   On-hold allowed: {String(reviewResult.onholdAllowed)}
@@ -522,6 +536,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.text,
     marginBottom: 2,
+  },
+  reviewResultCancellationBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginTop: 4,
+  },
+  reviewResultCancellationText: {
+    fontSize: 12,
+    color: Colors.textLight,
+    fontWeight: '600',
   },
   reviewResultNote: {
     fontSize: 12,
