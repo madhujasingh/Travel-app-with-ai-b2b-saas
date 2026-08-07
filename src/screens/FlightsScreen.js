@@ -464,6 +464,7 @@ const FlightsScreen = ({ navigation }) => {
   const [fareRuleState, setFareRuleState] = useState({ visible: false, loading: false, data: null, error: null });
   const [seatMapState, setSeatMapState] = useState({ visible: false, loading: false, data: null, error: null });
   const [selectedByGroup, setSelectedByGroup] = useState({});
+  const [activeGroupKey, setActiveGroupKey] = useState(null);
   const [showFilters, setShowFilters] = useState(true);
   const [travellerModalVisible, setTravellerModalVisible] = useState(false);
   const [showAirlineInput, setShowAirlineInput] = useState(false);
@@ -671,6 +672,7 @@ const FlightsScreen = ({ navigation }) => {
       setSearched(true);
       setReviewedFare(null);
       setSelectedByGroup({});
+      setActiveGroupKey(null);
       setSortBy('BEST');
       setStopsFilter('ALL');
 
@@ -714,12 +716,20 @@ const FlightsScreen = ({ navigation }) => {
 
   const isMultiLeg = groupKeys.length > 1;
   const allLegsSelected = isMultiLeg && groupKeys.every((key) => selectedByGroup[key]);
+  // Which leg's options are currently shown below the chips - defaults to the
+  // first leg (Onward) until the user taps a different chip or a selection
+  // auto-advances it.
+  const effectiveActiveGroupKey = activeGroupKey || groupKeys[0];
 
   // Sort/stop-filter the already-fetched results client-side (no re-search
-  // round trip). Sorted within each group so leg ordering (ONWARD before
-  // RETURN, leg 1 before leg 2, ...) is preserved for the multi-leg picker.
+  // round trip), then scope down to just the active leg - with 900+ combined
+  // onward+return options in a domestic round trip, showing everything in one
+  // flat list makes the return leg practically unreachable by scrolling.
   const visibleFlights = useMemo(() => {
     let list = flights;
+    if (isMultiLeg && effectiveActiveGroupKey) {
+      list = list.filter((flight) => flight.groupKey === effectiveActiveGroupKey);
+    }
     if (stopsFilter === 'NONSTOP') {
       list = list.filter((flight) => flight.stopsCount === 0);
     } else if (stopsFilter === 'ONE_PLUS') {
@@ -730,15 +740,8 @@ const FlightsScreen = ({ navigation }) => {
     if (!comparator) {
       return list;
     }
-
-    const byGroup = {};
-    list.forEach((flight) => {
-      if (!byGroup[flight.groupKey]) byGroup[flight.groupKey] = [];
-      byGroup[flight.groupKey].push(flight);
-    });
-    return groupKeys.flatMap((key) => [...(byGroup[key] || [])].sort(comparator));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flights, sortBy, stopsFilter, groupKeys]);
+    return [...list].sort(comparator);
+  }, [flights, sortBy, stopsFilter, isMultiLeg, effectiveActiveGroupKey]);
 
   const runReview = async (legs) => {
     const priceIds = legs.flatMap((leg) => leg.priceIds || []);
@@ -871,7 +874,17 @@ const FlightsScreen = ({ navigation }) => {
   };
 
   const selectFlightForGroup = (flight) => {
-    setSelectedByGroup((prev) => ({ ...prev, [flight.groupKey]: flight }));
+    setSelectedByGroup((prev) => {
+      const next = { ...prev, [flight.groupKey]: flight };
+      // Auto-advance to the next leg that still needs a pick (e.g. Onward ->
+      // Return), same flow real flight sites use, instead of leaving the user
+      // to notice and tap the next chip themselves.
+      const nextUnselected = groupKeys.find((key) => key !== flight.groupKey && !next[key]);
+      if (nextUnselected) {
+        setActiveGroupKey(nextUnselected);
+      }
+      return next;
+    });
     setReviewedFare(null);
   };
 
@@ -1386,7 +1399,8 @@ const FlightsScreen = ({ navigation }) => {
                   })}
                 </ScrollView>
                 <Text style={styles.resultsCount}>
-                  {visibleFlights.length} of {flights.length} option{flights.length === 1 ? '' : 's'}
+                  {visibleFlights.length} of {isMultiLeg ? flights.filter((f) => f.groupKey === effectiveActiveGroupKey).length : flights.length} option{flights.length === 1 ? '' : 's'}
+                  {isMultiLeg ? ` for ${buildJourneyLabel(effectiveActiveGroupKey)}` : ''}
                 </Text>
               </View>
             ) : null}
@@ -1397,22 +1411,35 @@ const FlightsScreen = ({ navigation }) => {
                   {tripType === 'MULTI_CITY' ? 'Pick one flight per route leg' : 'Pick your onward and return flight'}
                 </Text>
                 <Text style={styles.legSelectionHint}>
-                  Tap a flight in each group below, then review them together. TripJack prices these as a single itinerary.
+                  Tap a leg below to switch what's shown, tap a flight card to pick it - the next leg comes up
+                  automatically. TripJack prices these as a single itinerary.
                 </Text>
                 <View style={styles.legSelectionChips}>
                   {groupKeys.map((key) => {
                     const selection = selectedByGroup[key];
+                    const isActive = key === effectiveActiveGroupKey;
                     return (
-                      <View key={key} style={[styles.legSelectionChip, selection && styles.legSelectionChipDone]}>
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          styles.legSelectionChip,
+                          selection && styles.legSelectionChipDone,
+                          isActive && styles.legSelectionChipActive,
+                        ]}
+                        onPress={() => setActiveGroupKey(key)}
+                      >
                         <Ionicons
                           name={selection ? 'checkmark-circle' : 'ellipse-outline'}
                           size={16}
-                          color={selection ? Colors.success : Colors.textMuted}
+                          color={selection ? Colors.success : isActive ? Colors.primaryDark : Colors.textMuted}
                         />
-                        <Text style={styles.legSelectionChipText} numberOfLines={1}>
+                        <Text
+                          style={[styles.legSelectionChipText, isActive && styles.legSelectionChipTextActive]}
+                          numberOfLines={1}
+                        >
                           {buildJourneyLabel(key)}{selection ? `: ₹${selection.price.toLocaleString()}` : ''}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                 </View>
@@ -2264,11 +2291,18 @@ const styles = StyleSheet.create({
     borderColor: Colors.success,
     backgroundColor: '#EAF7EC',
   },
+  legSelectionChipActive: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
   legSelectionChipText: {
     marginLeft: 6,
     fontSize: 12,
     fontWeight: '700',
     color: Colors.text,
+  },
+  legSelectionChipTextActive: {
+    color: Colors.primaryDark,
   },
   legReviewButtonDisabled: {
     opacity: 0.5,
