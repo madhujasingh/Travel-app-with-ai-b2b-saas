@@ -82,7 +82,9 @@ const B2BDashboard = ({ navigation }) => {
     let active = true;
     (async () => {
       try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/flights/user-balance`);
+        const response = await fetch(`${API_CONFIG.BASE_URL}/flights/user-balance`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const data = await response.json();
         const bs = data?.user?.bs || data?.bs || null;
         if (active) setWallet(bs);
@@ -95,7 +97,7 @@ const B2BDashboard = ({ navigation }) => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [token]);
 
   const recentBookings = [
     {

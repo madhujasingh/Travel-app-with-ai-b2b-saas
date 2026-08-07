@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson } from '../utils/hotelApiErrors';
+import { useAuth } from '../context/AuthContext';
 
 const TITLES = ['Mr', 'Mrs', 'Ms', 'Miss', 'Master'];
 
@@ -65,6 +66,7 @@ const buildInitialTravelers = (rooms) => {
 };
 
 const HotelBookingScreen = ({ route, navigation }) => {
+  const { token } = useAuth();
   const { hotelName, searchContext, reviewResult } = route.params;
   const option = reviewResult.option;
   const panRequired = Boolean(option?.compliance?.panRequired);
@@ -184,7 +186,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
         `${API_CONFIG.BASE_URL}/hotels/book`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload),
         },
         'Unable to submit this booking right now.'
@@ -207,7 +209,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
         `${API_CONFIG.BASE_URL}/hotels/booking-details`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ bookingId }),
         },
         'Unable to check booking status.'
@@ -244,7 +246,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
         `${API_CONFIG.BASE_URL}/hotels/confirm-book`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(payload),
         },
         'Unable to confirm and pay for this booking.'
@@ -272,7 +274,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
             setCancelling(true);
             await fetchHotelJson(
               `${API_CONFIG.BASE_URL}/hotels/cancel-booking/${bookingId}`,
-              { method: 'POST' },
+              { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
               'Unable to cancel this booking.'
             );
             Alert.alert('Cancellation requested', 'Checking the latest status now.');

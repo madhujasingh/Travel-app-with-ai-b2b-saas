@@ -39,12 +39,37 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/ai/**").permitAll()
-                .requestMatchers("/flights/**").permitAll()
+                // Only the discovery/pricing phase of the TripJack flight
+                // passthrough is public (browsing without an account) - Book,
+                // Confirm-Book, Booking Details, Release PNR, Amendments,
+                // Ancillaries, Reissue, and User Balance all either move real
+                // money against TripJack's production API or reveal a specific
+                // booking's traveller PII/PNR by id alone, so they require a
+                // real logged-in user. Explicit permitAll entries must come
+                // before the catch-all authenticated() below - first match wins.
+                .requestMatchers(HttpMethod.POST, "/flights/search").permitAll()
+                .requestMatchers(HttpMethod.POST, "/flights/review").permitAll()
+                .requestMatchers(HttpMethod.POST, "/flights/fare-rule").permitAll()
+                .requestMatchers(HttpMethod.POST, "/flights/seat-map").permitAll()
+                .requestMatchers(HttpMethod.POST, "/flights/fare-validate").permitAll()
+                .requestMatchers("/flights/**").authenticated()
                 // Persisted flight bookings are account-scoped (ownership enforced
                 // in FlightBookingController/-Service) - unlike the TripJack
                 // passthrough endpoints above, these need a real logged-in user.
                 .requestMatchers("/flight-bookings/**").authenticated()
-                .requestMatchers("/hotels/**").permitAll()
+                // Same split as flights - Listing/Detail/Review/Static-Detail are
+                // pre-booking discovery, public; Book/Confirm-Book/Booking
+                // Details/Cancel move money or expose a specific booking's PII.
+                .requestMatchers(HttpMethod.POST, "/hotels/listing").permitAll()
+                .requestMatchers(HttpMethod.POST, "/hotels/detail").permitAll()
+                .requestMatchers(HttpMethod.POST, "/hotels/review").permitAll()
+                .requestMatchers(HttpMethod.POST, "/hotels/static-detail").permitAll()
+                .requestMatchers(HttpMethod.GET, "/hotels/nationalities").permitAll()
+                .requestMatchers(HttpMethod.GET, "/hotels/countries").permitAll()
+                .requestMatchers(HttpMethod.GET, "/hotels/city-region-ids").permitAll()
+                .requestMatchers(HttpMethod.POST, "/hotels/hotel-mapping").permitAll()
+                .requestMatchers(HttpMethod.POST, "/hotels/hotel-content").permitAll()
+                .requestMatchers("/hotels/**").authenticated()
                 // Syncing costs real TripJack API calls and writes to our DB -
                 // admin-triggered only. Reading the cached catalog is public,
                 // same as /hotels/** above.

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import DatePickerModal from '../components/DatePickerModal';
+import { useAuth } from '../context/AuthContext';
 
 // TripJack's Reissue Review/Book errors sometimes come back as a direct
 // passthrough and sometimes wrapped by GlobalExceptionHandler - same
@@ -27,10 +28,10 @@ const parseTripJackError = (data, fallback) => {
   return message || fallback;
 };
 
-const post = async (path, body) => {
+const post = async (path, body, token) => {
   const response = await fetch(`${API_CONFIG.BASE_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   });
   const data = await response.json();
@@ -108,6 +109,7 @@ const getSsrSegments = (reviewData) => {
 };
 
 const FlightReissueScreen = ({ route, navigation }) => {
+  const { token } = useAuth();
   const { bookingId } = route.params || {};
 
   const [phase, setPhase] = useState('loading');
@@ -124,7 +126,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
   useEffect(() => {
     (async () => {
       try {
-        const { ok, data } = await post('/flights/booking-details', { bookingId });
+        const { ok, data } = await post('/flights/booking-details', { bookingId }, token);
         if (!ok || data?.order?.status !== 'SUCCESS') {
           throw new Error('This booking must be a confirmed (SUCCESS) ticket before it can be reissued.');
         }
@@ -165,7 +167,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
         paxIds: travellerInfos.map((t) => String(t.id)),
       };
 
-      const listResult = await post('/flights/reissue/searchquery-list', searchBody);
+      const listResult = await post('/flights/reissue/searchquery-list', searchBody, token);
       if (!listResult.ok || listResult.data?.status?.success === false) {
         throw new Error(parseTripJackError(listResult.data, 'Unable to search reschedule options for this trip.'));
       }
@@ -174,7 +176,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
         throw new Error('TripJack did not return a search request id.');
       }
 
-      const pollResult = await post('/flights/reissue/search', { requestId });
+      const pollResult = await post('/flights/reissue/search', { requestId }, token);
       if (!pollResult.ok || pollResult.data?.status?.success === false) {
         throw new Error(parseTripJackError(pollResult.data, 'Unable to fetch reschedule options for this trip.'));
       }
@@ -230,7 +232,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
         priceIds: [option.priceId],
         oldBookingId: bookingId,
         priceValidation: true,
-      });
+      }, token);
       if (!ok || data?.status?.success === false) {
         throw new Error(parseTripJackError(data, 'This option is no longer available - please pick another.'));
       }
@@ -305,7 +307,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
         };
       }
 
-      const { ok, data } = await post('/flights/reissue/book', reissueBody);
+      const { ok, data } = await post('/flights/reissue/book', reissueBody, token);
       if (!ok || data?.status?.success === false) {
         throw new Error(parseTripJackError(data, 'Unable to confirm this reschedule right now.'));
       }

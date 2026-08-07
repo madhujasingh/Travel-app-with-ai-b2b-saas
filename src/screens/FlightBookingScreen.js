@@ -325,7 +325,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     console.log('[booking-details] REQUEST', JSON.stringify(requestBody));
     const response = await fetch(`${API_CONFIG.BASE_URL}/flights/booking-details`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(requestBody),
     });
     const data = await response.json();
@@ -474,7 +474,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       console.log('[book] REQUEST', JSON.stringify(body));
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/book`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
       const data = await response.json();
@@ -518,7 +518,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       console.log('[book-instant] REQUEST', JSON.stringify(body));
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/book`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
       const data = await response.json();
@@ -553,7 +553,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       console.log('[confirm-fare] REQUEST', JSON.stringify({ bookingId }));
       const confirmFareResponse = await fetch(`${API_CONFIG.BASE_URL}/flights/confirm-fare-before-ticket`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bookingId }),
       });
       const confirmFareData = await confirmFareResponse.json();
@@ -567,7 +567,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       console.log('[confirm-book] REQUEST', JSON.stringify(confirmBookBody));
       const confirmBookResponse = await fetch(`${API_CONFIG.BASE_URL}/flights/confirm-book`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(confirmBookBody),
       });
       const confirmBookData = await confirmBookResponse.json();
@@ -637,7 +637,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/amendment-details`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ amendmentId }),
       });
       const data = await response.json();
@@ -682,7 +682,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/submit-amendment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bookingId, type: 'FULL_REFUND', remarks: reason }),
       });
       const data = await response.json();
@@ -702,7 +702,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     try {
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/amendment-charges`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bookingId, type: 'FULL_REFUND', remarks: reason }),
       });
       const data = await response.json();
@@ -742,7 +742,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     try {
       const ssrResponse = await fetch(`${API_CONFIG.BASE_URL}/flights/ancillaries/fetch-ssr`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bookingId }),
       });
       const ssrData = await ssrResponse.json();
@@ -756,7 +756,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       try {
         const seatResponse = await fetch(`${API_CONFIG.BASE_URL}/flights/ancillaries/fetch-seat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ bookingId }),
         });
         const parsedSeat = await seatResponse.json();
@@ -843,7 +843,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const pollAncillaryAmendment = async (amendmentId, attempt) => {
     const response = await fetch(`${API_CONFIG.BASE_URL}/flights/amendment-details`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ amendmentId }),
     });
     const data = await response.json();
@@ -867,7 +867,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       const sI = buildAncillaryPayload();
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/ancillaries/add-ssr`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ bookingId, paymentInfos: [{ amount }], sI }),
       });
       const data = await response.json();
