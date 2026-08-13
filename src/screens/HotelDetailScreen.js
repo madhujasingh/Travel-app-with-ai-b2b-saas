@@ -121,7 +121,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
         nationality: searchContext.nationality,
       };
 
-      console.log('[hotel detail] REQUEST', JSON.stringify(payload));
+      if (__DEV__) console.log('[hotel detail] REQUEST', JSON.stringify(payload));
       const data = await fetchHotelJson(
         `${API_CONFIG.BASE_URL}/hotels/detail`,
         {
@@ -131,7 +131,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
         },
         'Unable to load hotel options right now.'
       );
-      console.log('[hotel detail] RESPONSE', JSON.stringify(data));
+      if (__DEV__) console.log('[hotel detail] RESPONSE', JSON.stringify(data));
 
       setDetail(data);
     } catch (err) {
@@ -196,7 +196,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
         hid: tjHotelId,
       };
 
-      console.log('[hotel review] REQUEST', JSON.stringify(payload));
+      if (__DEV__) console.log('[hotel review] REQUEST', JSON.stringify(payload));
       const data = await fetchHotelJson(
         `${API_CONFIG.BASE_URL}/hotels/review`,
         {
@@ -206,7 +206,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
         },
         'Unable to review this option right now.'
       );
-      console.log('[hotel review] RESPONSE', JSON.stringify(data));
+      if (__DEV__) console.log('[hotel review] RESPONSE', JSON.stringify(data));
 
       setReviewResult(data);
     } catch (err) {
@@ -265,6 +265,15 @@ const HotelDetailScreen = ({ route, navigation }) => {
               </ScrollView>
             ) : null;
           })()}
+
+          {catalogHotel?.starRating && (
+            <View style={styles.hotelRatingRow}>
+              {Array.from({ length: Math.round(parseFloat(catalogHotel.starRating)) || 0 }).map((_, i) => (
+                <Ionicons key={i} name="star" size={14} color={Colors.warning} />
+              ))}
+              <Text style={styles.hotelRatingText}>{catalogHotel.starRating}-star hotel</Text>
+            </View>
+          )}
 
           <View style={styles.stayInfoRow}>
             <Text style={styles.stayInfo}>
@@ -338,7 +347,9 @@ const HotelDetailScreen = ({ route, navigation }) => {
               })()}
               {reviewResult.onholdAllowed !== undefined && (
                 <Text style={styles.reviewResultRow}>
-                  On-hold allowed: {String(reviewResult.onholdAllowed)}
+                  {reviewResult.onholdAllowed
+                    ? 'You can hold this room now and pay later.'
+                    : 'Payment is required now to confirm this booking.'}
                 </Text>
               )}
               <TouchableOpacity
@@ -369,7 +380,6 @@ const HotelDetailScreen = ({ route, navigation }) => {
             return (
               <View key={option.optionId} style={[styles.optionCard, isReviewed && styles.optionCardSelected]}>
                 <View style={styles.optionHeader}>
-                  <Text style={styles.optionType}>{option.optionType}</Text>
                   <Text style={styles.mealBasis}>{option.mealBasis}</Text>
                 </View>
 
@@ -439,9 +449,6 @@ const HotelDetailScreen = ({ route, navigation }) => {
                       <Text style={styles.badgeText}>Passport required</Text>
                     </View>
                   )}
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{option.commercial?.type}</Text>
-                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -532,6 +539,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginRight: 8,
     backgroundColor: Colors.primaryLight,
+  },
+  hotelRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginBottom: 10,
+  },
+  hotelRatingText: {
+    marginLeft: 6,
+    fontSize: 13,
+    color: Colors.textMuted,
   },
   stayInfoRow: {
     flexDirection: 'row',
@@ -654,11 +672,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 6,
-  },
-  optionType: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: Colors.primaryDark,
   },
   mealBasis: {
     fontSize: 13,

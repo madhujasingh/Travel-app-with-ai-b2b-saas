@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -48,6 +48,13 @@ const generateCorrelationId = () =>
 
 const createEmptyRoom = () => ({ adults: 2, children: 0, childAge: [] });
 
+const STAR_FILTERS = [
+  { value: 'ALL', label: 'All ratings' },
+  { value: '3', label: '3★+' },
+  { value: '4', label: '4★+' },
+  { value: '5', label: '5★' },
+];
+
 const HotelsScreen = ({ navigation }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -62,6 +69,7 @@ const HotelsScreen = ({ navigation }) => {
   const [hotels, setHotels] = useState([]);
   const [totalResults, setTotalResults] = useState(0);
   const [searchSession, setSearchSession] = useState(null);
+  const [starFilter, setStarFilter] = useState('ALL');
 
   const [nationalities, setNationalities] = useState(null);
   const [nationalityModal, setNationalityModal] = useState(false);
@@ -203,9 +211,10 @@ const HotelsScreen = ({ navigation }) => {
       setLoading(true);
       setSearched(true);
       setHotels([]);
+      setStarFilter('ALL');
       setSearchSession(null);
 
-      console.log('[hotel listing] REQUEST', JSON.stringify(payload));
+      if (__DEV__) console.log('[hotel listing] REQUEST', JSON.stringify(payload));
       const data = await fetchHotelJson(
         `${API_CONFIG.BASE_URL}/hotels/listing`,
         {
@@ -215,7 +224,7 @@ const HotelsScreen = ({ navigation }) => {
         },
         'Unable to search hotels right now.'
       );
-      console.log('[hotel listing] RESPONSE', JSON.stringify(data));
+      if (__DEV__) console.log('[hotel listing] RESPONSE', JSON.stringify(data));
 
       setHotels(data.hotels || []);
       setTotalResults(data.totalResults || 0);
@@ -341,6 +350,15 @@ const HotelsScreen = ({ navigation }) => {
     `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
   );
 
+  const filteredHotels = useMemo(() => {
+    if (starFilter === 'ALL') return hotels;
+    const minStars = Number(starFilter);
+    return hotels.filter((item) => {
+      const stars = parseFloat(item.starRating);
+      return Number.isFinite(stars) && stars >= minStars;
+    });
+  }, [hotels, starFilter]);
+
   const renderHotel = ({ item }) => {
     // Best practice from the docs: filter out options where inventory.available
     // is explicitly false before picking what to display.
@@ -360,6 +378,19 @@ const HotelsScreen = ({ navigation }) => {
 
         <View style={styles.hotelContent}>
           <Text style={styles.hotelName}>{item.name}</Text>
+
+          {(item.starRating || item.city) && (
+            <View style={styles.hotelMetaRow}>
+              {item.starRating ? (
+                <View style={styles.starRow}>
+                  {Array.from({ length: Math.round(parseFloat(item.starRating)) || 0 }).map((_, i) => (
+                    <Ionicons key={i} name="star" size={12} color={Colors.warning} />
+                  ))}
+                </View>
+              ) : null}
+              {item.city ? <Text style={styles.hotelCity}>{item.city}</Text> : null}
+            </View>
+          )}
 
           {topOption && (
             <>
@@ -551,21 +582,48 @@ const HotelsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {searched && !loading && (
-          <Text style={styles.resultsSummary}>
-            {hotels.length} of {totalResults} hotels shown
-          </Text>
+        {searched && !loading && hotels.length > 0 && (
+          <View style={styles.resultsToolbar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
+              {STAR_FILTERS.map((option) => {
+                const active = starFilter === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.pill, active && styles.pillActive]}
+                    onPress={() => setStarFilter(option.value)}
+                  >
+                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <Text style={styles.resultsCount}>
+              {filteredHotels.length} of {totalResults} hotel{totalResults === 1 ? '' : 's'} shown
+            </Text>
+          </View>
         )}
 
         {searched && !loading && hotels.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="bed-outline" size={40} color={Colors.textMuted} />
             <Text style={styles.emptyStateText}>No hotels found for this search.</Text>
+            <Text style={styles.emptyStateSubtext}>Try different dates or another city.</Text>
+          </View>
+        )}
+
+        {searched && !loading && hotels.length > 0 && filteredHotels.length === 0 && (
+          <View style={styles.emptyState}>
+            <Ionicons name="filter-outline" size={40} color={Colors.textMuted} />
+            <Text style={styles.emptyStateText}>No hotels match this rating filter.</Text>
+            <TouchableOpacity style={styles.clearFilterButton} onPress={() => setStarFilter('ALL')}>
+              <Text style={styles.clearFilterButtonText}>Clear Filter</Text>
+            </TouchableOpacity>
           </View>
         )}
 
         <FlatList
-          data={hotels}
+          data={filteredHotels}
           renderItem={renderHotel}
           keyExtractor={(item) => item.hotelId}
           contentContainerStyle={styles.listContainer}
@@ -853,6 +911,54 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 4,
   },
+  resultsToolbar: {
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  resultsToolbarRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  pill: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#FFF4EC',
+    marginRight: 10,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  pillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  pillText: {
+    color: Colors.primaryDark,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  pillTextActive: {
+    color: Colors.secondary,
+  },
+  resultsCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  clearFilterButton: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: Colors.primary,
+  },
+  clearFilterButtonText: {
+    color: Colors.secondary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
   emptyState: {
     alignItems: 'center',
     padding: 30,
@@ -861,6 +967,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: Colors.textMuted,
     fontSize: 14,
+  },
+  emptyStateSubtext: {
+    marginTop: 4,
+    color: Colors.textMuted,
+    fontSize: 12,
   },
   listContainer: {
     padding: 15,
@@ -894,6 +1005,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.text,
     marginBottom: 4,
+  },
+  hotelMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  starRow: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  hotelCity: {
+    fontSize: 13,
+    color: Colors.textMuted,
   },
   tagRow: {
     flexDirection: 'row',

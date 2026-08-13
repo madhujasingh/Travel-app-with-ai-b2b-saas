@@ -49,11 +49,13 @@ public class HotelService {
     }
 
     // Step 1 - Listing: search criteria in, hotel list with cheapest rate each.
-    // TripJack's dynamic Listing response never includes photos - by their own
-    // documented schema, images are static content only, fetched separately
-    // and cached in our own `hotels` table (see HotelCatalogService). Enrich
-    // each result here with heroImageUrl by hotelId so every consumer of this
-    // endpoint gets a photo without needing its own extra round-trip per hotel.
+    // TripJack's dynamic Listing response never includes photos, star rating,
+    // or address - by their own documented schema, that's static content
+    // only, fetched separately and cached in our own `hotels` table (see
+    // HotelCatalogService). Enrich each result here by hotelId so every
+    // consumer of this endpoint gets it without needing its own extra
+    // round-trip per hotel (the customer-facing star-rating filter and
+    // locality-on-card display both depend on this).
     public JsonNode listing(JsonNode payload) {
         JsonNode response = tripJackClient.postHotel("/hms/v3/hotel/listing", payload);
         JsonNode hotels = response.get("hotels");
@@ -64,8 +66,15 @@ public class HotelService {
                 }
                 String hotelId = hotelNode.get("hotelId").asText();
                 hotelRepository.findById(hotelId).ifPresent(hotel -> {
+                    ObjectNode node = (ObjectNode) hotelNode;
                     if (StringUtils.hasText(hotel.getHeroImageUrl())) {
-                        ((ObjectNode) hotelNode).put("heroImageUrl", hotel.getHeroImageUrl());
+                        node.put("heroImageUrl", hotel.getHeroImageUrl());
+                    }
+                    if (StringUtils.hasText(hotel.getStarRating())) {
+                        node.put("starRating", hotel.getStarRating());
+                    }
+                    if (StringUtils.hasText(hotel.getCity())) {
+                        node.put("city", hotel.getCity());
                     }
                 });
             }
