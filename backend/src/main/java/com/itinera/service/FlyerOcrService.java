@@ -1,6 +1,7 @@
 package com.itinera.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -64,9 +65,11 @@ public class FlyerOcrService {
                     .retrieve()
                     .body(JsonNode.class);
         } catch (HttpStatusCodeException ex) {
+            String detail = extractGoogleErrorMessage(ex.getResponseBodyAsString());
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "Vision API returned an error: " + ex.getStatusCode().value()
+                    "Vision API returned " + ex.getStatusCode().value()
+                            + (detail != null ? ": " + detail : "")
             );
         } catch (ResourceAccessException ex) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Vision API is unavailable");
@@ -87,5 +90,21 @@ public class FlyerOcrService {
 
         JsonNode fullText = first.path("fullTextAnnotation").path("text");
         return fullText.isMissingNode() ? "" : fullText.asText("");
+    }
+
+    // Google's error body shape is {"error": {"code": ..., "message": "...", "status": "..."}} -
+    // pull the message out so the admin sees the real reason (bad key, billing
+    // not enabled, wrong key restriction, etc.) instead of just a status code.
+    private String extractGoogleErrorMessage(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode body = new ObjectMapper().readTree(responseBody);
+            JsonNode message = body.path("error").path("message");
+            return message.isMissingNode() ? null : message.asText(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
