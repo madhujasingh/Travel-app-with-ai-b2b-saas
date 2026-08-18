@@ -2,12 +2,17 @@ package com.itinera.controller;
 
 import com.itinera.model.Itinerary;
 import com.itinera.repository.ItineraryRepository;
+import com.itinera.service.FlyerOcrService;
 import com.itinera.service.ItineraryService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/itineraries")
@@ -15,6 +20,9 @@ public class ItineraryController {
 
     @Autowired
     private ItineraryService itineraryService;
+
+    @Autowired
+    private FlyerOcrService flyerOcrService;
 
     @GetMapping
     public ResponseEntity<List<Itinerary>> getAllItineraries() {
@@ -66,6 +74,27 @@ public class ItineraryController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Itinerary> createItinerary(@RequestBody Itinerary itinerary) {
         return ResponseEntity.ok(itineraryService.createItinerary(itinerary));
+    }
+
+    // OCRs a flyer/poster photo into raw text - the admin's paste-and-parse
+    // box (flyerTextParser.js on the frontend) does the actual structuring,
+    // this just gets text out of an image for it.
+    @PostMapping(value = "/extract-from-flyer", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> extractFromFlyer(@RequestParam("flyer") MultipartFile flyer) {
+        if (flyer.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No image uploaded"));
+        }
+        String contentType = flyer.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Uploaded file must be an image"));
+        }
+        try {
+            String text = flyerOcrService.extractText(flyer.getBytes());
+            return ResponseEntity.ok(Map.of("text", text));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "Could not read uploaded image"));
+        }
     }
 
     @PutMapping("/{id}")
