@@ -174,9 +174,12 @@ public class AuthController {
 
         FailedLoginState state = failedLoginAttempts.get(normalizedEmail);
         if (state != null && state.lockedUntil > System.currentTimeMillis()) {
+            long minutesLeft = Math.max(1,
+                    (long) Math.ceil((state.lockedUntil - System.currentTimeMillis()) / 60000.0));
             return ResponseEntity.status(429).body(Map.of(
                     "error", "Too many attempts",
-                    "message", "Too many failed login attempts. Please try again in a few minutes."
+                    "message", "Too many failed login attempts. Try again in " + minutesLeft
+                            + (minutesLeft == 1 ? " minute." : " minutes.")
             ));
         }
 
