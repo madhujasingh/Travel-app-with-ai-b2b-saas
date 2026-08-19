@@ -48,6 +48,26 @@ public class HotelCatalogController {
         return ResponseEntity.ok(Map.of("synced", count));
     }
 
+    // Admin-only (see SecurityConfig) - syncs every hotel TripJack has
+    // mapped for ONE city (resolved to a regionId via fetch-city-regionIds,
+    // then fetch-hotel-mapping filtered by that regionId), instead of
+    // syncCountry's whole-country pull. Use this to fill in a specific
+    // city's coverage - e.g. a low-maxPages country sync can leave a city
+    // with only a fraction of its real hotel count synced.
+    // lookupMaxPages bounds the regionId search (fetch-city-regionIds has no
+    // name filter, so finding one city means paging through the global list
+    // at 2000/page); mappingMaxPages bounds the hotel-mapping pull once the
+    // regionId is found.
+    @PostMapping("/sync-city")
+    public ResponseEntity<?> syncCity(
+            @RequestParam String cityName,
+            @RequestParam(defaultValue = "100") int lookupMaxPages,
+            @RequestParam(defaultValue = "5") int mappingMaxPages
+    ) {
+        Map<String, Object> result = hotelCatalogService.syncCity(cityName, lookupMaxPages, mappingMaxPages);
+        return ResponseEntity.ok(result);
+    }
+
     // Public - powers the "search by city" picker on the frontend. Only
     // returns cities that actually have synced hotels, so every result is
     // guaranteed to resolve to real, searchable hotel IDs.
