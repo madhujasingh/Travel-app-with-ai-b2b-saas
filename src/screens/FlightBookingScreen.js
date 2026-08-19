@@ -48,6 +48,7 @@ const syncFlightBooking = async (token, entry) => {
       body: JSON.stringify({
         tripjackBookingId: entry.bookingId,
         routeSummary: entry.summary,
+        airlineCode: entry.airlineCode,
         totalFare: entry.totalFare,
         status: entry.status,
       }),
@@ -148,9 +149,51 @@ const buildAncillarySegments = (ssrData, seatData, bookingTravellers) => {
   return segments;
 };
 
+// tripSeatMap.tripSeat is keyed by TripJack segment id, with rows/columns that
+// include gaps for the aisle (e.g. a 3-3 layout skips column 4) - build a
+// row-major grid from sInfo positions rather than assuming contiguous columns.
+const buildSeatGrid = (segment) => {
+  const rowCount = Number(segment?.sData?.row || 0);
+  const columnCount = Number(segment?.sData?.column || 0);
+  const seatByPosition = {};
+  (segment?.seats || []).forEach((seat) => {
+    const row = seat?.seatPosition?.row;
+    const column = seat?.seatPosition?.column;
+    if (row != null && column != null) {
+      seatByPosition[`${row}-${column}`] = seat;
+    }
+  });
+
+  const rows = [];
+  for (let row = 1; row <= rowCount; row += 1) {
+    const cols = [];
+    for (let column = 1; column <= columnCount; column += 1) {
+      cols.push(seatByPosition[`${row}-${column}`] || null);
+    }
+    rows.push(cols);
+  }
+  return rows;
+};
+
+// Static UI copy, not something TripJack's Seat Map API returns (its only
+// text field is `nt`, which explains why a specific leg has no seat data -
+// not a general seat-preference disclaimer) - mirrors the notice shown on
+// TripJack's own booking site next to seat selection.
+const SEAT_MAP_DISCLAIMER =
+  '*Conditions apply. We will try our best to accommodate your seat preferences, however due to operational considerations we can not guarantee this selection. The seat map shown may not be the exact replica of flight layout, we shall not be responsible for losses arising from the same. Thank you for your understanding.';
+
 const routeSummary = (flights) => {
   if (!Array.isArray(flights) || !flights.length) return 'Flight';
   return flights.map((leg) => `${leg.from}→${leg.to}`).join(' • ');
+};
+
+// Mirrors the same "multiple operating carriers -> MULTI" logic FlightsScreen
+// uses per-card, but across every leg of the journey (e.g. onward + return).
+const routeAirlineCode = (flights) => {
+  if (!Array.isArray(flights) || !flights.length) return null;
+  const codes = new Set(flights.map((leg) => leg.airlineCode).filter(Boolean));
+  if (codes.size === 0) return null;
+  return codes.size > 1 ? 'MULTI' : [...codes][0];
 };
 
 // Friendlier text for TripJack's documented error codes (error-codes/errorcodes.pdf)
@@ -245,6 +288,12 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId, openCancel } = route.params || {};
   const isResume = !reviewResponse;
   const autoCancelHandled = useRef(false);
+  // Lets the top section tabs ("Passenger Details" / "Baggage & Meal" /
+  // "Seats") jump-scroll the form instead of making the user hunt through
+  // one long scroll - mirrors TripJack's own booking page.
+  const formScrollRef = useRef(null);
+  const sectionOffsets = useRef({});
+  const [activeSection, setActiveSection] = useState('passenger');
 
   const conditions = reviewResponse?.conditions || {};
   const totalFare = Number(reviewResponse?.totalPriceInfo?.totalFareDetail?.fC?.TF || 0);
@@ -266,6 +315,14 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const [emergencyEmail, setEmergencyEmail] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [ssrSelections, setSsrSelections] = useState({});
+  const [seatMapState, setSeatMapState] = useState({ loading: false, data: null, error: null });
+  // { [segmentId]: { [travellerIndex]: seatCode } } - unlike baggage/meal
+  // (one choice applied to the whole segment), a seat is inherently
+  // per-traveller, so each non-infant traveller picks their own.
+  const [seatSelections, setSeatSelections] = useState({});
+  // { [segmentId]: travellerIndex } - which traveller a tap on the seat
+  // grid currently assigns a seat to, per segment.
+  const [activeSeatTraveller, setActiveSeatTraveller] = useState({});
   const [titlePicker, setTitlePicker] = useState({ visible: false, travellerIndex: null });
   const [datePicker, setDatePicker] = useState({ visible: false, travellerIndex: null, field: null });
   const [bookingDetails, setBookingDetails] = useState(null);
@@ -296,11 +353,123 @@ const FlightBookingScreen = ({ route, navigation }) => {
     });
   };
 
-  // Pre-booking baggage/meal SSR add to the order total (same as post-booking
-  // ancillaries, see computeAncillaryAmount below) - TripJack rejects Book/
-  // Confirm-Book with errCode 1015 ("Total amount passed in payment doesn't
-  // match with total order Amount") if paymentInfos.amount is just the base
-  // fare while ssrBaggageInfos/ssrMealInfos are attached to the same request.
+  // Infants don't get their own seat, so they're excluded from seat picking -
+  // same filter buildAncillarySegments already applies post-booking.
+  const nonInfantTravellers = travellers
+    .map((traveller, travellerIndex) => ({ traveller, travellerIndex }))
+    .filter(({ traveller }) => traveller.pt !== 'INFANT');
+
+  // Seat availability isn't part of AirReviewResponse (unlike baggage/meal's
+  // ssrInfo) - it's a separate TripJack call keyed by the same review
+  // bookingId, fetched once the review is in hand (see the effect below).
+  // `seats` keeps every seat (booked included) so the grid can grey those
+  // out - selection itself still refuses anything with isBooked true.
+  const seatOptionsBySegmentId = seatMapState.data?.tripSeatMap?.tripSeat || {};
+  const seatSegmentsList = Array.isArray(reviewResponse?.tripInfos)
+    ? reviewResponse.tripInfos.flatMap((trip) =>
+        (trip?.sI || [])
+          .map((segment) => {
+            const seatEntry = seatOptionsBySegmentId[segment?.id];
+            return {
+              id: segment?.id,
+              label: `${segment?.da?.code || '--'} → ${segment?.aa?.code || '--'}`,
+              sData: seatEntry?.sData,
+              seats: seatEntry?.sInfo || [],
+              note: seatEntry?.nt || null,
+            };
+          })
+          .filter((segment) => segment.seats.length > 0 || segment.note)
+      )
+    : [];
+
+  const fetchSeatMap = async () => {
+    if (!bookingId) return;
+    setSeatMapState({ loading: true, data: null, error: null });
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/flights/seat-map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || 'Unable to load seat availability right now.');
+      }
+      setSeatMapState({ loading: false, data, error: null });
+    } catch (error) {
+      // Silent - seat selection is optional; don't block the booking form if
+      // this particular fare has no seat map (conditions.isa can be false).
+      setSeatMapState({ loading: false, data: null, error: error.message || null });
+    }
+  };
+
+  useEffect(() => {
+    // Per the Seat Map API doc: without conditions.isa true, TripJack won't
+    // return seat info for this fare regardless - skip the call entirely.
+    if (isResume || !conditions?.isa) return;
+    fetchSeatMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isResume, bookingId, conditions?.isa]);
+
+  const chooseSeat = (segmentId, travellerIndex, seat) => {
+    if (seat.isBooked) {
+      Alert.alert('Seat unavailable', `Seat ${seat.seatNo} is already booked.`);
+      return;
+    }
+    setSeatSelections((prev) => {
+      const current = prev[segmentId] || {};
+      const alreadyMine = current[travellerIndex] === seat.code;
+      if (!alreadyMine) {
+        const takenBy = Object.entries(current).find(
+          ([otherIndex, code]) => Number(otherIndex) !== travellerIndex && code === seat.code
+        );
+        if (takenBy) {
+          const otherTraveller = travellers[Number(takenBy[0])];
+          Alert.alert(
+            'Seat taken',
+            `Seat ${seat.seatNo} is already selected for ${otherTraveller?.fN || `traveller ${Number(takenBy[0]) + 1}`}.`
+          );
+          return prev;
+        }
+      }
+      const next = { ...current, [travellerIndex]: alreadyMine ? undefined : seat.code };
+      return { ...prev, [segmentId]: next };
+    });
+  };
+
+  const recordSectionOffset = (key) => (event) => {
+    sectionOffsets.current[key] = event.nativeEvent.layout.y;
+  };
+
+  const scrollToSection = (key) => {
+    setActiveSection(key);
+    const y = sectionOffsets.current[key];
+    if (y != null) {
+      formScrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+    }
+  };
+
+  // Lightweight scroll-spy: highlight whichever section's recorded offset is
+  // the closest one at or above the current scroll position.
+  const handleFormScroll = (event) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    let closestKey = 'passenger';
+    let closestY = -Infinity;
+    Object.entries(sectionOffsets.current).forEach(([key, y]) => {
+      if (y - 40 <= offsetY && y > closestY) {
+        closestKey = key;
+        closestY = y;
+      }
+    });
+    setActiveSection(closestKey);
+  };
+
+  // Pre-booking baggage/meal/seat SSR add to the order total (same as post-
+  // booking ancillaries, see computeAncillaryAmount below) - TripJack rejects
+  // Book/Confirm-Book with errCode 1015 ("Total amount passed in payment
+  // doesn't match with total order Amount") if paymentInfos.amount is just
+  // the base fare while ssrBaggageInfos/ssrMealInfos/ssrSeatInfos are
+  // attached to the same request.
   const computeSsrAmount = () => {
     let total = 0;
     ssrSegments.forEach((segment) => {
@@ -314,6 +483,14 @@ const FlightBookingScreen = ({ route, navigation }) => {
         const option = segment.mealOptions.find((o) => o.code === selection.meal);
         total += Number(option?.amount || 0);
       }
+    });
+    seatSegmentsList.forEach((segment) => {
+      const byTraveller = seatSelections[segment.id] || {};
+      Object.values(byTraveller).forEach((seatCode) => {
+        if (!seatCode) return;
+        const option = segment.seats.find((s) => s.code === seatCode);
+        total += Number(option?.amount || 0);
+      });
     });
     return total;
   };
@@ -411,9 +588,22 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // /oms/v1/air/book request (doc: "Which is the same as INSTANT BOOK
   // (request should not have paymentInfo)" for Hold).
   const buildBookingBody = () => {
+    // Per TripJack's Book request schema (booking-api.txt / the "With SSR"
+    // sample payload), ssrBaggageInfos/ssrMealInfos/ssrSeatInfos each live
+    // nested INSIDE every travellerInfo[] entry, not at the request's top
+    // level - baggage/meal is one choice per segment applied to every
+    // non-infant traveller on it, while seat is whatever that traveller
+    // individually picked.
+    const ssrBaggageInfos = Object.entries(ssrSelections)
+      .filter(([, sel]) => sel?.baggage)
+      .map(([key, sel]) => ({ key, code: sel.baggage }));
+    const ssrMealInfos = Object.entries(ssrSelections)
+      .filter(([, sel]) => sel?.meal)
+      .map(([key, sel]) => ({ key, code: sel.meal }));
+
     const body = {
       bookingId,
-      travellerInfo: travellers.map((t) => {
+      travellerInfo: travellers.map((t, travellerIndex) => {
         const traveller = { ti: t.ti, pt: t.pt, fN: t.fN, lN: t.lN };
         if (t.dob) traveller.dob = t.dob;
         if (passportRequired || t.pNum) {
@@ -425,6 +615,20 @@ const FlightBookingScreen = ({ route, navigation }) => {
         if (documentIdApplicable && t.di) {
           traveller.di = t.di;
         }
+
+        if (t.pt !== 'INFANT') {
+          if (ssrBaggageInfos.length) traveller.ssrBaggageInfos = ssrBaggageInfos;
+          if (ssrMealInfos.length) traveller.ssrMealInfos = ssrMealInfos;
+
+          const ssrSeatInfos = seatSegmentsList
+            .map((segment) => {
+              const code = seatSelections[segment.id]?.[travellerIndex];
+              return code ? { key: segment.id, code } : null;
+            })
+            .filter(Boolean);
+          if (ssrSeatInfos.length) traveller.ssrSeatInfos = ssrSeatInfos;
+        }
+
         return traveller;
       }),
       deliveryInfo: {
@@ -453,15 +657,6 @@ const FlightBookingScreen = ({ route, navigation }) => {
       };
     }
 
-    const ssrBaggageInfos = Object.entries(ssrSelections)
-      .filter(([, sel]) => sel?.baggage)
-      .map(([key, sel]) => ({ key, code: sel.baggage }));
-    const ssrMealInfos = Object.entries(ssrSelections)
-      .filter(([, sel]) => sel?.meal)
-      .map(([key, sel]) => ({ key, code: sel.meal }));
-    if (ssrBaggageInfos.length) body.ssrBaggageInfos = ssrBaggageInfos;
-    if (ssrMealInfos.length) body.ssrMealInfos = ssrMealInfos;
-
     return body;
   };
 
@@ -486,6 +681,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       await syncFlightBooking(token, {
         bookingId,
         summary: routeSummary(flights),
+        airlineCode: routeAirlineCode(flights),
         totalFare: totalWithSsr,
         status: 'ON_HOLD',
       });
@@ -533,6 +729,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       await syncFlightBooking(token, {
         bookingId,
         summary: routeSummary(flights),
+        airlineCode: routeAirlineCode(flights),
         totalFare: details?.order?.amount ?? totalWithSsr,
         status: details?.order?.status || 'SUCCESS',
       });
@@ -582,6 +779,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       await syncFlightBooking(token, {
         bookingId,
         summary: routeSummary(flights),
+        airlineCode: routeAirlineCode(flights),
         totalFare: details?.order?.amount ?? totalWithSsr,
         status: details?.order?.status || 'SUCCESS',
       });
@@ -599,6 +797,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
           await syncFlightBooking(token, {
             bookingId,
             summary: routeSummary(flights),
+            airlineCode: routeAirlineCode(flights),
             totalFare: details?.order?.amount ?? totalWithSsr,
             status: 'SUCCESS',
           });
@@ -653,6 +852,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
         await syncFlightBooking(token, {
           bookingId,
           summary: routeSummary(flights),
+          airlineCode: routeAirlineCode(flights),
           totalFare: bookingDetails?.order?.amount ?? totalWithSsr,
           status: 'CANCELLED',
         });
@@ -926,7 +1126,45 @@ const FlightBookingScreen = ({ route, navigation }) => {
         <View style={{ width: 30 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      {phase === 'form' ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sectionTabBar}>
+          <TouchableOpacity
+            style={[styles.sectionTab, activeSection === 'passenger' && styles.sectionTabActive]}
+            onPress={() => scrollToSection('passenger')}
+          >
+            <Text style={[styles.sectionTabText, activeSection === 'passenger' && styles.sectionTabTextActive]}>
+              Passenger Details
+            </Text>
+          </TouchableOpacity>
+          {ssrSegments.length > 0 ? (
+            <TouchableOpacity
+              style={[styles.sectionTab, activeSection === 'baggageMeal' && styles.sectionTabActive]}
+              onPress={() => scrollToSection('baggageMeal')}
+            >
+              <Text style={[styles.sectionTabText, activeSection === 'baggageMeal' && styles.sectionTabTextActive]}>
+                Baggage & Meal
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {seatSegmentsList.length > 0 ? (
+            <TouchableOpacity
+              style={[styles.sectionTab, activeSection === 'seats' && styles.sectionTabActive]}
+              onPress={() => scrollToSection('seats')}
+            >
+              <Text style={[styles.sectionTabText, activeSection === 'seats' && styles.sectionTabTextActive]}>
+                Seats
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </ScrollView>
+      ) : null}
+
+      <ScrollView
+        ref={formScrollRef}
+        contentContainerStyle={styles.content}
+        onScroll={handleFormScroll}
+        scrollEventThrottle={32}
+      >
         {phase === 'loading' ? (
           <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
         ) : null}
@@ -948,6 +1186,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
               </View>
             ) : null}
 
+            <View onLayout={recordSectionOffset('passenger')} />
             {travellers.map((t, index) => (
               <View key={index} style={styles.card}>
                 <View style={styles.travellerCardHeader}>
@@ -1163,6 +1402,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
               </View>
             ) : null}
 
+            <View onLayout={recordSectionOffset('baggageMeal')} />
             {ssrSegments.map((segment) => (
               <View key={segment.id} style={styles.card}>
                 <View style={styles.cardTitleRow}>
@@ -1175,16 +1415,28 @@ const FlightBookingScreen = ({ route, navigation }) => {
                 <Text style={styles.hintText}>{segment.label}</Text>
                 {segment.baggageOptions.length ? (
                   <>
-                    <Text style={styles.cardSubtitle}>Baggage</Text>
+                    <View style={styles.ssrSubtitleRow}>
+                      <Text style={styles.cardSubtitle}>Baggage</Text>
+                      <View style={styles.ssrCountBadge}>
+                        <Text style={styles.ssrCountBadgeText}>
+                          {ssrSelections[segment.id]?.baggage ? 1 : 0}/1
+                        </Text>
+                      </View>
+                    </View>
                     <View style={styles.chipRow}>
                       {segment.baggageOptions.map((option) => {
                         const selected = ssrSelections[segment.id]?.baggage === option.code;
                         return (
                           <TouchableOpacity
                             key={option.code}
-                            style={[styles.ssrChip, selected ? styles.ssrChipSelected : null]}
+                            style={[styles.ssrChip, styles.ssrChipWithIcon, selected ? styles.ssrChipSelected : null]}
                             onPress={() => setSsrChoice(segment.id, 'baggage', option.code)}
                           >
+                            <Ionicons
+                              name="briefcase-outline"
+                              size={14}
+                              color={selected ? Colors.primaryDark : Colors.textLight}
+                            />
                             <Text style={[styles.ssrChipText, selected ? styles.ssrChipTextSelected : null]}>
                               {option.desc} {Number(option.amount) > 0 ? `(+₹${option.amount})` : ''}
                             </Text>
@@ -1217,6 +1469,123 @@ const FlightBookingScreen = ({ route, navigation }) => {
                 ) : null}
               </View>
             ))}
+
+            {seatMapState.loading ? (
+              <View style={styles.card}>
+                <ActivityIndicator color={Colors.primary} />
+              </View>
+            ) : null}
+
+            <View onLayout={recordSectionOffset('seats')} />
+            {seatSegmentsList.map((segment) => {
+              const activeTravellerIndex =
+                activeSeatTraveller[segment.id] ?? nonInfantTravellers[0]?.travellerIndex ?? 0;
+
+              return (
+                <View key={segment.id} style={styles.card}>
+                  <View style={styles.cardTitleRow}>
+                    <Ionicons name="grid-outline" size={15} color={Colors.primaryDark} />
+                    <Text style={styles.cardTitle}>Choose Seats</Text>
+                    <View style={styles.optionalTag}>
+                      <Text style={styles.optionalTagText}>Optional</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.hintText}>{segment.label}</Text>
+
+                  {segment.note ? <Text style={styles.hintText}>{segment.note}</Text> : null}
+
+                  {segment.seats.length > 0 && nonInfantTravellers.length > 0 ? (
+                    <>
+                      <Text style={styles.cardSubtitle}>Selecting seat for</Text>
+                      <View style={styles.chipRow}>
+                        {nonInfantTravellers.map(({ traveller, travellerIndex }) => {
+                          const active = travellerIndex === activeTravellerIndex;
+                          const assignedSeat = seatSelections[segment.id]?.[travellerIndex];
+                          return (
+                            <TouchableOpacity
+                              key={travellerIndex}
+                              style={[styles.ssrChip, active ? styles.ssrChipSelected : null]}
+                              onPress={() =>
+                                setActiveSeatTraveller((prev) => ({ ...prev, [segment.id]: travellerIndex }))
+                              }
+                            >
+                              <Text style={[styles.ssrChipText, active ? styles.ssrChipTextSelected : null]}>
+                                {traveller.fN ? `${traveller.ti} ${traveller.fN}` : `Traveller ${travellerIndex + 1}`}
+                                {assignedSeat ? ` · ${assignedSeat}` : ''}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      <View style={styles.seatLegendRow}>
+                        <View style={styles.seatLegendItem}>
+                          <View style={[styles.seatLegendSwatch, styles.seatAvailable]} />
+                          <Text style={styles.seatLegendLabel}>Available</Text>
+                        </View>
+                        <View style={styles.seatLegendItem}>
+                          <View style={[styles.seatLegendSwatch, styles.seatChargeable]} />
+                          <Text style={styles.seatLegendLabel}>Chargeable</Text>
+                        </View>
+                        <View style={styles.seatLegendItem}>
+                          <View style={[styles.seatLegendSwatch, styles.seatSelectedSwatch]} />
+                          <Text style={styles.seatLegendLabel}>Selected</Text>
+                        </View>
+                        <View style={styles.seatLegendItem}>
+                          <View style={[styles.seatLegendSwatch, styles.seatBooked]} />
+                          <Text style={styles.seatLegendLabel}>Booked</Text>
+                        </View>
+                        <View style={styles.seatLegendItem}>
+                          <View style={[styles.seatLegendSwatch, styles.seatLegroom]} />
+                          <Text style={styles.seatLegendLabel}>Legroom</Text>
+                        </View>
+                      </View>
+
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View>
+                          {buildSeatGrid(segment).map((rowSeats, rowIdx) => (
+                            <View key={rowIdx} style={styles.seatRow}>
+                              {rowSeats.map((seat, colIdx) => {
+                                if (!seat) return <View key={colIdx} style={styles.seatGap} />;
+                                const takenByEntry = Object.entries(seatSelections[segment.id] || {}).find(
+                                  ([, code]) => code === seat.code
+                                );
+                                const takenByTravellerIndex = takenByEntry ? Number(takenByEntry[0]) : null;
+                                const isMine = takenByTravellerIndex === activeTravellerIndex;
+                                const isTakenByOther = takenByTravellerIndex != null && !isMine;
+                                return (
+                                  <TouchableOpacity
+                                    key={colIdx}
+                                    style={[
+                                      styles.seatBox,
+                                      seat.isBooked
+                                        ? styles.seatBooked
+                                        : isMine
+                                        ? styles.seatSelectedSwatch
+                                        : isTakenByOther
+                                        ? styles.seatTakenByOther
+                                        : Number(seat.amount) > 0
+                                        ? styles.seatChargeable
+                                        : styles.seatAvailable,
+                                      seat.isLegroom ? styles.seatLegroom : null,
+                                    ]}
+                                    onPress={() => chooseSeat(segment.id, activeTravellerIndex, seat)}
+                                  >
+                                    <Text style={styles.seatBoxText}>{seat.seatNo}</Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          ))}
+                        </View>
+                      </ScrollView>
+
+                      <Text style={styles.seatDisclaimer}>{SEAT_MAP_DISCLAIMER}</Text>
+                    </>
+                  ) : null}
+                </View>
+              );
+            })}
 
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Total{computeSsrAmount() > 0 ? ' (fare + extras)' : ''}</Text>
@@ -1559,6 +1928,30 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  sectionTabBar: {
+    flexDirection: 'row',
+    backgroundColor: Colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  sectionTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  sectionTabActive: {
+    borderBottomColor: Colors.primary,
+  },
+  sectionTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textMuted,
+  },
+  sectionTabTextActive: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
   content: {
     padding: 16,
     paddingBottom: 40,
@@ -1695,6 +2088,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginBottom: 2,
   },
+  ssrSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ssrCountBadge: {
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+  },
+  ssrCountBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+  },
   hintText: {
     fontSize: 11,
     color: Colors.textMuted,
@@ -1718,6 +2127,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 8,
   },
+  ssrChipWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   ssrChipSelected: {
     borderColor: Colors.primary,
     backgroundColor: Colors.primarySoft,
@@ -1729,6 +2143,84 @@ const styles = StyleSheet.create({
   ssrChipTextSelected: {
     color: Colors.primaryDark,
     fontWeight: '700',
+  },
+  seatLegendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  seatLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 14,
+    marginBottom: 6,
+  },
+  seatLegendSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  seatLegendLabel: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  seatRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  seatBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    marginRight: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seatGap: {
+    width: 28,
+    height: 28,
+    marginRight: 4,
+  },
+  seatBoxText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  seatAvailable: {
+    backgroundColor: '#E3F5E5',
+    borderWidth: 1,
+    borderColor: Colors.success,
+  },
+  seatChargeable: {
+    backgroundColor: '#FFF3D6',
+    borderWidth: 1,
+    borderColor: Colors.warning,
+  },
+  seatBooked: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.textMuted,
+  },
+  seatLegroom: {
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  seatSelectedSwatch: {
+    backgroundColor: Colors.primarySoft,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  seatTakenByOther: {
+    backgroundColor: '#F0F0F0',
+    borderWidth: 1,
+    borderColor: Colors.textMuted,
+  },
+  seatDisclaimer: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: Colors.textMuted,
+    marginTop: 10,
   },
   input: {
     borderWidth: 1,
