@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  ImageBackground,
   Modal,
   Pressable,
   SafeAreaView,
@@ -16,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import MapView, { Callout, Marker } from '../components/MapViewCompat';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson, SEARCH_SESSION_MS } from '../utils/hotelApiErrors';
@@ -28,6 +30,13 @@ const parseDateValue = (value) => {
   if (!match) return null;
   const [, year, month, day] = match;
   return new Date(Number(year), Number(month) - 1, Number(day));
+};
+
+const nightsBetween = (checkInStr, checkOutStr) => {
+  const from = parseDateValue(checkInStr);
+  const to = parseDateValue(checkOutStr);
+  if (!from || !to) return 0;
+  return Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
 };
 
 const formatDisplayDate = (value) => {
@@ -48,6 +57,19 @@ const generateCorrelationId = () =>
 
 const createEmptyRoom = () => ({ adults: 2, children: 0, childAge: [] });
 
+// TripJack's /hotels/listing caps at 100 hids per call, so a city with more
+// synced hotels than that needs multiple calls merged together.
+const LISTING_CHUNK_SIZE = 100;
+const RESULTS_PAGE_SIZE = 20;
+
+const chunkArray = (arr, size) => {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+};
+
 const STAR_FILTERS = [
   { value: 'ALL', label: 'All ratings' },
   { value: '3', label: '3★+' },
@@ -67,9 +89,12 @@ const HotelsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [hotels, setHotels] = useState([]);
-  const [totalResults, setTotalResults] = useState(0);
   const [searchSession, setSearchSession] = useState(null);
   const [starFilter, setStarFilter] = useState('ALL');
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
+  const [visibleCount, setVisibleCount] = useState(RESULTS_PAGE_SIZE);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const scrollViewRef = useRef(null);
 
   const [nationalities, setNationalities] = useState(null);
   const [nationalityModal, setNationalityModal] = useState(false);
@@ -136,6 +161,9 @@ const HotelsScreen = ({ navigation }) => {
   };
 
   const buildHotelIds = () => {
+    // Populated by selectCity() with every synced hotel for the chosen city -
+    // unbounded here, searchHotels() chunks it into ≤100-id batches for
+    // TripJack's per-call limit.
     const ids = hotelIdsInput
       .split(',')
       .map((token) => token.trim())
@@ -144,9 +172,6 @@ const HotelsScreen = ({ navigation }) => {
 
     if (ids.length === 0) {
       return [];
-    }
-    if (ids.length > 100) {
-      throw new Error('Enter at most 100 hotel IDs.');
     }
     if (ids.some((id) => !Number.isFinite(id))) {
       throw new Error('Hotel IDs must be numbers, separated by commas.');
@@ -197,37 +222,47 @@ const HotelsScreen = ({ navigation }) => {
       }
 
       const roomsPayload = buildRoomsPayload();
+      // One correlationId for the whole logical search, per TripJack's docs -
+      // reused across every chunked Listing call below, and later for Detail
+      // and Review. Not a per-request nonce.
       const correlationId = generateCorrelationId();
-      const payload = {
+      const basePayload = {
         checkIn,
         checkOut,
         rooms: roomsPayload,
         currency: currency.trim().toUpperCase(),
         correlationId,
         nationality: nationality.trim(),
-        hids,
       };
 
       setLoading(true);
       setSearched(true);
       setHotels([]);
       setStarFilter('ALL');
+      setViewMode('list');
+      setVisibleCount(RESULTS_PAGE_SIZE);
       setSearchSession(null);
 
-      if (__DEV__) console.log('[hotel listing] REQUEST', JSON.stringify(payload));
-      const data = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotels/listing`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        },
-        'Unable to search hotels right now.'
+      const chunks = chunkArray(hids, LISTING_CHUNK_SIZE);
+      const responses = await Promise.all(
+        chunks.map((chunkHids) => {
+          const payload = { ...basePayload, hids: chunkHids };
+          if (__DEV__) console.log('[hotel listing] REQUEST', JSON.stringify(payload));
+          return fetchHotelJson(
+            `${API_CONFIG.BASE_URL}/hotels/listing`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            },
+            'Unable to search hotels right now.'
+          );
+        })
       );
-      if (__DEV__) console.log('[hotel listing] RESPONSE', JSON.stringify(data));
+      if (__DEV__) console.log('[hotel listing] RESPONSES', JSON.stringify(responses));
 
-      setHotels(data.hotels || []);
-      setTotalResults(data.totalResults || 0);
+      const mergedHotels = responses.flatMap((data) => data.hotels || []);
+      setHotels(mergedHotels);
       // Same correlationId (the docs call it "searchId" in prose) must be reused
       // for Detail and Review - the session is valid ~15 minutes from Listing.
       setSearchSession({
@@ -329,7 +364,7 @@ const HotelsScreen = ({ navigation }) => {
         'Unable to load hotels for this city right now.'
       );
 
-      const ids = hotelsInCity.map((h) => h.tjHotelId).filter(Boolean).slice(0, 100);
+      const ids = hotelsInCity.map((h) => h.tjHotelId).filter(Boolean);
       if (ids.length === 0) {
         Alert.alert('No hotels', 'No synced hotels found for this city.');
         return;
@@ -359,15 +394,45 @@ const HotelsScreen = ({ navigation }) => {
     });
   }, [hotels, starFilter]);
 
-  const renderHotel = ({ item }) => {
-    // Best practice from the docs: filter out options where inventory.available
-    // is explicitly false before picking what to display.
-    const availableOptions = (item.options || []).filter((option) => option.inventory?.available !== false);
-    const topOption = availableOptions[0];
+  const mappableHotels = useMemo(
+    () =>
+      filteredHotels.filter(
+        (item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)
+      ),
+    [filteredHotels]
+  );
+
+  const mapRegion = useMemo(() => {
+    if (mappableHotels.length === 0) return null;
+    const lats = mappableHotels.map((item) => item.latitude);
+    const lngs = mappableHotels.map((item) => item.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: Math.max(maxLat - minLat, 0.05) * 1.4,
+      longitudeDelta: Math.max(maxLng - minLng, 0.05) * 1.4,
+    };
+  }, [mappableHotels]);
+
+  // Best practice from the docs: filter out options where inventory.available
+  // is explicitly false before picking what to display.
+  const getTopOption = (item) => (item.options || []).find((option) => option.inventory?.available !== false);
+
+  const renderHotel = ({ item, index }) => {
+    const topOption = getTopOption(item);
     const pricing = topOption?.pricing;
 
     return (
       <TouchableOpacity style={styles.hotelCard} activeOpacity={0.85} onPress={() => openHotelDetail(item)}>
+        <View style={styles.hotelIndexBadge} pointerEvents="none">
+          <Text style={styles.hotelIndexBadgeText}>
+            {index + 1} of {filteredHotels.length}
+          </Text>
+        </View>
         {item.heroImageUrl ? (
           <Image source={{ uri: item.heroImageUrl }} style={styles.hotelImage} resizeMode="cover" />
         ) : (
@@ -409,9 +474,23 @@ const HotelsScreen = ({ navigation }) => {
               <View style={styles.hotelFooter}>
                 <View style={styles.priceContainer}>
                   <Text style={styles.priceLabel}>Total for stay</Text>
+                  {pricing?.strikeThrough > pricing?.totalPrice && (
+                    <Text style={styles.strikeThroughPrice}>
+                      {pricing.currency} {Number(pricing.strikeThrough).toLocaleString()}
+                    </Text>
+                  )}
                   <Text style={styles.price}>
                     {pricing?.currency} {Number(pricing?.totalPrice || 0).toLocaleString()}
                   </Text>
+                  {(() => {
+                    const nights = nightsBetween(checkIn, checkOut);
+                    if (!pricing?.totalPrice || nights <= 1) return null;
+                    return (
+                      <Text style={styles.perNightPrice}>
+                        {pricing.currency} {Math.round(pricing.totalPrice / nights).toLocaleString()} / night
+                      </Text>
+                    );
+                  })()}
                 </View>
                 <View style={styles.viewOptionsButton}>
                   <Text style={styles.viewOptionsText}>View Options</Text>
@@ -425,48 +504,115 @@ const HotelsScreen = ({ navigation }) => {
     );
   };
 
+  if (viewMode === 'map' && mapRegion) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setViewMode('list')}>
+            <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Map view</Text>
+          <View style={{ width: 30 }} />
+        </View>
+
+        <MapView style={styles.map} initialRegion={mapRegion}>
+          {mappableHotels.map((item) => {
+            const pricing = getTopOption(item)?.pricing;
+            return (
+              <Marker
+                key={item.hotelId}
+                coordinate={{ latitude: item.latitude, longitude: item.longitude }}
+              >
+                <Callout onPress={() => openHotelDetail(item)}>
+                  <View style={styles.calloutCard}>
+                    <Text style={styles.calloutTitle} numberOfLines={1}>{item.name}</Text>
+                    {item.city ? <Text style={styles.calloutMeta}>{item.city}</Text> : null}
+                    {pricing && (
+                      <Text style={styles.calloutPrice}>
+                        {pricing.currency} {Number(pricing.totalPrice || 0).toLocaleString()}
+                      </Text>
+                    )}
+                    <Text style={styles.calloutLink}>View details</Text>
+                  </View>
+                </Callout>
+              </Marker>
+            );
+          })}
+        </MapView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor={Colors.accentBlueDark} barStyle="light-content" />
 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
+      <ImageBackground
+        source={require('../../assets/hotels/hero-sunset.jpg')}
+        style={styles.hero}
+        imageStyle={styles.heroImage}
+      >
+        <View style={styles.heroOverlay} />
+        <TouchableOpacity style={styles.heroBackButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={22} color={Colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hotels</Text>
-        <View style={{ width: 30 }} />
-      </View>
+        <View style={styles.heroContent}>
+          <Text style={styles.heroTitle}>
+            Find Your{'\n'}
+            <Text style={styles.heroTitleAccent}>Perfect Stay</Text>
+          </Text>
+          <Text style={styles.heroSubtitle}>Comfortable stays, unforgettable journeys.</Text>
+        </View>
+      </ImageBackground>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        onScroll={({ nativeEvent }) => {
+          const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+          const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 300;
+          if (nearBottom) {
+            setVisibleCount((prev) => Math.min(prev + RESULTS_PAGE_SIZE, filteredHotels.length));
+          }
+          setShowScrollTop(contentOffset.y > 400);
+        }}
+        scrollEventThrottle={200}
+      >
         <View style={styles.formCard}>
           <View style={styles.dateRow}>
             <View style={styles.dateField}>
               <Text style={styles.fieldLabel}>Check-in</Text>
-              <TouchableOpacity style={styles.input} onPress={() => openDatePicker('checkIn')}>
-                <Text style={checkIn ? styles.pickerText : styles.pickerPlaceholder}>
+              <TouchableOpacity style={styles.inputWithIcon} onPress={() => openDatePicker('checkIn')}>
+                <Ionicons name="calendar-outline" size={17} color={Colors.accentBlue} />
+                <Text style={[styles.inputIconText, checkIn ? styles.pickerText : styles.pickerPlaceholder]}>
                   {formatDisplayDate(checkIn) || 'Select date'}
                 </Text>
+                <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
               </TouchableOpacity>
             </View>
             <View style={styles.dateField}>
               <Text style={styles.fieldLabel}>Check-out</Text>
               <TouchableOpacity
-                style={[styles.input, !checkIn && styles.inputDisabled]}
+                style={[styles.inputWithIcon, !checkIn && styles.inputDisabled]}
                 onPress={() => checkIn && openDatePicker('checkOut')}
                 disabled={!checkIn}
               >
-                <Text style={checkOut ? styles.pickerText : styles.pickerPlaceholder}>
+                <Ionicons name="calendar-outline" size={17} color={Colors.accentBlue} />
+                <Text style={[styles.inputIconText, checkOut ? styles.pickerText : styles.pickerPlaceholder]}>
                   {formatDisplayDate(checkOut) || 'Select date'}
                 </Text>
+                <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
               </TouchableOpacity>
             </View>
           </View>
 
           <Text style={styles.fieldLabel}>Destination</Text>
           <TouchableOpacity style={styles.browseButton} onPress={openCityModal} disabled={selectingCity}>
-            <Ionicons name="location-outline" size={18} color={Colors.primary} />
+            <Ionicons name="location-outline" size={18} color={Colors.accentBlue} />
             <Text style={styles.browseButtonText}>
-              {selectingCity ? 'Loading hotels...' : destinationLabel || 'Choose a city'}
+              {selectingCity ? 'Loading hotels...' : destinationLabel || 'Where do you want to go?'}
             </Text>
             {selectingCity ? (
               <ActivityIndicator size="small" color={Colors.primary} />
@@ -478,29 +624,37 @@ const HotelsScreen = ({ navigation }) => {
           <View style={styles.dateRow}>
             <View style={styles.dateField}>
               <Text style={styles.fieldLabel}>Nationality</Text>
-              <TouchableOpacity style={styles.input} onPress={openNationalityModal}>
-                <Text style={styles.pickerText}>{nationalityLabel}</Text>
+              <TouchableOpacity style={styles.inputWithIcon} onPress={openNationalityModal}>
+                <Ionicons name="people-outline" size={17} color={Colors.accentBlue} />
+                <Text style={[styles.inputIconText, styles.pickerText]}>{nationalityLabel}</Text>
+                <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
               </TouchableOpacity>
             </View>
             <View style={styles.dateField}>
               <Text style={styles.fieldLabel}>Currency</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="INR"
-                placeholderTextColor={Colors.textMuted}
-                value={currency}
-                onChangeText={setCurrency}
-                autoCapitalize="characters"
-                maxLength={3}
-              />
+              <View style={styles.inputWithIcon}>
+                <Ionicons name="card-outline" size={17} color={Colors.accentBlue} />
+                <TextInput
+                  style={styles.inputIconTextField}
+                  placeholder="INR"
+                  placeholderTextColor={Colors.textMuted}
+                  value={currency}
+                  onChangeText={setCurrency}
+                  autoCapitalize="characters"
+                  maxLength={3}
+                />
+              </View>
             </View>
           </View>
 
-          <Text style={styles.sectionLabel}>Rooms</Text>
+          <Text style={styles.sectionLabel}>Rooms & Guests</Text>
           {rooms.map((room, index) => (
             <View key={index} style={styles.roomCard}>
               <View style={styles.roomCardHeader}>
-                <Text style={styles.roomCardTitle}>Room {index + 1}</Text>
+                <View style={styles.roomCardTitleRow}>
+                  <Ionicons name="bed-outline" size={16} color={Colors.accentBlue} />
+                  <Text style={styles.roomCardTitle}>Room {index + 1}</Text>
+                </View>
                 {rooms.length > 1 && (
                   <TouchableOpacity onPress={() => removeRoom(index)}>
                     <Ionicons name="trash-outline" size={18} color={Colors.error} />
@@ -509,39 +663,45 @@ const HotelsScreen = ({ navigation }) => {
               </View>
 
               <View style={styles.stepperRow}>
-                <Text style={styles.stepperLabel}>Adults</Text>
+                <View style={styles.stepperLabelRow}>
+                  <Ionicons name="person-outline" size={15} color={Colors.accentBlue} />
+                  <Text style={styles.stepperLabel}>Adults</Text>
+                </View>
                 <View style={styles.stepperControls}>
                   <TouchableOpacity
-                    style={styles.stepperButton}
+                    style={styles.stepperButtonMinus}
                     onPress={() => adjustRoomCount(index, 'adults', -1, 1, 9)}
                   >
-                    <Ionicons name="remove" size={18} color={Colors.primaryDark} />
+                    <Ionicons name="remove" size={18} color={Colors.accentBlue} />
                   </TouchableOpacity>
                   <Text style={styles.stepperValue}>{room.adults}</Text>
                   <TouchableOpacity
-                    style={styles.stepperButton}
+                    style={styles.stepperButtonPlus}
                     onPress={() => adjustRoomCount(index, 'adults', 1, 1, 9)}
                   >
-                    <Ionicons name="add" size={18} color={Colors.primaryDark} />
+                    <Ionicons name="add" size={18} color={Colors.primary} />
                   </TouchableOpacity>
                 </View>
               </View>
 
               <View style={styles.stepperRow}>
-                <Text style={styles.stepperLabel}>Children</Text>
+                <View style={styles.stepperLabelRow}>
+                  <Ionicons name="people-outline" size={15} color={Colors.accentBlue} />
+                  <Text style={styles.stepperLabel}>Children</Text>
+                </View>
                 <View style={styles.stepperControls}>
                   <TouchableOpacity
-                    style={styles.stepperButton}
+                    style={styles.stepperButtonMinus}
                     onPress={() => adjustRoomCount(index, 'children', -1, 0, 6)}
                   >
-                    <Ionicons name="remove" size={18} color={Colors.primaryDark} />
+                    <Ionicons name="remove" size={18} color={Colors.accentBlue} />
                   </TouchableOpacity>
                   <Text style={styles.stepperValue}>{room.children}</Text>
                   <TouchableOpacity
-                    style={styles.stepperButton}
+                    style={styles.stepperButtonPlus}
                     onPress={() => adjustRoomCount(index, 'children', 1, 0, 6)}
                   >
-                    <Ionicons name="add" size={18} color={Colors.primaryDark} />
+                    <Ionicons name="add" size={18} color={Colors.primary} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -582,6 +742,36 @@ const HotelsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
+        {!searched && (
+          <>
+            <View style={styles.trustBadgeRow}>
+              <View style={styles.trustBadge}>
+                <View style={styles.trustBadgeIconWrap}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color={Colors.accentBlue} />
+                </View>
+                <Text style={styles.trustBadgeText}>Best Price{'\n'}Guarantee</Text>
+              </View>
+              <View style={styles.trustBadge}>
+                <View style={styles.trustBadgeIconWrap}>
+                  <Ionicons name="headset-outline" size={18} color={Colors.accentBlue} />
+                </View>
+                <Text style={styles.trustBadgeText}>24/7{'\n'}Support</Text>
+              </View>
+              <View style={styles.trustBadge}>
+                <View style={styles.trustBadgeIconWrap}>
+                  <Ionicons name="lock-closed-outline" size={18} color={Colors.accentBlue} />
+                </View>
+                <Text style={styles.trustBadgeText}>Secure{'\n'}Booking</Text>
+              </View>
+            </View>
+
+            <View style={styles.flightPathRow}>
+              <View style={styles.flightPathLine} />
+              <Ionicons name="airplane" size={16} color={Colors.accentBlue} style={styles.flightPathIcon} />
+            </View>
+          </>
+        )}
+
         {searched && !loading && hotels.length > 0 && (
           <View style={styles.resultsToolbar}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
@@ -591,16 +781,29 @@ const HotelsScreen = ({ navigation }) => {
                   <TouchableOpacity
                     key={option.value}
                     style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => setStarFilter(option.value)}
+                    onPress={() => {
+                      setStarFilter(option.value);
+                      setVisibleCount(RESULTS_PAGE_SIZE);
+                    }}
                   >
                     <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-            <Text style={styles.resultsCount}>
-              {filteredHotels.length} of {totalResults} hotel{totalResults === 1 ? '' : 's'} shown
-            </Text>
+            <View style={styles.resultsMetaRow}>
+              <Text style={styles.resultsCount}>
+                {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
+                {filteredHotels.length === 1 ? '' : 's'} loaded
+                {visibleCount < filteredHotels.length ? ' · scroll for more' : ''}
+              </Text>
+              {mappableHotels.length > 0 && (
+                <TouchableOpacity style={styles.mapViewButton} onPress={() => setViewMode('map')}>
+                  <Ionicons name="map-outline" size={14} color={Colors.primary} />
+                  <Text style={styles.mapViewButtonText}>Map view</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
 
@@ -623,13 +826,23 @@ const HotelsScreen = ({ navigation }) => {
         )}
 
         <FlatList
-          data={filteredHotels}
+          data={filteredHotels.slice(0, visibleCount)}
           renderItem={renderHotel}
           keyExtractor={(item) => item.hotelId}
           contentContainerStyle={styles.listContainer}
           scrollEnabled={false}
         />
       </ScrollView>
+
+      {showScrollTop && (
+        <TouchableOpacity
+          style={styles.scrollTopButton}
+          activeOpacity={0.85}
+          onPress={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+        >
+          <Ionicons name="arrow-up" size={22} color={Colors.secondary} />
+        </TouchableOpacity>
+      )}
 
       <Modal visible={nationalityModal} transparent animationType="fade" onRequestClose={() => setNationalityModal(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setNationalityModal(false)}>
@@ -742,13 +955,59 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.secondary,
   },
+  hero: {
+    backgroundColor: Colors.accentBlueDark,
+    paddingTop: 16,
+    paddingBottom: 56,
+    paddingHorizontal: 20,
+    overflow: 'hidden',
+  },
+  heroImage: {
+    resizeMode: 'cover',
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    // Darkens/blues the photo so the white/orange text on top stays
+    // legible regardless of how bright that particular image is.
+    backgroundColor: 'rgba(11,59,102,0.55)',
+  },
+  heroBackButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  heroContent: {
+    maxWidth: '85%',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: Colors.secondary,
+    lineHeight: 34,
+  },
+  heroTitleAccent: {
+    color: Colors.primary,
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 8,
+  },
   formCard: {
-    margin: 15,
+    marginHorizontal: 15,
+    marginTop: -36,
     padding: 15,
     backgroundColor: Colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: 20,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 6,
   },
   dateRow: {
     flexDirection: 'row',
@@ -779,6 +1038,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  inputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  inputIconText: {
+    flex: 1,
+  },
+  inputIconTextField: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.text,
+    padding: 0,
+  },
   inputDisabled: {
     opacity: 0.5,
   },
@@ -794,15 +1073,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.primarySoft,
+    backgroundColor: Colors.background,
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.primary,
+    borderColor: Colors.border,
   },
   browseButtonText: {
     flex: 1,
-    color: Colors.primaryDark,
+    color: Colors.text,
     fontWeight: '600',
     fontSize: 14,
   },
@@ -820,6 +1099,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
+  roomCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   roomCardTitle: {
     fontSize: 14,
     fontWeight: '600',
@@ -831,6 +1115,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
   },
+  stepperLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   stepperLabel: {
     fontSize: 14,
     color: Colors.text,
@@ -839,7 +1128,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  stepperButton: {
+  stepperButtonMinus: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Colors.accentBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonPlus: {
     width: 30,
     height: 30,
     borderRadius: 15,
@@ -905,6 +1203,48 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+  trustBadgeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginTop: 20,
+    gap: 10,
+  },
+  trustBadge: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: Colors.accentBlueSoft,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  trustBadgeIconWrap: {
+    marginBottom: 6,
+  },
+  trustBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.accentBlueDark,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  flightPathRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginTop: 18,
+    marginBottom: 6,
+  },
+  flightPathLine: {
+    flex: 1,
+    height: 1,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Colors.accentBlueSoft,
+  },
+  flightPathIcon: {
+    marginLeft: 8,
+    transform: [{ rotate: '45deg' }],
+  },
   resultsSummary: {
     paddingHorizontal: 20,
     color: Colors.textMuted,
@@ -947,6 +1287,56 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 2,
   },
+  resultsMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingRight: 4,
+  },
+  mapViewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  mapViewButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  map: {
+    flex: 1,
+  },
+  calloutCard: {
+    width: 180,
+    padding: 4,
+  },
+  calloutTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: Colors.text,
+  },
+  calloutMeta: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  calloutPrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+    marginTop: 4,
+  },
+  calloutLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
+    marginTop: 6,
+  },
   clearFilterButton: {
     marginTop: 16,
     paddingHorizontal: 18,
@@ -986,6 +1376,21 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
     overflow: 'hidden',
+  },
+  hotelIndexBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    zIndex: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  hotelIndexBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   hotelHeader: {
     backgroundColor: Colors.primaryLight,
@@ -1067,6 +1472,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.primary,
   },
+  strikeThroughPrice: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textDecorationLine: 'line-through',
+  },
+  perNightPrice: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
   viewOptionsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1141,6 +1556,22 @@ const styles = StyleSheet.create({
   modalListRowMeta: {
     fontSize: 13,
     color: Colors.textMuted,
+  },
+  scrollTopButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });
 

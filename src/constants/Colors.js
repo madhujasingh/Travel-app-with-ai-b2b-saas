@@ -16,4 +16,9 @@ export const Colors = {
   warning: '#FFC107',
   error: '#F44336',
   shadow: '#000000',
+  // Blue accent set - used alongside the orange primary palette for
+  // screens designed with a blue+orange scheme (e.g. hotel search).
+  accentBlue: '#1565C0',
+  accentBlueDark: '#0B3B66',
+  accentBlueSoft: '#EAF2FB',
 };
