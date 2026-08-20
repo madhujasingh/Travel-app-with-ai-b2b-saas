@@ -105,6 +105,7 @@ const HotelsScreen = ({ navigation }) => {
   const [loadingCities, setLoadingCities] = useState(false);
   const [selectingCity, setSelectingCity] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState('');
+  const [citySyncTriggering, setCitySyncTriggering] = useState(false);
 
   const [datePickerField, setDatePickerField] = useState(null); // 'checkIn' | 'checkOut' | null
 
@@ -128,17 +129,17 @@ const HotelsScreen = ({ navigation }) => {
     });
   };
 
+  // Tapping Check-in opens the picker in range mode (see DatePickerModal) so
+  // both dates are chosen in one continuous session; this only handles the
+  // Check-out field being tapped on its own, to adjust just that date.
   const chooseDate = (dateString) => {
-    if (datePickerField === 'checkIn') {
-      setCheckIn(dateString);
-      // Keep check-out valid relative to the new check-in - clear it if it
-      // no longer makes sense rather than silently sending a bad search.
-      if (checkOut && checkOut <= dateString) {
-        setCheckOut('');
-      }
-    } else if (datePickerField === 'checkOut') {
-      setCheckOut(dateString);
-    }
+    setCheckOut(dateString);
+    closeDatePicker();
+  };
+
+  const chooseDateRange = (startDateString, endDateString) => {
+    setCheckIn(startDateString);
+    setCheckOut(endDateString);
     closeDatePicker();
   };
 
@@ -399,6 +400,42 @@ const HotelsScreen = ({ navigation }) => {
   const filteredCities = (cities || []).filter((c) =>
     `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
   );
+
+  // Fallback for typing a city with no synced hotels yet - looks it up
+  // against TripJack's own city index and, if found, starts a background
+  // sync (see HotelSyncJobRunner) so it's searchable soon, without making
+  // this search wait for that sync to finish.
+  const triggerCitySync = async () => {
+    const query = citySearch.trim();
+    if (!query) return;
+
+    try {
+      setCitySyncTriggering(true);
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotel-catalog/search-and-sync-city?cityName=${encodeURIComponent(query)}`,
+        { method: 'POST' },
+        'Unable to search for this city right now.'
+      );
+
+      if (data.action === 'started' || data.action === 'already-running') {
+        Alert.alert(
+          'Loading this destination',
+          `We're fetching hotels for "${query}" from our supplier - this can take a few minutes. Search again shortly and it should appear.`
+        );
+      } else if (data.action === 'already-fresh') {
+        Alert.alert(
+          'Already up to date',
+          `"${query}" was already synced recently. If it's still not showing up, double-check the spelling.`
+        );
+      } else if (data.action === 'busy') {
+        Alert.alert('Please try again', "We're already loading a few other destinations right now - try again in a minute.");
+      }
+    } catch (error) {
+      Alert.alert('City Search', error.message || 'Unable to search for this city right now.');
+    } finally {
+      setCitySyncTriggering(false);
+    }
+  };
 
   // Best practice from the docs: filter out options where inventory.available
   // is explicitly false before picking what to display. Listing only ever
@@ -1021,7 +1058,27 @@ const HotelsScreen = ({ navigation }) => {
             {loadingCities ? (
               <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
             ) : filteredCities.length === 0 ? (
-              <Text style={styles.modalEmptyText}>No synced cities match your search.</Text>
+              <View style={styles.citySyncPrompt}>
+                <Text style={styles.modalEmptyText}>
+                  No synced cities match "{citySearch.trim()}".
+                </Text>
+                {citySearch.trim().length > 0 && (
+                  <TouchableOpacity
+                    style={styles.citySyncButton}
+                    onPress={triggerCitySync}
+                    disabled={citySyncTriggering}
+                  >
+                    {citySyncTriggering ? (
+                      <ActivityIndicator size="small" color={Colors.secondary} />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-download-outline" size={16} color={Colors.secondary} />
+                        <Text style={styles.citySyncButtonText}>Search "{citySearch.trim()}" anyway</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
             ) : (
               <FlatList
                 data={filteredCities}
@@ -1191,7 +1248,8 @@ const HotelsScreen = ({ navigation }) => {
 
       <DatePickerModal
         visible={datePickerField !== null}
-        title={datePickerField === 'checkOut' ? 'Check-out date' : 'Check-in date'}
+        title={datePickerField === 'checkOut' ? 'Check-out date' : 'Check-in → Check-out'}
+        rangeMode={datePickerField === 'checkIn'}
         initialDate={parseDateValue(datePickerField === 'checkOut' ? checkOut : checkIn)}
         minDate={
           datePickerField === 'checkOut' && checkIn
@@ -1199,6 +1257,7 @@ const HotelsScreen = ({ navigation }) => {
             : startOfTomorrow()
         }
         onSelect={chooseDate}
+        onSelectRange={chooseDateRange}
         onClose={closeDatePicker}
       />
     </SafeAreaView>
@@ -1897,6 +1956,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.textMuted,
     marginVertical: 30,
+  },
+  citySyncPrompt: {
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  citySyncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  citySyncButtonText: {
+    color: Colors.secondary,
+    fontWeight: '700',
+    fontSize: 14,
   },
   modalList: {
     maxHeight: 380,

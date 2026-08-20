@@ -4,14 +4,25 @@ import com.itinera.model.Hotel;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface HotelRepository extends JpaRepository<Hotel, String> {
     List<Hotel> findByCountryNameIgnoreCase(String countryName);
     List<Hotel> findByCityIgnoreCase(String city);
+
+    // Drives the on-demand sync trigger (see HotelSyncJobRunner) - a city
+    // with a recent max(synced_at) across its hotels doesn't need
+    // re-syncing, one with an old or null max does. Reading off the hotels
+    // themselves (rather than a separate per-city tracking table) means this
+    // reflects whatever actually touched that city last, whether that was a
+    // city-scoped or country-scoped sync.
+    @Query(value = "SELECT MAX(synced_at) FROM hotels WHERE UPPER(city) = UPPER(:city)", nativeQuery = true)
+    LocalDateTime findMaxSyncedAtByCity(@Param("city") String city);
 
     // One-time cleanup for hotels synced before HotelCatalogService switched
     // to storing only lightweight fields in bulk (see

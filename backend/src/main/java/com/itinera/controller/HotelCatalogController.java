@@ -133,6 +133,21 @@ public class HotelCatalogController {
         return ResponseEntity.ok(hotelCatalogService.hotelsTableStorageStats());
     }
 
+    // Public (see SecurityConfig) - powers the city picker's "can't find
+    // your city" fallback. Looks up cityName against TripJack's own city
+    // index and, if it's never been synced (or hasn't in a while), starts a
+    // background sync for it - same safe job system as the admin endpoints.
+    // Deliberately public rather than admin-gated, since it's meant to fire
+    // from ordinary customer search traffic, not a deliberate admin action -
+    // abuse is bounded by HotelSyncJobRunner's staleness/duplicate/
+    // concurrency checks rather than by requiring login. Returns immediately
+    // either way; poll GET /hotel-catalog/sync-jobs/{id} if a jobId comes
+    // back in the response.
+    @PostMapping("/search-and-sync-city")
+    public ResponseEntity<?> searchAndSyncCity(@RequestParam String cityName) {
+        return ResponseEntity.ok(hotelSyncJobRunner.triggerOnDemandCitySync(cityName));
+    }
+
     // Public - fetches one hotel's full content (images, amenities,
     // descriptions, policies) live from TripJack rather than our cache,
     // since the bulk catalog sync deliberately doesn't store that heavy
