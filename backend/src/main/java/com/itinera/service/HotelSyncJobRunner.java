@@ -165,6 +165,45 @@ public class HotelSyncJobRunner {
         }
     }
 
+    // One-time catch-up, separate from refreshGlobalDelta's ongoing daily
+    // watermark - that job intentionally starts watching from "now" so it
+    // doesn't try to backfill TripJack's full history, but that also means
+    // it never cleans up hotels TripJack deleted before today that are
+    // still sitting in our catalog from before this sync existed. This
+    // walks the DELETE feed from an arbitrary (much older) sinceIso and
+    // removes any matches - a distinct "DELETE_CLEANUP" job type, so it
+    // never gets picked up as a GLOBAL_DELTA watermark.
+    public HotelSyncJob startDeletedHotelsCleanup(String sinceIso, int maxPages) {
+        HotelSyncJob job = createJob("DELETE_CLEANUP", sinceIso);
+        self.runDeletedHotelsCleanup(job.getId(), sinceIso, maxPages);
+        return job;
+    }
+
+    @Async
+    public void runDeletedHotelsCleanup(Long jobId, String sinceIso, int maxPages) {
+        HotelSyncJob job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return;
+        }
+        try {
+            job.setStatus("RUNNING");
+            job.setUpdatedAt(LocalDateTime.now());
+            jobRepository.save(job);
+
+            HotelCatalogService.SyncPage deletedIds = hotelCatalogService.collectSyncIds("DELETE", sinceIso, maxPages);
+            hotelCatalogService.deleteHotelsByTjHotelIds(deletedIds.ids());
+
+            job.setTotalMapped(deletedIds.ids().size());
+            job.setTotalDeleted(deletedIds.ids().size());
+            job.setStatus(deletedIds.truncated() ? "PARTIAL" : "COMPLETED");
+            job.setCompletedAt(LocalDateTime.now());
+            job.setUpdatedAt(LocalDateTime.now());
+            jobRepository.save(job);
+        } catch (Exception e) {
+            markFailed(jobId, e);
+        }
+    }
+
     @Async
     public void runCountrySync(Long jobId, String countryName, int maxPages) {
         runMappingAndSync(jobId, payload -> payload.put("countryName", countryName), maxPages);

@@ -276,12 +276,21 @@ public class HotelCatalogService {
     }
 
     // Bulk-remove hotels TripJack has delisted (see fetch-deleted-hotel-mapping).
-    @Transactional
+    // Chunked to keep each DELETE ... WHERE id IN (...) statement's
+    // parameter count well under Postgres's ~32k limit - relevant for the
+    // one-time historical cleanup, which can pass tens of thousands of ids
+    // at once (the ongoing daily delta sync's lists are far smaller).
+    // deleteAllByIdInBatch is transactional on its own (Spring Data JPA's
+    // SimpleJpaRepository wraps write operations regardless of caller
+    // context), so no extra @Transactional wrapping is needed here.
     public void deleteHotelsByTjHotelIds(List<String> tjHotelIds) {
         if (tjHotelIds == null || tjHotelIds.isEmpty()) {
             return;
         }
-        hotelRepository.deleteAllByIdInBatch(tjHotelIds);
+        for (int i = 0; i < tjHotelIds.size(); i += 1000) {
+            List<String> batch = tjHotelIds.subList(i, Math.min(i + 1000, tjHotelIds.size()));
+            hotelRepository.deleteAllByIdInBatch(batch);
+        }
     }
 
     // fetch-city-regionIds has no name filter (per TripJack's docs) - the

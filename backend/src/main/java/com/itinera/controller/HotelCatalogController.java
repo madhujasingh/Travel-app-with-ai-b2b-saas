@@ -143,6 +143,21 @@ public class HotelCatalogController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
+    // Admin-only (see SecurityConfig) - one-time catch-up for hotels
+    // TripJack deleted before today's global delta sync started watching
+    // (see HotelSyncJobRunner.startDeletedHotelsCleanup). sinceIso should be
+    // an old ISO-8601 UTC timestamp (e.g. "2020-01-01T00:00:00Z") to cover
+    // TripJack's full deletion history; maxPages needs to be big enough to
+    // exhaust that history (2000 records/page).
+    @PostMapping("/cleanup-deleted-hotels")
+    public ResponseEntity<?> cleanupDeletedHotels(
+            @RequestParam String sinceIso,
+            @RequestParam(defaultValue = "60") int maxPages
+    ) {
+        HotelSyncJob job = hotelSyncJobRunner.startDeletedHotelsCleanup(sinceIso, maxPages);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+
     // Admin-only (see SecurityConfig) - trims a country's catalog down to
     // just the given cities (see HotelCatalogService.pruneCountryToCities).
     // Meant to clean up after a full country sync brought in far more
