@@ -152,8 +152,8 @@ public class HotelSyncJobRunner {
                 }
             }
 
-            hotelCatalogService.deleteHotelsByTjHotelIds(deletedIds.ids());
-            job.setTotalDeleted(deletedIds.ids().size());
+            int removed = hotelCatalogService.deleteHotelsByTjHotelIds(deletedIds.ids());
+            job.setTotalDeleted(removed);
 
             boolean truncated = newIds.truncated() || updatedIds.truncated() || deletedIds.truncated();
             job.setStatus(truncated ? "PARTIAL" : "COMPLETED");
@@ -191,10 +191,10 @@ public class HotelSyncJobRunner {
             jobRepository.save(job);
 
             HotelCatalogService.SyncPage deletedIds = hotelCatalogService.collectSyncIds("DELETE", sinceIso, maxPages);
-            hotelCatalogService.deleteHotelsByTjHotelIds(deletedIds.ids());
+            int removed = hotelCatalogService.deleteHotelsByTjHotelIds(deletedIds.ids());
 
             job.setTotalMapped(deletedIds.ids().size());
-            job.setTotalDeleted(deletedIds.ids().size());
+            job.setTotalDeleted(removed);
             job.setStatus(deletedIds.truncated() ? "PARTIAL" : "COMPLETED");
             job.setCompletedAt(LocalDateTime.now());
             job.setUpdatedAt(LocalDateTime.now());

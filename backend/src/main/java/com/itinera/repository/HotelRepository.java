@@ -45,6 +45,17 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
     @Query("DELETE FROM Hotel h WHERE UPPER(h.countryName) = UPPER(:countryName) AND UPPER(h.city) NOT IN :keepCitiesUpper")
     int deleteByCountryNameExceptCities(@Param("countryName") String countryName, @Param("keepCitiesUpper") List<String> keepCitiesUpper);
 
+    // Bulk-remove hotels TripJack has delisted (see HotelCatalogService.
+    // deleteHotelsByTjHotelIds) - a JPQL bulk delete rather than
+    // deleteAllByIdInBatch, specifically because this returns the actual
+    // number of rows affected. Most ids TripJack reports as deleted were
+    // never in our catalog to begin with (we only sync a fraction of their
+    // global inventory), so that real count is very different from - and
+    // much smaller than - the number of ids checked.
+    @Modifying
+    @Query("DELETE FROM Hotel h WHERE h.tjHotelId IN :tjHotelIds")
+    int deleteByTjHotelIdIn(@Param("tjHotelIds") List<String> tjHotelIds);
+
     interface CityCount {
         String getCity();
         String getCountryName();

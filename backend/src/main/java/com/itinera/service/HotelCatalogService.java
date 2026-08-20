@@ -280,17 +280,22 @@ public class HotelCatalogService {
     // parameter count well under Postgres's ~32k limit - relevant for the
     // one-time historical cleanup, which can pass tens of thousands of ids
     // at once (the ongoing daily delta sync's lists are far smaller).
-    // deleteAllByIdInBatch is transactional on its own (Spring Data JPA's
-    // SimpleJpaRepository wraps write operations regardless of caller
+    // Returns the real number of rows removed - most ids TripJack reports
+    // as deleted were never in our catalog (we only sync a fraction of
+    // their global inventory), so this is typically far smaller than
+    // tjHotelIds.size(). deleteByTjHotelIdIn is transactional on its own
+    // (Spring Data JPA wraps @Modifying queries regardless of caller
     // context), so no extra @Transactional wrapping is needed here.
-    public void deleteHotelsByTjHotelIds(List<String> tjHotelIds) {
+    public int deleteHotelsByTjHotelIds(List<String> tjHotelIds) {
         if (tjHotelIds == null || tjHotelIds.isEmpty()) {
-            return;
+            return 0;
         }
+        int removed = 0;
         for (int i = 0; i < tjHotelIds.size(); i += 1000) {
             List<String> batch = tjHotelIds.subList(i, Math.min(i + 1000, tjHotelIds.size()));
-            hotelRepository.deleteAllByIdInBatch(batch);
+            removed += hotelRepository.deleteByTjHotelIdIn(batch);
         }
+        return removed;
     }
 
     // fetch-city-regionIds has no name filter (per TripJack's docs) - the
