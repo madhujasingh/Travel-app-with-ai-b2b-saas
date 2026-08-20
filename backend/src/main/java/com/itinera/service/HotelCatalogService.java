@@ -9,6 +9,7 @@ import com.itinera.repository.HotelRepository;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
@@ -51,7 +52,15 @@ public class HotelCatalogService {
     }
 
     // fetch-hotel-content: up to 100 hotel IDs per call (TripJack's own
-    // limit - passing more returns a 400).
+    // limit - passing more returns a 400). Persists the LIGHTWEIGHT fields
+    // only (name/city/starRating/heroImageUrl/coordinates - what search
+    // results actually use) - see mapToHotelForCatalog. The full
+    // images/amenities/descriptions/policies content this same TripJack
+    // response carries is deliberately not stored here; it's fetched live,
+    // per-hotel, only when someone opens that hotel's detail page (see
+    // fetchLiveContent). Storing the full content for every hotel in bulk is
+    // what pushed each row to ~10KB and the catalog to hundreds of MB for
+    // relatively few cities.
     public int syncHotelContent(List<String> tjHotelIds) {
         if (tjHotelIds == null || tjHotelIds.isEmpty()) {
             return 0;
@@ -67,10 +76,37 @@ public class HotelCatalogService {
         JsonNode response = hotelService.hotelContent(payload);
         int count = 0;
         for (JsonNode hotelNode : response.path("hotels")) {
-            hotelRepository.save(mapToHotel(hotelNode));
+            hotelRepository.save(mapToHotelForCatalog(hotelNode));
             count++;
         }
         return count;
+    }
+
+    // Fetches ONE hotel's full content (images, amenities, descriptions,
+    // policies) live from TripJack and returns it without persisting -
+    // powers the hotel detail screen now that the bulk catalog sync no
+    // longer stores this content for every hotel up front.
+    public Hotel fetchLiveContent(String tjHotelId) {
+        ObjectNode payload = objectMapper.createObjectNode();
+        ArrayNode idsNode = payload.putArray("hotelIds");
+        idsNode.add(tjHotelId);
+
+        JsonNode response = hotelService.hotelContent(payload);
+        for (JsonNode hotelNode : response.path("hotels")) {
+            return mapToHotel(hotelNode);
+        }
+        return null;
+    }
+
+    // One-time cleanup for hotels synced before this lightweight approach -
+    // nulls the heavy content columns on every existing row, reclaiming the
+    // space they were taking up. Safe: the detail screen falls back to
+    // fetchLiveContent for that content regardless of whether a row still has
+    // it cached, and the lightweight fields (name/city/starRating/
+    // heroImageUrl/coordinates) that search results depend on are untouched.
+    @Transactional
+    public int clearHeavyContent() {
+        return hotelRepository.clearHeavyContent();
     }
 
     // Runs one syncHotelContent call inside its own short transaction, then
@@ -157,6 +193,21 @@ public class HotelCatalogService {
             }
         }
         return matches;
+    }
+
+    // Used only for the bulk catalog sync - builds the same Hotel object as
+    // mapToHotel but strips the heavy content fields (full image gallery,
+    // full amenities list, descriptions, policies) before it's persisted.
+    // Those fields still exist on the entity/table (fetchLiveContent's
+    // non-persisted results use them), they're just deliberately left null
+    // by the bulk sync path.
+    private Hotel mapToHotelForCatalog(JsonNode node) {
+        Hotel hotel = mapToHotel(node);
+        hotel.setImagesJson(null);
+        hotel.setAmenitiesJson(null);
+        hotel.setDescriptionsJson(null);
+        hotel.setPoliciesJson(null);
+        return hotel;
     }
 
     private Hotel mapToHotel(JsonNode node) {

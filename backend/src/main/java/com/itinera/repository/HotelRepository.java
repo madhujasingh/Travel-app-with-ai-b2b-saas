@@ -2,6 +2,7 @@ package com.itinera.repository;
 
 import com.itinera.model.Hotel;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -11,6 +12,16 @@ import java.util.List;
 public interface HotelRepository extends JpaRepository<Hotel, String> {
     List<Hotel> findByCountryNameIgnoreCase(String countryName);
     List<Hotel> findByCityIgnoreCase(String city);
+
+    // One-time cleanup for hotels synced before HotelCatalogService switched
+    // to storing only lightweight fields in bulk (see
+    // HotelCatalogService.clearHeavyContent) - a single bulk UPDATE rather
+    // than loading/re-saving every row, so it stays fast and memory-safe
+    // regardless of table size.
+    @Modifying
+    @Query("UPDATE Hotel h SET h.imagesJson = null, h.amenitiesJson = null, h.descriptionsJson = null, h.policiesJson = null " +
+           "WHERE h.imagesJson IS NOT NULL OR h.amenitiesJson IS NOT NULL OR h.descriptionsJson IS NOT NULL OR h.policiesJson IS NOT NULL")
+    int clearHeavyContent();
 
     // Powers the city picker in the search UI - only cities with hotels
     // actually synced into our catalog are offered, so a selection always

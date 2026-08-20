@@ -104,6 +104,29 @@ public class HotelCatalogController {
         return ResponseEntity.ok(hotelSyncJobRepository.findTop20ByOrderByStartedAtDesc());
     }
 
+    // Admin-only (see SecurityConfig) - one-time cleanup for hotels synced
+    // before the catalog switched to storing only lightweight fields in
+    // bulk (see HotelCatalogService.clearHeavyContent). A single bulk SQL
+    // UPDATE, not a loop - fast and safe to run directly regardless of how
+    // many rows exist.
+    @PostMapping("/cleanup-heavy-content")
+    public ResponseEntity<?> cleanupHeavyContent() {
+        int updated = hotelCatalogService.clearHeavyContent();
+        return ResponseEntity.ok(Map.of("clearedRows", updated));
+    }
+
+    // Public - fetches one hotel's full content (images, amenities,
+    // descriptions, policies) live from TripJack rather than our cache,
+    // since the bulk catalog sync deliberately doesn't store that heavy
+    // content for every hotel - only the lightweight fields needed for
+    // search results (see HotelCatalogService.mapToHotelForCatalog). Used by
+    // the hotel detail screen.
+    @GetMapping("/{tjHotelId}/live")
+    public ResponseEntity<Hotel> getLive(@PathVariable String tjHotelId) {
+        Hotel hotel = hotelCatalogService.fetchLiveContent(tjHotelId);
+        return hotel != null ? ResponseEntity.ok(hotel) : ResponseEntity.notFound().build();
+    }
+
     // Public - powers the "search by city" picker on the frontend. Only
     // returns cities that actually have synced hotels, so every result is
     // guaranteed to resolve to real, searchable hotel IDs.

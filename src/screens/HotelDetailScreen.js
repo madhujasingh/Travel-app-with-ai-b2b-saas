@@ -434,11 +434,14 @@ const HotelDetailScreen = ({ route, navigation }) => {
   };
 
   // TripJack's dynamic Detail/Static-Detail responses don't carry photos -
-  // images only exist in our own locally-synced catalog (see
-  // HotelCatalogService), so fetch that separately for the hero image/gallery.
+  // images/amenities/descriptions/policies only ever come from this content
+  // endpoint. The bulk catalog sync deliberately doesn't pre-store this for
+  // every hotel (it's the heavy part - see HotelCatalogService.
+  // mapToHotelForCatalog), so this fetches it live for just this one hotel,
+  // same as TripJack's own site loading detail content on demand.
   const fetchCatalogHotel = async () => {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/hotel-catalog/${tjHotelId}`);
+      const response = await fetch(`${API_CONFIG.BASE_URL}/hotel-catalog/${tjHotelId}/live`);
       if (!response.ok) return;
       const data = await response.json();
       setCatalogHotel(data);
