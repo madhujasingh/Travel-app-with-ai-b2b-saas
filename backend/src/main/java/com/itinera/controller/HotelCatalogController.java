@@ -2,6 +2,7 @@ package com.itinera.controller;
 
 import com.itinera.model.Hotel;
 import com.itinera.model.HotelSyncJob;
+import com.itinera.model.KnownCity;
 import com.itinera.repository.HotelRepository;
 import com.itinera.repository.HotelSyncJobRepository;
 import com.itinera.service.HotelCatalogService;
@@ -133,31 +134,34 @@ public class HotelCatalogController {
         return ResponseEntity.ok(hotelCatalogService.hotelsTableStorageStats());
     }
 
-    // Public (see SecurityConfig) - powers the city picker's "can't find
-    // your city" fallback. Looks up cityName against TripJack's own city
-    // index and, if it's never been synced (or hasn't in a while), starts a
-    // background sync for it - same safe job system as the admin endpoints.
-    // Deliberately public rather than admin-gated, since it's meant to fire
-    // from ordinary customer search traffic, not a deliberate admin action -
-    // abuse is bounded by HotelSyncJobRunner's staleness/duplicate/
-    // concurrency checks rather than by requiring login. Returns immediately
-    // either way; poll GET /hotel-catalog/sync-jobs/{id} if a jobId comes
-    // back in the response.
-    @PostMapping("/search-and-sync-city")
-    public ResponseEntity<?> searchAndSyncCity(@RequestParam String cityName) {
-        return ResponseEntity.ok(hotelSyncJobRunner.triggerOnDemandCitySync(cityName));
+    // Admin-only (see SecurityConfig) - adds a city to the curated
+    // "high-traffic" list (see KnownCity). Resolves its regionIds once and
+    // kicks off an initial sync; the periodic refresh job
+    // (HotelSyncJobRunner.refreshKnownCities) reuses those stored regionIds
+    // afterwards to check for newly-added hotels without a full country
+    // scan. lookupMaxPages bounds the one-time regionId lookup.
+    @PostMapping("/known-cities")
+    public ResponseEntity<?> addKnownCity(
+            @RequestParam String cityName,
+            @RequestParam(defaultValue = "100") int lookupMaxPages
+    ) {
+        return ResponseEntity.ok(hotelSyncJobRunner.addKnownCity(cityName, lookupMaxPages));
     }
 
-    // Public (see SecurityConfig) - fallback for when search-and-sync-city
-    // comes back "need-country": the city-level lookup has no name filter
-    // and can miss even real cities (seen with Ahmedabad, Phuket), so rather
-    // than scan indefinitely, the frontend asks the customer to pick a
-    // country (from GET /hotels/countries) and calls this instead. Country-
-    // level sync doesn't have that lookup problem - fetch-hotel-mapping
-    // accepts countryName directly - so it's reliable.
-    @PostMapping("/search-and-sync-country")
-    public ResponseEntity<?> searchAndSyncCountry(@RequestParam String countryName) {
-        return ResponseEntity.ok(hotelSyncJobRunner.triggerOnDemandCountrySync(countryName));
+    // Admin-only (see SecurityConfig) - the curated city list, with each
+    // city's last periodic-refresh timestamp.
+    @GetMapping("/known-cities")
+    public ResponseEntity<List<KnownCity>> knownCities() {
+        return ResponseEntity.ok(hotelSyncJobRunner.listKnownCities());
+    }
+
+    // Admin-only (see SecurityConfig) - removes a city from the curated
+    // list. Doesn't delete its already-synced hotels, just stops the
+    // periodic refresh from checking it going forward.
+    @DeleteMapping("/known-cities/{id}")
+    public ResponseEntity<?> removeKnownCity(@PathVariable Long id) {
+        hotelSyncJobRunner.removeKnownCity(id);
+        return ResponseEntity.noContent().build();
     }
 
     // Public - fetches one hotel's full content (images, amenities,

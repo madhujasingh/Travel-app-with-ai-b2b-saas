@@ -3,17 +3,21 @@ package com.itinera.service;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.itinera.model.HotelSyncJob;
-import com.itinera.repository.HotelRepository;
+import com.itinera.model.KnownCity;
 import com.itinera.repository.HotelSyncJobRepository;
+import com.itinera.repository.KnownCityRepository;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 // Runs HotelCatalogService syncs as background jobs (see HotelSyncJob)
 // instead of one long synchronous HTTP request. A prior synchronous
@@ -35,7 +39,15 @@ public class HotelSyncJobRunner {
 
     private final HotelCatalogService hotelCatalogService;
     private final HotelSyncJobRepository jobRepository;
-    private final HotelRepository hotelRepository;
+    private final KnownCityRepository knownCityRepository;
+
+    // Self-injected proxy reference - calling an @Async method via `this.`
+    // from another method in this same class bypasses Spring's @Async proxy
+    // entirely (self-invocation isn't intercepted), so it would silently run
+    // synchronously instead of being dispatched to a background thread.
+    // Routing internal calls through `self` instead goes through the real
+    // proxy. @Lazy breaks the circular dependency this otherwise creates.
+    private final HotelSyncJobRunner self;
 
     // Pause between batches - mirrors TripJack's own site's incremental-load
     // behavior (loads ~10 hotels at a time on scroll) instead of hammering
@@ -43,200 +55,186 @@ public class HotelSyncJobRunner {
     // rate-limiting during an earlier, more aggressive attempt at this.
     private static final long BATCH_PAUSE_MS = 500;
 
-    // A city with hotels synced more recently than this doesn't get
-    // re-triggered by on-demand sync - old enough that TripJack's inventory
-    // for it may have meaningfully changed, recent enough not to re-sync a
-    // city every time it's searched.
-    private static final int STALENESS_DAYS = 30;
+    // Extra pause between cities in the periodic known-city refresh, on top
+    // of BATCH_PAUSE_MS between each city's own 100-hotel batches - spreads
+    // the whole run out rather than hammering TripJack city after city.
+    private static final long CITY_REFRESH_PAUSE_MS = 2000;
 
-    // Customer searches can trigger this concurrently for different cities -
-    // unlike the admin endpoints (one deliberate action at a time), this cap
-    // keeps a burst of searches for different never-synced cities from
-    // piling up multiple simultaneous background jobs on a small instance.
-    private static final int MAX_CONCURRENT_ON_DEMAND_JOBS = 2;
-    private final AtomicInteger runningOnDemandJobs = new AtomicInteger(0);
+    // Bounds each known city's periodic refresh - it's re-checking a city
+    // whose regionIds are already known (not searching for it), so this only
+    // needs to be big enough to page through that one city's current hotel
+    // count, not a whole country.
+    private static final int KNOWN_CITY_REFRESH_MAX_PAGES = 5;
 
-    // fetch-city-regionIds has no name filter, so finding a given city can
-    // mean scanning arbitrarily deep into TripJack's global list - we've
-    // seen it miss entirely even after 100+ pages (Ahmedabad, Phuket). A
-    // full scan isn't a good fit for something triggered synchronously from
-    // a customer's tap, so the on-demand path only tries a short, bounded
-    // lookup; a miss here means "ask the customer which country instead"
-    // (triggerOnDemandCountrySync) rather than "keep scanning".
-    private static final int ON_DEMAND_QUICK_LOOKUP_MAX_PAGES = 15;
-    private static final int ON_DEMAND_MAPPING_MAX_PAGES = 5;
-    private static final int ON_DEMAND_COUNTRY_MAX_PAGES = 5;
-
-    public HotelSyncJobRunner(HotelCatalogService hotelCatalogService, HotelSyncJobRepository jobRepository, HotelRepository hotelRepository) {
+    public HotelSyncJobRunner(
+            HotelCatalogService hotelCatalogService,
+            HotelSyncJobRepository jobRepository,
+            KnownCityRepository knownCityRepository,
+            @Lazy HotelSyncJobRunner self
+    ) {
         this.hotelCatalogService = hotelCatalogService;
         this.jobRepository = jobRepository;
-        this.hotelRepository = hotelRepository;
+        this.knownCityRepository = knownCityRepository;
+        this.self = self;
     }
 
     public HotelSyncJob startCountrySync(String countryName, int maxPages) {
         HotelSyncJob job = createJob("COUNTRY", countryName);
-        runCountrySync(job.getId(), countryName, maxPages, false);
+        self.runCountrySync(job.getId(), countryName, maxPages);
         return job;
     }
 
     public HotelSyncJob startCitySync(String cityName, int lookupMaxPages, int mappingMaxPages) {
         HotelSyncJob job = createJob("CITY", cityName);
-        runCitySync(job.getId(), cityName, lookupMaxPages, mappingMaxPages, false);
+        self.runCitySync(job.getId(), cityName, lookupMaxPages, mappingMaxPages);
         return job;
     }
 
-    // Public, customer-facing counterpart to startCitySync (see
-    // HotelCatalogController) - powers the city picker's "can't find your
-    // city" fallback. Only actually starts a job when the city looks like it
-    // needs one: never synced, or not synced within STALENESS_DAYS, and not
-    // already being synced right now, and under the concurrency cap. Every
-    // other case is a fast, cheap no-op - this is safe to call from live
-    // customer traffic, not just deliberate admin action.
-    //
-    // The regionId lookup itself runs synchronously here (bounded to
-    // ON_DEMAND_QUICK_LOOKUP_MAX_PAGES, so worst case is a ~15-20s wait, not
-    // minutes) so the response can tell the caller definitively whether the
-    // city was found - "need-country" means it wasn't, and the frontend
-    // should fall back to triggerOnDemandCountrySync with a country the
-    // customer picks, rather than this endpoint scanning indefinitely.
-    public Map<String, Object> triggerOnDemandCitySync(String cityName) {
+    // Admin-only (see HotelCatalogController/SecurityConfig) - adds a city to
+    // the curated "high-traffic" list. Resolves its regionIds once (bounded
+    // lookup - fetch-city-regionIds has no name filter, so this can still
+    // miss a real city, same as the admin sync-city path) and, if found,
+    // stores them on the KnownCity row and kicks off an initial sync so the
+    // city is searchable right away. The stored regionIds are what
+    // refreshKnownCities reuses later - no re-lookup needed on every refresh.
+    public Map<String, Object> addKnownCity(String cityName, int lookupMaxPages) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("cityName", cityName);
 
-        LocalDateTime lastSynced = hotelRepository.findMaxSyncedAtByCity(cityName);
-        if (lastSynced != null && lastSynced.isAfter(LocalDateTime.now().minusDays(STALENESS_DAYS))) {
-            result.put("action", "already-fresh");
-            result.put("lastSyncedAt", lastSynced.toString());
+        if (knownCityRepository.findByCityNameIgnoreCase(cityName).isPresent()) {
+            result.put("action", "already-known");
             return result;
         }
 
-        boolean alreadyRunningForCity = jobRepository.findTop20ByOrderByStartedAtDesc().stream()
-                .anyMatch(job -> "RUNNING".equals(job.getStatus())
-                        && "CITY".equals(job.getType())
-                        && cityName.equalsIgnoreCase(job.getParam()));
-        if (alreadyRunningForCity) {
-            result.put("action", "already-running");
-            return result;
-        }
-
-        if (runningOnDemandJobs.get() >= MAX_CONCURRENT_ON_DEMAND_JOBS) {
-            result.put("action", "busy");
-            return result;
-        }
-
-        List<Long> regionIds = hotelCatalogService.findRegionIds(cityName, ON_DEMAND_QUICK_LOOKUP_MAX_PAGES);
+        List<Long> regionIds = hotelCatalogService.findRegionIds(cityName, lookupMaxPages);
         if (regionIds.isEmpty()) {
-            result.put("action", "need-country");
+            result.put("action", "not-found");
             return result;
         }
 
-        runningOnDemandJobs.incrementAndGet();
+        KnownCity known = new KnownCity();
+        known.setCityName(cityName);
+        known.setRegionIds(joinRegionIds(regionIds));
+        known.setCreatedAt(LocalDateTime.now());
+        known = knownCityRepository.save(known);
+
         HotelSyncJob job = createJob("CITY", cityName);
         job.setRegionIds(regionIds.toString());
         jobRepository.save(job);
-        runCityMappingSync(job.getId(), regionIds, ON_DEMAND_MAPPING_MAX_PAGES, true);
+        self.runCityMappingSync(job.getId(), regionIds);
+
         result.put("action", "started");
+        result.put("knownCityId", known.getId());
         result.put("jobId", job.getId());
         return result;
     }
 
-    // Fallback for triggerOnDemandCitySync's "need-country" case - the
-    // customer picked a country (from TripJack's own country list, see
-    // GET /hotels/countries) for a city the quick lookup couldn't find.
-    // Country-level sync doesn't have the "no name filter" problem city
-    // lookup does - fetch-hotel-mapping accepts countryName directly - so
-    // this has been reliable every time it's been used (India, UAE,
-    // Thailand all completed cleanly). Duplicate/concurrency-capped the same
-    // way as the city path.
-    public Map<String, Object> triggerOnDemandCountrySync(String countryName) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("countryName", countryName);
-
-        boolean alreadyRunning = jobRepository.findTop20ByOrderByStartedAtDesc().stream()
-                .anyMatch(job -> "RUNNING".equals(job.getStatus())
-                        && "COUNTRY".equals(job.getType())
-                        && countryName.equalsIgnoreCase(job.getParam()));
-        if (alreadyRunning) {
-            result.put("action", "already-running");
-            return result;
-        }
-
-        if (runningOnDemandJobs.get() >= MAX_CONCURRENT_ON_DEMAND_JOBS) {
-            result.put("action", "busy");
-            return result;
-        }
-
-        runningOnDemandJobs.incrementAndGet();
-        HotelSyncJob job = createJob("COUNTRY", countryName);
-        runCountrySync(job.getId(), countryName, ON_DEMAND_COUNTRY_MAX_PAGES, true);
-        result.put("action", "started");
-        result.put("jobId", job.getId());
-        return result;
+    public List<KnownCity> listKnownCities() {
+        return knownCityRepository.findAllByOrderByCityNameAsc();
     }
 
-    @Async
-    public void runCountrySync(Long jobId, String countryName, int maxPages, boolean onDemand) {
-        try {
-            runMappingAndSync(jobId, payload -> payload.put("countryName", countryName), maxPages);
-        } finally {
-            if (onDemand) {
-                runningOnDemandJobs.decrementAndGet();
+    public void removeKnownCity(Long id) {
+        knownCityRepository.deleteById(id);
+    }
+
+    // Runs daily - re-checks every curated city for hotels TripJack has
+    // added since the last sync, using each city's already-resolved
+    // regionIds (see addKnownCity) rather than a country-wide scan. Cities
+    // run one at a time (not concurrently) with a pause between each, same
+    // gentle-polling reasoning as BATCH_PAUSE_MS - a scheduled background
+    // job has no reason to burst all cities at once.
+    @Scheduled(cron = "0 0 4 * * *")
+    public void refreshKnownCities() {
+        for (KnownCity city : knownCityRepository.findAllByOrderByCityNameAsc()) {
+            List<Long> regionIds = parseRegionIds(city.getRegionIds());
+            if (regionIds.isEmpty()) {
+                continue;
+            }
+
+            HotelSyncJob job = createJob("CITY_REFRESH", city.getCityName());
+            job.setRegionIds(city.getRegionIds());
+            jobRepository.save(job);
+
+            runMappingAndSync(job.getId(), payload -> {
+                ArrayNode regionIdsNode = payload.putArray("regionIds");
+                regionIds.forEach(id -> regionIdsNode.add(String.valueOf(id)));
+            }, KNOWN_CITY_REFRESH_MAX_PAGES);
+
+            city.setLastSyncedAt(LocalDateTime.now());
+            knownCityRepository.save(city);
+
+            try {
+                Thread.sleep(CITY_REFRESH_PAUSE_MS);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
             }
         }
     }
 
-    // Used once a city's regionIds are already known (either from the
-    // synchronous quick lookup in triggerOnDemandCitySync, or - see
-    // runCitySync below - found during the admin path's own lookup) - skips
-    // re-resolving them and goes straight to the mapping+content sync.
+    private String joinRegionIds(List<Long> regionIds) {
+        return regionIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
+
+    private List<Long> parseRegionIds(String csv) {
+        List<Long> ids = new ArrayList<>();
+        if (csv == null || csv.isBlank()) {
+            return ids;
+        }
+        for (String part : csv.split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) {
+                ids.add(Long.parseLong(trimmed));
+            }
+        }
+        return ids;
+    }
+
     @Async
-    public void runCityMappingSync(Long jobId, List<Long> regionIds, int mappingMaxPages, boolean onDemand) {
+    public void runCountrySync(Long jobId, String countryName, int maxPages) {
+        runMappingAndSync(jobId, payload -> payload.put("countryName", countryName), maxPages);
+    }
+
+    // Used once a city's regionIds are already known (either from
+    // addKnownCity's lookup, or - see runCitySync below - found during the
+    // admin path's own lookup) - skips re-resolving them and goes straight
+    // to the mapping+content sync.
+    @Async
+    public void runCityMappingSync(Long jobId, List<Long> regionIds) {
+        runMappingAndSync(jobId, payload -> {
+            ArrayNode regionIdsNode = payload.putArray("regionIds");
+            regionIds.forEach(id -> regionIdsNode.add(String.valueOf(id)));
+        }, KNOWN_CITY_REFRESH_MAX_PAGES);
+    }
+
+    @Async
+    public void runCitySync(Long jobId, String cityName, int lookupMaxPages, int mappingMaxPages) {
+        HotelSyncJob job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return;
+        }
         try {
+            job.setStatus("RUNNING");
+            job.setUpdatedAt(LocalDateTime.now());
+            jobRepository.save(job);
+
+            List<Long> regionIds = hotelCatalogService.findRegionIds(cityName, lookupMaxPages);
+            if (regionIds.isEmpty()) {
+                job.setStatus("FAILED");
+                job.setErrorMessage("No matching city found in TripJack's region index within " + lookupMaxPages + " pages");
+                job.setUpdatedAt(LocalDateTime.now());
+                jobRepository.save(job);
+                return;
+            }
+            job.setRegionIds(regionIds.toString());
+            jobRepository.save(job);
+
             runMappingAndSync(jobId, payload -> {
                 ArrayNode regionIdsNode = payload.putArray("regionIds");
                 regionIds.forEach(id -> regionIdsNode.add(String.valueOf(id)));
             }, mappingMaxPages);
-        } finally {
-            if (onDemand) {
-                runningOnDemandJobs.decrementAndGet();
-            }
-        }
-    }
-
-    @Async
-    public void runCitySync(Long jobId, String cityName, int lookupMaxPages, int mappingMaxPages, boolean onDemand) {
-        try {
-            HotelSyncJob job = jobRepository.findById(jobId).orElse(null);
-            if (job == null) {
-                return;
-            }
-            try {
-                job.setStatus("RUNNING");
-                job.setUpdatedAt(LocalDateTime.now());
-                jobRepository.save(job);
-
-                List<Long> regionIds = hotelCatalogService.findRegionIds(cityName, lookupMaxPages);
-                if (regionIds.isEmpty()) {
-                    job.setStatus("FAILED");
-                    job.setErrorMessage("No matching city found in TripJack's region index within " + lookupMaxPages + " pages");
-                    job.setUpdatedAt(LocalDateTime.now());
-                    jobRepository.save(job);
-                    return;
-                }
-                job.setRegionIds(regionIds.toString());
-                jobRepository.save(job);
-
-                runMappingAndSync(jobId, payload -> {
-                    ArrayNode regionIdsNode = payload.putArray("regionIds");
-                    regionIds.forEach(id -> regionIdsNode.add(String.valueOf(id)));
-                }, mappingMaxPages);
-            } catch (Exception e) {
-                markFailed(jobId, e);
-            }
-        } finally {
-            if (onDemand) {
-                runningOnDemandJobs.decrementAndGet();
-            }
+        } catch (Exception e) {
+            markFailed(jobId, e);
         }
     }
 

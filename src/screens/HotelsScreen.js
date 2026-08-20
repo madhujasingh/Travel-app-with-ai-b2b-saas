@@ -105,19 +105,6 @@ const HotelsScreen = ({ navigation }) => {
   const [loadingCities, setLoadingCities] = useState(false);
   const [selectingCity, setSelectingCity] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState('');
-  const [citySyncTriggering, setCitySyncTriggering] = useState(false);
-
-  // Fallback when the quick city-index lookup can't find a typed city
-  // (fetch-city-regionIds has no name filter, so it can miss real cities -
-  // see triggerCitySync) - lets the customer pick the country instead, which
-  // syncs reliably. countryPickerCity remembers what they originally typed,
-  // just for the modal's copy.
-  const [countries, setCountries] = useState(null);
-  const [countryPickerVisible, setCountryPickerVisible] = useState(false);
-  const [countryPickerCity, setCountryPickerCity] = useState('');
-  const [countrySearch, setCountrySearch] = useState('');
-  const [loadingCountries, setLoadingCountries] = useState(false);
-  const [countrySyncTriggering, setCountrySyncTriggering] = useState(false);
 
   const [datePickerField, setDatePickerField] = useState(null); // 'checkIn' | 'checkOut' | null
 
@@ -412,100 +399,6 @@ const HotelsScreen = ({ navigation }) => {
   const filteredCities = (cities || []).filter((c) =>
     `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
   );
-
-  // Fallback for typing a city with no synced hotels yet - looks it up
-  // against TripJack's own city index and, if found, starts a background
-  // sync (see HotelSyncJobRunner) so it's searchable soon, without making
-  // this search wait for that sync to finish.
-  const triggerCitySync = async () => {
-    const query = citySearch.trim();
-    if (!query) return;
-
-    try {
-      setCitySyncTriggering(true);
-      const data = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotel-catalog/search-and-sync-city?cityName=${encodeURIComponent(query)}`,
-        { method: 'POST' },
-        'Unable to search for this city right now.'
-      );
-
-      if (data.action === 'started' || data.action === 'already-running') {
-        Alert.alert(
-          'Loading this destination',
-          `We're fetching hotels for "${query}" from our supplier - this can take a few minutes. Search again shortly and it should appear.`
-        );
-      } else if (data.action === 'already-fresh') {
-        Alert.alert(
-          'Already up to date',
-          `"${query}" was already synced recently. If it's still not showing up, double-check the spelling.`
-        );
-      } else if (data.action === 'busy') {
-        Alert.alert('Please try again', "We're already loading a few other destinations right now - try again in a minute.");
-      } else if (data.action === 'need-country') {
-        // TripJack's city index has no name filter, so a quick lookup can
-        // miss a real city - fall back to a reliable country-level sync
-        // instead of failing outright. Close the city modal first - two RN
-        // Modals visible at once silently fails to open the second one.
-        setCountryPickerCity(query);
-        setCityModal(false);
-        openCountryPicker();
-      }
-    } catch (error) {
-      Alert.alert('City Search', error.message || 'Unable to search for this city right now.');
-    } finally {
-      setCitySyncTriggering(false);
-    }
-  };
-
-  const openCountryPicker = async () => {
-    setCountryPickerVisible(true);
-    if (countries) return;
-
-    try {
-      setLoadingCountries(true);
-      const data = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotels/countries`,
-        { method: 'GET' },
-        'Unable to load countries right now.'
-      );
-      setCountries(data.hotelCountries || []);
-    } catch (error) {
-      Alert.alert('Countries', error.message || 'Unable to load countries right now.');
-    } finally {
-      setLoadingCountries(false);
-    }
-  };
-
-  const filteredCountries = (countries || []).filter((name) =>
-    name.toLowerCase().includes(countrySearch.trim().toLowerCase())
-  );
-
-  const triggerCountrySync = async (countryName) => {
-    try {
-      setCountrySyncTriggering(true);
-      const data = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotel-catalog/search-and-sync-country?countryName=${encodeURIComponent(countryName)}`,
-        { method: 'POST' },
-        'Unable to search this country right now.'
-      );
-
-      setCountryPickerVisible(false);
-      setCountrySearch('');
-
-      if (data.action === 'started' || data.action === 'already-running') {
-        Alert.alert(
-          'Loading this destination',
-          `We're fetching hotels across ${countryName} from our supplier - this can take a few minutes. Search for "${countryPickerCity}" again shortly and it should appear.`
-        );
-      } else if (data.action === 'busy') {
-        Alert.alert('Please try again', "We're already loading a few other destinations right now - try again in a minute.");
-      }
-    } catch (error) {
-      Alert.alert('Country Search', error.message || 'Unable to search this country right now.');
-    } finally {
-      setCountrySyncTriggering(false);
-    }
-  };
 
   // Best practice from the docs: filter out options where inventory.available
   // is explicitly false before picking what to display. Listing only ever
@@ -1109,53 +1002,6 @@ const HotelsScreen = ({ navigation }) => {
         </Pressable>
       </Modal>
 
-      <Modal
-        visible={countryPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCountryPickerVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setCountryPickerVisible(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Which country is "{countryPickerCity}" in?</Text>
-              <TouchableOpacity onPress={() => setCountryPickerVisible(false)}>
-                <Ionicons name="close" size={20} color={Colors.text} />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalHintText}>
-              We couldn't find this city directly - pick its country and we'll load hotels for the whole country instead.
-            </Text>
-            <TextInput
-              style={styles.modalSearchInput}
-              placeholder="Search country..."
-              placeholderTextColor={Colors.textMuted}
-              value={countrySearch}
-              onChangeText={setCountrySearch}
-            />
-            {loadingCountries ? (
-              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
-            ) : (
-              <FlatList
-                data={filteredCountries}
-                keyExtractor={(name) => name}
-                style={styles.modalList}
-                renderItem={({ item: name }) => (
-                  <TouchableOpacity
-                    style={styles.modalListRow}
-                    onPress={() => triggerCountrySync(name)}
-                    disabled={countrySyncTriggering}
-                  >
-                    <Text style={styles.modalListRowText}>{name}</Text>
-                  </TouchableOpacity>
-                )}
-              />
-            )}
-            {countrySyncTriggering && <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
       <Modal visible={cityModal} transparent animationType="fade" onRequestClose={() => setCityModal(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setCityModal(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
@@ -1174,53 +1020,23 @@ const HotelsScreen = ({ navigation }) => {
             />
             {loadingCities ? (
               <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+            ) : filteredCities.length === 0 ? (
+              <Text style={styles.modalEmptyText}>No synced cities match "{citySearch.trim()}".</Text>
             ) : (
-              <>
-                {filteredCities.length === 0 ? (
-                  <Text style={styles.modalEmptyText}>No synced cities match "{citySearch.trim()}".</Text>
-                ) : (
-                  // Same-named places in different countries are real (e.g.
-                  // there's a town called "Bali" in India, distinct from the
-                  // Indonesian island) - matches here don't necessarily mean
-                  // the city the customer actually wants is covered, so
-                  // "Search anyway" stays available below regardless.
-                  <FlatList
-                    data={filteredCities}
-                    keyExtractor={(item) => `${item.city}-${item.countryName}`}
-                    style={styles.modalList}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity style={styles.modalListRow} onPress={() => selectCity(item)} disabled={selectingCity}>
-                        <View>
-                          <Text style={styles.modalListRowText}>{item.city}</Text>
-                          <Text style={styles.modalListRowMeta}>{item.countryName}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                      </TouchableOpacity>
-                    )}
-                  />
+              <FlatList
+                data={filteredCities}
+                keyExtractor={(item) => `${item.city}-${item.countryName}`}
+                style={styles.modalList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectCity(item)} disabled={selectingCity}>
+                    <View>
+                      <Text style={styles.modalListRowText}>{item.city}</Text>
+                      <Text style={styles.modalListRowMeta}>{item.countryName}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                  </TouchableOpacity>
                 )}
-                {citySearch.trim().length > 0 && (
-                  <View style={styles.citySyncPrompt}>
-                    {filteredCities.length > 0 && (
-                      <Text style={styles.modalHintText}>Not the right one? It might be in a different country.</Text>
-                    )}
-                    <TouchableOpacity
-                      style={styles.citySyncButton}
-                      onPress={triggerCitySync}
-                      disabled={citySyncTriggering}
-                    >
-                      {citySyncTriggering ? (
-                        <ActivityIndicator size="small" color={Colors.secondary} />
-                      ) : (
-                        <>
-                          <Ionicons name="cloud-download-outline" size={16} color={Colors.secondary} />
-                          <Text style={styles.citySyncButtonText}>Search "{citySearch.trim()}" anyway</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
+              />
             )}
           </Pressable>
         </Pressable>
@@ -2066,12 +1882,6 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     fontWeight: '700',
   },
-  modalHintText: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    marginBottom: 12,
-    lineHeight: 18,
-  },
   modalSearchInput: {
     backgroundColor: Colors.background,
     borderRadius: 10,
@@ -2089,24 +1899,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: Colors.textMuted,
     marginVertical: 30,
-  },
-  citySyncPrompt: {
-    alignItems: 'center',
-    paddingBottom: 20,
-  },
-  citySyncButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 999,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  citySyncButtonText: {
-    color: Colors.secondary,
-    fontWeight: '700',
-    fontSize: 14,
   },
   modalList: {
     maxHeight: 380,
