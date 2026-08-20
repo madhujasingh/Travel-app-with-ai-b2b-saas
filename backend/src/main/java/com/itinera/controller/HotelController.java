@@ -88,4 +88,13 @@ public class HotelController {
     public ResponseEntity<JsonNode> hotelContent(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(hotelService.hotelContent(payload));
     }
+
+    // Admin-only (see SecurityConfig) - passthrough to TripJack's older v1
+    // static-hotels feed, being evaluated as a possible replacement for the
+    // per-city regionId refresh (see HotelSyncJobRunner) since it supports a
+    // proper lastUpdateTime delta rather than a full re-scan.
+    @PostMapping("/static-hotels")
+    public ResponseEntity<JsonNode> staticHotels(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(hotelService.fetchStaticHotels(payload));
+    }
 }

@@ -69,6 +69,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/hotels/city-region-ids").permitAll()
                 .requestMatchers(HttpMethod.POST, "/hotels/hotel-mapping").permitAll()
                 .requestMatchers(HttpMethod.POST, "/hotels/hotel-content").permitAll()
+                .requestMatchers(HttpMethod.POST, "/hotels/static-hotels").hasRole("ADMIN")
                 .requestMatchers("/hotels/**").authenticated()
                 // Syncing costs real TripJack API calls and writes to our DB -
                 // admin-triggered only. Reading the cached catalog is public,
