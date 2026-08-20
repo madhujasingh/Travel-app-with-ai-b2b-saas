@@ -228,6 +228,62 @@ public class HotelCatalogService {
         return allIds;
     }
 
+    // Cursor-paginated collection for the NEW/UPDATE/DELETE mapping-sync
+    // feeds (see HotelSyncJobRunner.refreshGlobalDelta) - unlike
+    // collectMappedIds (page-number based, needs a city/country filter),
+    // these need no location filter at all: they return every tjHotelId
+    // that's new/changed/deleted globally since lastUpdateTime. Returns
+    // both the collected ids and whether maxPages was hit before the cursor
+    // ran out, so the caller can tell a full result from a truncated one.
+    record SyncPage(List<String> ids, boolean truncated) {}
+
+    SyncPage collectSyncIds(String type, String lastUpdateTimeIso, int maxPages) {
+        List<String> ids = new ArrayList<>();
+        String cursor = null;
+        boolean truncated = false;
+        for (int page = 0; page < maxPages; page++) {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("type", type);
+            payload.put("lastUpdateTime", lastUpdateTimeIso);
+            if (cursor != null) {
+                payload.put("cursor", cursor);
+            }
+
+            JsonNode response = "DELETE".equals(type)
+                    ? hotelService.deletedHotelMappingSync(payload)
+                    : hotelService.hotelMappingSync(payload);
+
+            JsonNode hotels = response.path("hotels");
+            if (!hotels.isArray() || hotels.isEmpty()) {
+                break;
+            }
+            for (JsonNode h : hotels) {
+                String id = h.path("tjHotelId").asText(null);
+                if (id != null) {
+                    ids.add(id);
+                }
+            }
+
+            cursor = response.path("nextCursor").asText(null);
+            if (cursor == null || cursor.isBlank()) {
+                break;
+            }
+            if (page == maxPages - 1) {
+                truncated = true;
+            }
+        }
+        return new SyncPage(ids, truncated);
+    }
+
+    // Bulk-remove hotels TripJack has delisted (see fetch-deleted-hotel-mapping).
+    @Transactional
+    public void deleteHotelsByTjHotelIds(List<String> tjHotelIds) {
+        if (tjHotelIds == null || tjHotelIds.isEmpty()) {
+            return;
+        }
+        hotelRepository.deleteAllByIdInBatch(tjHotelIds);
+    }
+
     // fetch-city-regionIds has no name filter (per TripJack's docs) - the
     // only way to find one city's regionId is to page through the full
     // global list (2000 records/page) looking for an exact, case-insensitive

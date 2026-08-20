@@ -3,21 +3,17 @@ package com.itinera.service;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.itinera.model.HotelSyncJob;
-import com.itinera.model.KnownCity;
 import com.itinera.repository.HotelSyncJobRepository;
-import com.itinera.repository.KnownCityRepository;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 // Runs HotelCatalogService syncs as background jobs (see HotelSyncJob)
 // instead of one long synchronous HTTP request. A prior synchronous
@@ -39,7 +35,6 @@ public class HotelSyncJobRunner {
 
     private final HotelCatalogService hotelCatalogService;
     private final HotelSyncJobRepository jobRepository;
-    private final KnownCityRepository knownCityRepository;
 
     // Self-injected proxy reference - calling an @Async method via `this.`
     // from another method in this same class bypasses Spring's @Async proxy
@@ -55,26 +50,19 @@ public class HotelSyncJobRunner {
     // rate-limiting during an earlier, more aggressive attempt at this.
     private static final long BATCH_PAUSE_MS = 500;
 
-    // Extra pause between cities in the periodic known-city refresh, on top
-    // of BATCH_PAUSE_MS between each city's own 100-hotel batches - spreads
-    // the whole run out rather than hammering TripJack city after city.
-    private static final long CITY_REFRESH_PAUSE_MS = 2000;
-
-    // Bounds each known city's periodic refresh - it's re-checking a city
-    // whose regionIds are already known (not searching for it), so this only
-    // needs to be big enough to page through that one city's current hotel
-    // count, not a whole country.
-    private static final int KNOWN_CITY_REFRESH_MAX_PAGES = 5;
+    // Caps each of the NEW/UPDATE/DELETE delta pulls at 50 pages * 2000/page
+    // = 100,000 records per run - a normal daily run should be a tiny
+    // fraction of that (see refreshGlobalDelta). This only matters as a
+    // safety net if the watermark somehow goes stale for a while.
+    private static final int DELTA_SYNC_MAX_PAGES = 50;
 
     public HotelSyncJobRunner(
             HotelCatalogService hotelCatalogService,
             HotelSyncJobRepository jobRepository,
-            KnownCityRepository knownCityRepository,
             @Lazy HotelSyncJobRunner self
     ) {
         this.hotelCatalogService = hotelCatalogService;
         this.jobRepository = jobRepository;
-        this.knownCityRepository = knownCityRepository;
         this.self = self;
     }
 
@@ -90,135 +78,89 @@ public class HotelSyncJobRunner {
         return job;
     }
 
-    // Admin-only (see HotelCatalogController/SecurityConfig) - adds a city to
-    // the curated "high-traffic" list. Resolves its regionIds once (bounded
-    // lookup - fetch-city-regionIds has no name filter, so this can still
-    // miss a real city, same as the admin sync-city path) and, if found,
-    // stores them on the KnownCity row and kicks off an initial sync so the
-    // city is searchable right away. The stored regionIds are what
-    // refreshKnownCities reuses later - no re-lookup needed on every refresh.
+    // Runs daily - the global "keep it fresh" sync. Unlike the old per-city
+    // regionId refresh this replaces, it needs no city/country curation and
+    // can't hit the same-name-wrong-country bug (it uses TripJack's
+    // dedicated NEW/UPDATE/DELETE mapping-sync feeds, not a name lookup).
     //
-    // regionIdsOverride (comma-separated) skips the name lookup entirely -
-    // needed because the lookup only does an exact, case-insensitive
-    // cityName match, which can silently resolve to the wrong place when
-    // multiple countries share a city name (caught once already with Bali,
-    // India vs Bali, Indonesia) or miss entirely when TripJack indexes a
-    // city only under a differently-named metro/region entry (Paris is only
-    // indexed as "METROPOLE DU GRAND PARIS" etc, never a plain "PARIS"/
-    // FRANCE entry - the name lookup instead matched "PARIS"/UNITED STATES).
-    // Always verify a newly-added city's job (GET /sync-jobs/{id}) shows a
-    // non-zero totalMapped before trusting it - a resolved regionId can
-    // still turn out to map to zero hotels.
-    public Map<String, Object> addKnownCity(String cityName, String regionIdsOverride, int lookupMaxPages) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("cityName", cityName);
-
-        if (knownCityRepository.findByCityNameIgnoreCase(cityName).isPresent()) {
-            result.put("action", "already-known");
-            return result;
-        }
-
-        List<Long> regionIds = (regionIdsOverride != null && !regionIdsOverride.isBlank())
-                ? parseRegionIds(regionIdsOverride)
-                : hotelCatalogService.findRegionIds(cityName, lookupMaxPages);
-        if (regionIds.isEmpty()) {
-            result.put("action", "not-found");
-            return result;
-        }
-
-        KnownCity known = new KnownCity();
-        known.setCityName(cityName);
-        known.setRegionIds(joinRegionIds(regionIds));
-        known.setCreatedAt(LocalDateTime.now());
-        known = knownCityRepository.save(known);
-
-        HotelSyncJob job = createJob("CITY", cityName);
-        job.setRegionIds(regionIds.toString());
-        jobRepository.save(job);
-        self.runCityMappingSync(job.getId(), regionIds);
-
-        result.put("action", "started");
-        result.put("knownCityId", known.getId());
-        result.put("jobId", job.getId());
-        return result;
-    }
-
-    public List<KnownCity> listKnownCities() {
-        return knownCityRepository.findAllByOrderByCityNameAsc();
-    }
-
-    public void removeKnownCity(Long id) {
-        knownCityRepository.deleteById(id);
-    }
-
-    // Runs daily - re-checks every curated city for hotels TripJack has
-    // added since the last sync, using each city's already-resolved
-    // regionIds (see addKnownCity) rather than a country-wide scan. Cities
-    // run one at a time (not concurrently) with a pause between each, same
-    // gentle-polling reasoning as BATCH_PAUSE_MS - a scheduled background
-    // job has no reason to burst all cities at once.
+    // Watermark: the lastUpdateTime sent to TripJack is this job type's most
+    // recent COMPLETED run's startedAt (not "now", and not that run's
+    // completedAt - using startedAt means nothing that changed while a run
+    // was executing gets missed by the next one). The very first run has no
+    // prior COMPLETED job to anchor to, so it falls back to its own
+    // startedAt - i.e. it watches from the moment it first runs, not from
+    // TripJack's entire history (which would mean ~1.6M hotels worldwide).
+    //
+    // If any of the three pulls hits DELTA_SYNC_MAX_PAGES without the
+    // cursor running out, the job is marked PARTIAL instead of COMPLETED so
+    // its startedAt is never used as a watermark - the next run naturally
+    // retries the same range instead of silently skipping whatever was past
+    // the cap (safe either way, since every sync here is an upsert).
     @Scheduled(cron = "0 0 4 * * *")
-    public void refreshKnownCities() {
-        for (KnownCity city : knownCityRepository.findAllByOrderByCityNameAsc()) {
-            List<Long> regionIds = parseRegionIds(city.getRegionIds());
-            if (regionIds.isEmpty()) {
-                continue;
-            }
+    public void refreshGlobalDelta() {
+        String watermark = jobRepository.findTopByTypeAndStatusOrderByStartedAtDesc("GLOBAL_DELTA", "COMPLETED")
+                .map(j -> j.getStartedAt().toString() + "Z")
+                .orElse(LocalDateTime.now().toString() + "Z");
 
-            HotelSyncJob job = createJob("CITY_REFRESH", city.getCityName());
-            job.setRegionIds(city.getRegionIds());
+        HotelSyncJob job = createJob("GLOBAL_DELTA", watermark);
+        self.runGlobalDeltaSync(job.getId(), watermark);
+    }
+
+    @Async
+    public void runGlobalDeltaSync(Long jobId, String watermark) {
+        HotelSyncJob job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return;
+        }
+        try {
+            job.setStatus("RUNNING");
+            job.setUpdatedAt(LocalDateTime.now());
             jobRepository.save(job);
 
-            runMappingAndSync(job.getId(), payload -> {
-                ArrayNode regionIdsNode = payload.putArray("regionIds");
-                regionIds.forEach(id -> regionIdsNode.add(String.valueOf(id)));
-            }, KNOWN_CITY_REFRESH_MAX_PAGES);
+            HotelCatalogService.SyncPage newIds = hotelCatalogService.collectSyncIds("NEW", watermark, DELTA_SYNC_MAX_PAGES);
+            HotelCatalogService.SyncPage updatedIds = hotelCatalogService.collectSyncIds("UPDATE", watermark, DELTA_SYNC_MAX_PAGES);
+            HotelCatalogService.SyncPage deletedIds = hotelCatalogService.collectSyncIds("DELETE", watermark, DELTA_SYNC_MAX_PAGES);
 
-            city.setLastSyncedAt(LocalDateTime.now());
-            knownCityRepository.save(city);
+            Set<String> toSync = new LinkedHashSet<>(newIds.ids());
+            toSync.addAll(updatedIds.ids());
 
-            try {
-                Thread.sleep(CITY_REFRESH_PAUSE_MS);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                break;
+            job.setTotalMapped(toSync.size());
+            jobRepository.save(job);
+
+            int synced = 0;
+            List<String> toSyncList = List.copyOf(toSync);
+            for (int i = 0; i < toSyncList.size(); i += 100) {
+                List<String> batch = toSyncList.subList(i, Math.min(i + 100, toSyncList.size()));
+                synced += hotelCatalogService.syncHotelContentBatch(batch);
+
+                job.setTotalSynced(synced);
+                job.setUpdatedAt(LocalDateTime.now());
+                jobRepository.save(job);
+
+                try {
+                    Thread.sleep(BATCH_PAUSE_MS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
-        }
-    }
 
-    private String joinRegionIds(List<Long> regionIds) {
-        return regionIds.stream().map(String::valueOf).collect(Collectors.joining(","));
-    }
+            hotelCatalogService.deleteHotelsByTjHotelIds(deletedIds.ids());
+            job.setTotalDeleted(deletedIds.ids().size());
 
-    private List<Long> parseRegionIds(String csv) {
-        List<Long> ids = new ArrayList<>();
-        if (csv == null || csv.isBlank()) {
-            return ids;
+            boolean truncated = newIds.truncated() || updatedIds.truncated() || deletedIds.truncated();
+            job.setStatus(truncated ? "PARTIAL" : "COMPLETED");
+            job.setCompletedAt(LocalDateTime.now());
+            job.setUpdatedAt(LocalDateTime.now());
+            jobRepository.save(job);
+        } catch (Exception e) {
+            markFailed(jobId, e);
         }
-        for (String part : csv.split(",")) {
-            String trimmed = part.trim();
-            if (!trimmed.isEmpty()) {
-                ids.add(Long.parseLong(trimmed));
-            }
-        }
-        return ids;
     }
 
     @Async
     public void runCountrySync(Long jobId, String countryName, int maxPages) {
         runMappingAndSync(jobId, payload -> payload.put("countryName", countryName), maxPages);
-    }
-
-    // Used once a city's regionIds are already known (either from
-    // addKnownCity's lookup, or - see runCitySync below - found during the
-    // admin path's own lookup) - skips re-resolving them and goes straight
-    // to the mapping+content sync.
-    @Async
-    public void runCityMappingSync(Long jobId, List<Long> regionIds) {
-        runMappingAndSync(jobId, payload -> {
-            ArrayNode regionIdsNode = payload.putArray("regionIds");
-            regionIds.forEach(id -> regionIdsNode.add(String.valueOf(id)));
-        }, KNOWN_CITY_REFRESH_MAX_PAGES);
     }
 
     @Async

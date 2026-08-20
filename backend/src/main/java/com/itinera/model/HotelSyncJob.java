@@ -41,6 +41,9 @@ public class HotelSyncJob {
     @Column(name = "total_synced")
     private Integer totalSynced = 0;
 
+    @Column(name = "total_deleted")
+    private Integer totalDeleted = 0;
+
     @Column(name = "error_message", length = 2000)
     private String errorMessage;
 

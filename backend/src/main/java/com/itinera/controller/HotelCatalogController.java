@@ -2,7 +2,6 @@ package com.itinera.controller;
 
 import com.itinera.model.Hotel;
 import com.itinera.model.HotelSyncJob;
-import com.itinera.model.KnownCity;
 import com.itinera.repository.HotelRepository;
 import com.itinera.repository.HotelSyncJobRepository;
 import com.itinera.service.HotelCatalogService;
@@ -132,37 +131,6 @@ public class HotelCatalogController {
     @GetMapping("/storage-stats")
     public ResponseEntity<?> storageStats() {
         return ResponseEntity.ok(hotelCatalogService.hotelsTableStorageStats());
-    }
-
-    // Admin-only (see SecurityConfig) - adds a city to the curated
-    // "high-traffic" list (see KnownCity). Resolves its regionIds once and
-    // kicks off an initial sync; the periodic refresh job
-    // (HotelSyncJobRunner.refreshKnownCities) reuses those stored regionIds
-    // afterwards to check for newly-added hotels without a full country
-    // scan. lookupMaxPages bounds the one-time regionId lookup.
-    @PostMapping("/known-cities")
-    public ResponseEntity<?> addKnownCity(
-            @RequestParam String cityName,
-            @RequestParam(required = false) String regionIds,
-            @RequestParam(defaultValue = "100") int lookupMaxPages
-    ) {
-        return ResponseEntity.ok(hotelSyncJobRunner.addKnownCity(cityName, regionIds, lookupMaxPages));
-    }
-
-    // Admin-only (see SecurityConfig) - the curated city list, with each
-    // city's last periodic-refresh timestamp.
-    @GetMapping("/known-cities")
-    public ResponseEntity<List<KnownCity>> knownCities() {
-        return ResponseEntity.ok(hotelSyncJobRunner.listKnownCities());
-    }
-
-    // Admin-only (see SecurityConfig) - removes a city from the curated
-    // list. Doesn't delete its already-synced hotels, just stops the
-    // periodic refresh from checking it going forward.
-    @DeleteMapping("/known-cities/{id}")
-    public ResponseEntity<?> removeKnownCity(@PathVariable Long id) {
-        hotelSyncJobRunner.removeKnownCity(id);
-        return ResponseEntity.noContent().build();
     }
 
     // Admin-only (see SecurityConfig) - trims a country's catalog down to
