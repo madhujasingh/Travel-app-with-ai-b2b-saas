@@ -239,12 +239,10 @@ const HotelDetailScreen = ({ route, navigation }) => {
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
 
   // Inline date editing - 'checkIn' | 'checkOut' | null selects which field
-  // the DatePickerModal is editing. pendingCheckIn holds a newly-picked
-  // check-in date that isn't valid against the current check-out yet (the
-  // user still needs to pick a new check-out before it's applied), mirroring
-  // HotelsScreen's own date flow.
+  // the DatePickerModal is editing. Tapping Check-in opens the picker in
+  // range mode (both dates picked in one session); tapping Check-out opens
+  // it in single mode to adjust just that date.
   const [datePickerField, setDatePickerField] = useState(null);
-  const [pendingCheckIn, setPendingCheckIn] = useState(null);
   const [changingDates, setChangingDates] = useState(false);
 
   // Room filters - client-side over the current Detail response.
@@ -392,22 +390,19 @@ const HotelDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleDateSelected = (dateString) => {
-    const field = datePickerField;
+  // Check-out tapped on its own - adjust just that date, keeping check-in.
+  const handleCheckOutSelected = (dateString) => {
     setDatePickerField(null);
-    if (field === 'checkIn') {
-      if (dateString < searchContext.checkOut) {
-        applyDateChange(dateString, searchContext.checkOut);
-      } else {
-        // New check-in falls on/after the current check-out - it's no longer
-        // a valid pair, so hold it and make the user pick a new check-out
-        // rather than silently sending an invalid range.
-        setPendingCheckIn(dateString);
-      }
-    } else if (field === 'checkOut') {
-      applyDateChange(pendingCheckIn || searchContext.checkIn, dateString);
-      setPendingCheckIn(null);
-    }
+    applyDateChange(searchContext.checkIn, dateString);
+  };
+
+  // Check-in tapped - the picker runs in range mode, so both dates arrive
+  // together already validated (end > start) rather than needing the
+  // "hold the new check-in until a valid check-out is picked" dance this
+  // used to require.
+  const handleDateRangeSelected = (startDateString, endDateString) => {
+    setDatePickerField(null);
+    applyDateChange(startDateString, endDateString);
   };
 
   // Static Detail: property policies, check-in/out times, and mandatory fees
@@ -630,9 +625,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
                 disabled={changingDates}
               >
                 <Ionicons name="calendar-outline" size={13} color={Colors.primaryDark} />
-                <Text style={styles.datePillText}>
-                  {formatDisplayDate(pendingCheckIn || searchContext.checkIn)}
-                </Text>
+                <Text style={styles.datePillText}>{formatDisplayDate(searchContext.checkIn)}</Text>
               </TouchableOpacity>
               <Ionicons name="arrow-forward" size={13} color={Colors.textMuted} />
               <TouchableOpacity
@@ -642,9 +635,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
                 disabled={changingDates}
               >
                 <Ionicons name="calendar-outline" size={13} color={Colors.primaryDark} />
-                <Text style={styles.datePillText}>
-                  {pendingCheckIn ? 'Select date' : formatDisplayDate(searchContext.checkOut)}
-                </Text>
+                <Text style={styles.datePillText}>{formatDisplayDate(searchContext.checkOut)}</Text>
               </TouchableOpacity>
               {changingDates && (
                 <ActivityIndicator size="small" color={Colors.primary} style={styles.dateEditSpinner} />
@@ -1010,20 +1001,20 @@ const HotelDetailScreen = ({ route, navigation }) => {
 
       <DatePickerModal
         visible={datePickerField !== null}
-        title={datePickerField === 'checkOut' ? 'Check-out date' : 'Check-in date'}
+        title={datePickerField === 'checkOut' ? 'Check-out date' : 'Check-in → Check-out'}
+        rangeMode={datePickerField === 'checkIn'}
         initialDate={
           datePickerField === 'checkOut'
             ? parseDateValue(searchContext.checkOut)
-            : parseDateValue(pendingCheckIn || searchContext.checkIn)
+            : parseDateValue(searchContext.checkIn)
         }
         minDate={
           datePickerField === 'checkOut'
-            ? new Date(
-                parseDateValue(pendingCheckIn || searchContext.checkIn).getTime() + 24 * 60 * 60 * 1000
-              )
+            ? new Date(parseDateValue(searchContext.checkIn).getTime() + 24 * 60 * 60 * 1000)
             : startOfTomorrow()
         }
-        onSelect={handleDateSelected}
+        onSelect={handleCheckOutSelected}
+        onSelectRange={handleDateRangeSelected}
         onClose={() => setDatePickerField(null)}
       />
     </SafeAreaView>

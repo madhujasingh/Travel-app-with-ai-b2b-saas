@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 
@@ -40,31 +40,80 @@ const toDateString = (date) => {
 // Generic calendar-picker modal (dates only, no time) used anywhere the app
 // needs a date input - flight search dates, DOB, passport issue/expiry -
 // rather than free-text "type YYYY-MM-DD" fields prone to typos.
-const DatePickerModal = ({ visible, title, initialDate, minDate, maxDate, onSelect, onClose }) => {
+//
+// rangeMode picks a start+end pair in one continuous session instead of two
+// separate opens (e.g. hotel check-in immediately flowing into check-out):
+// the first tap sets a pending start (highlighted, subtitle prompts for the
+// end date); a later tap far enough past it confirms the pair via
+// onSelectRange and closes. Tapping an earlier date restarts the start
+// instead. minNights (default 1) sets how much later the end date must be -
+// hotels need at least 1 night; pass 0 to allow the start/end date to match
+// (e.g. a same-day flight return).
+const DatePickerModal = ({
+  visible,
+  title,
+  initialDate,
+  minDate,
+  maxDate,
+  onSelect,
+  onClose,
+  rangeMode = false,
+  onSelectRange,
+  minNights = 1,
+}) => {
   const today = startOfDay(new Date());
   const [month, setMonth] = useState(startOfMonth(initialDate || maxDate || today));
+  const [pendingStart, setPendingStart] = useState(null);
 
   useEffect(() => {
     if (visible) {
       setMonth(startOfMonth(initialDate || maxDate || today));
+      setPendingStart(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const minBound = minDate ? startOfDay(minDate) : null;
   const maxBound = maxDate ? startOfDay(maxDate) : null;
+  // Deliberately NOT tightened by pendingStart while picking a range's end -
+  // every originally-valid date stays tappable throughout, so tapping an
+  // earlier date restarts the start (see handleDayPress) instead of that
+  // date being disabled and stuck unreachable.
   const isDisabled = (date) => (minBound && date < minBound) || (maxBound && date > maxBound);
   const canGoToPreviousMonth = !minBound || addMonths(month, -1) >= startOfMonth(minBound);
 
   const calendarDays = buildCalendarDays(month);
 
+  const handleDayPress = (date) => {
+    if (!rangeMode) {
+      onSelect(toDateString(date), date);
+      return;
+    }
+    const minEndDate = pendingStart
+      ? new Date(pendingStart.getTime() + minNights * 24 * 60 * 60 * 1000)
+      : null;
+    if (!pendingStart || date < minEndDate) {
+      // First tap, or not far enough past the pending start to be a valid
+      // end - (re)start the range from here and wait for the end date.
+      setPendingStart(date);
+      return;
+    }
+    onSelectRange(toDateString(pendingStart), toDateString(date), pendingStart, date);
+    setPendingStart(null);
+  };
+
+  const selectedDate = rangeMode ? pendingStart : initialDate;
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.modal} onPress={() => {}}>
+        <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View>
-              <Text style={styles.eyebrow}>Choose date</Text>
+              <Text style={styles.eyebrow}>
+                {rangeMode && pendingStart ? 'Now pick the end date' : 'Choose date'}
+              </Text>
               <Text style={styles.title}>{title}</Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -96,12 +145,12 @@ const DatePickerModal = ({ visible, title, initialDate, minDate, maxDate, onSele
             {calendarDays.map((date) => {
               const isCurrentMonth = date.getMonth() === month.getMonth();
               const disabled = isDisabled(date);
-              const selected = initialDate ? isSameDay(date, initialDate) : false;
+              const selected = selectedDate ? isSameDay(date, selectedDate) : false;
               return (
                 <TouchableOpacity
                   key={date.toISOString()}
                   style={[styles.day, selected && styles.daySelected, (!isCurrentMonth || disabled) && styles.dayMuted]}
-                  onPress={() => onSelect(toDateString(date), date)}
+                  onPress={() => handleDayPress(date)}
                   disabled={disabled}
                 >
                   <Text
@@ -118,6 +167,7 @@ const DatePickerModal = ({ visible, title, initialDate, minDate, maxDate, onSele
               );
             })}
           </View>
+        </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -135,6 +185,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: 28,
     padding: 20,
+    maxHeight: '90%',
     shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.18,

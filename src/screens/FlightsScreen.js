@@ -509,6 +509,13 @@ const FlightsScreen = ({ navigation }) => {
     routeIndex: null,
     month: startOfMonth(today),
     selected: today,
+    // Round-trip's Departure field opens in range mode - one continuous
+    // session picks both dates instead of two separate opens. pendingStart
+    // holds the departure date once picked, while selected stays the day
+    // currently highlighted in the grid (start, until the return is
+    // confirmed and the modal closes).
+    rangeMode: false,
+    pendingStart: null,
   });
 
   const updateRoute = (index, key, value) => {
@@ -1127,7 +1134,7 @@ const FlightsScreen = ({ navigation }) => {
     if (type === 'infants') setInfants(String(next.infants));
   };
 
-  const openCalendar = ({ target, routeIndex = null, currentValue = '' }) => {
+  const openCalendar = ({ target, routeIndex = null, currentValue = '', rangeMode = false }) => {
     setAirportSuggestFor(null);
     const parsedDate = parseDisplayDate(currentValue);
     const safeDate = parsedDate && parsedDate >= today ? parsedDate : today;
@@ -1138,6 +1145,8 @@ const FlightsScreen = ({ navigation }) => {
       routeIndex,
       month: startOfMonth(safeDate),
       selected: safeDate,
+      rangeMode,
+      pendingStart: null,
     });
   };
 
@@ -1150,6 +1159,22 @@ const FlightsScreen = ({ navigation }) => {
 
   const handleCalendarDateSelect = (date) => {
     if (date < today) {
+      return;
+    }
+
+    if (calendarState.rangeMode) {
+      const { pendingStart } = calendarState;
+      // Round trips can be same-day, so an equal-or-later date confirms the
+      // return; only a strictly earlier one restarts the departure pick.
+      if (!pendingStart || date < pendingStart) {
+        setCalendarState((current) => ({ ...current, pendingStart: date, selected: date }));
+        return;
+      }
+      if (typeof calendarState.routeIndex === 'number') {
+        updateRoute(calendarState.routeIndex, 'travelDate', formatDateForDisplay(pendingStart));
+      }
+      setReturnDate(formatDateForDisplay(date));
+      closeCalendar();
       return;
     }
 
@@ -1338,6 +1363,9 @@ const FlightsScreen = ({ navigation }) => {
                             target: 'route',
                             routeIndex: index,
                             currentValue: route.travelDate,
+                            // Round trip: pick departure + return together in
+                            // one session instead of two separate opens.
+                            rangeMode: tripType === 'RETURN',
                           })
                         }
                       >
@@ -1687,9 +1715,15 @@ const FlightsScreen = ({ navigation }) => {
           <Pressable style={styles.calendarModal} onPress={() => {}}>
             <View style={styles.calendarModalHeader}>
               <View>
-                <Text style={styles.calendarEyebrow}>Choose date</Text>
+                <Text style={styles.calendarEyebrow}>
+                  {calendarState.rangeMode && calendarState.pendingStart ? 'Now pick the return date' : 'Choose date'}
+                </Text>
                 <Text style={styles.calendarTitle}>
-                  {calendarState.target === 'return' ? 'Return date' : 'Departure date'}
+                  {calendarState.rangeMode
+                    ? 'Departure → Return'
+                    : calendarState.target === 'return'
+                    ? 'Return date'
+                    : 'Departure date'}
                 </Text>
               </View>
               <TouchableOpacity style={styles.calendarCloseButton} onPress={closeCalendar}>
