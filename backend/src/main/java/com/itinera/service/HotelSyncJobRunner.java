@@ -98,12 +98,19 @@ public class HotelSyncJobRunner {
     // the cap (safe either way, since every sync here is an upsert).
     @Scheduled(cron = "0 0 4 * * *")
     public void refreshGlobalDelta() {
+        startGlobalDeltaSync();
+    }
+
+    // Manual trigger (see HotelCatalogController) - same logic the schedule
+    // runs, exposed so an admin can force a run instead of waiting for 4am.
+    public HotelSyncJob startGlobalDeltaSync() {
         String watermark = jobRepository.findTopByTypeAndStatusOrderByStartedAtDesc("GLOBAL_DELTA", "COMPLETED")
                 .map(j -> j.getStartedAt().toString() + "Z")
                 .orElse(LocalDateTime.now().toString() + "Z");
 
         HotelSyncJob job = createJob("GLOBAL_DELTA", watermark);
         self.runGlobalDeltaSync(job.getId(), watermark);
+        return job;
     }
 
     @Async

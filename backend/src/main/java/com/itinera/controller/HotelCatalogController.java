@@ -133,6 +133,16 @@ public class HotelCatalogController {
         return ResponseEntity.ok(hotelCatalogService.hotelsTableStorageStats());
     }
 
+    // Admin-only (see SecurityConfig) - manually triggers the global
+    // NEW/UPDATE/DELETE delta sync (see HotelSyncJobRunner.refreshGlobalDelta)
+    // instead of waiting for its 4am schedule. Returns immediately with a
+    // job id - poll GET /hotel-catalog/sync-jobs/{id}.
+    @PostMapping("/sync-global-delta")
+    public ResponseEntity<?> syncGlobalDelta() {
+        HotelSyncJob job = hotelSyncJobRunner.startGlobalDeltaSync();
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+
     // Admin-only (see SecurityConfig) - trims a country's catalog down to
     // just the given cities (see HotelCatalogService.pruneCountryToCities).
     // Meant to clean up after a full country sync brought in far more
