@@ -148,6 +148,18 @@ public class HotelCatalogController {
         return ResponseEntity.ok(hotelSyncJobRunner.triggerOnDemandCitySync(cityName));
     }
 
+    // Public (see SecurityConfig) - fallback for when search-and-sync-city
+    // comes back "need-country": the city-level lookup has no name filter
+    // and can miss even real cities (seen with Ahmedabad, Phuket), so rather
+    // than scan indefinitely, the frontend asks the customer to pick a
+    // country (from GET /hotels/countries) and calls this instead. Country-
+    // level sync doesn't have that lookup problem - fetch-hotel-mapping
+    // accepts countryName directly - so it's reliable.
+    @PostMapping("/search-and-sync-country")
+    public ResponseEntity<?> searchAndSyncCountry(@RequestParam String countryName) {
+        return ResponseEntity.ok(hotelSyncJobRunner.triggerOnDemandCountrySync(countryName));
+    }
+
     // Public - fetches one hotel's full content (images, amenities,
     // descriptions, policies) live from TripJack rather than our cache,
     // since the bulk catalog sync deliberately doesn't store that heavy

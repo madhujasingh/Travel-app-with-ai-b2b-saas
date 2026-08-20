@@ -107,6 +107,18 @@ const HotelsScreen = ({ navigation }) => {
   const [destinationLabel, setDestinationLabel] = useState('');
   const [citySyncTriggering, setCitySyncTriggering] = useState(false);
 
+  // Fallback when the quick city-index lookup can't find a typed city
+  // (fetch-city-regionIds has no name filter, so it can miss real cities -
+  // see triggerCitySync) - lets the customer pick the country instead, which
+  // syncs reliably. countryPickerCity remembers what they originally typed,
+  // just for the modal's copy.
+  const [countries, setCountries] = useState(null);
+  const [countryPickerVisible, setCountryPickerVisible] = useState(false);
+  const [countryPickerCity, setCountryPickerCity] = useState('');
+  const [countrySearch, setCountrySearch] = useState('');
+  const [loadingCountries, setLoadingCountries] = useState(false);
+  const [countrySyncTriggering, setCountrySyncTriggering] = useState(false);
+
   const [datePickerField, setDatePickerField] = useState(null); // 'checkIn' | 'checkOut' | null
 
   const openDatePicker = (field) => setDatePickerField(field);
@@ -429,11 +441,69 @@ const HotelsScreen = ({ navigation }) => {
         );
       } else if (data.action === 'busy') {
         Alert.alert('Please try again', "We're already loading a few other destinations right now - try again in a minute.");
+      } else if (data.action === 'need-country') {
+        // TripJack's city index has no name filter, so a quick lookup can
+        // miss a real city - fall back to a reliable country-level sync
+        // instead of failing outright. Close the city modal first - two RN
+        // Modals visible at once silently fails to open the second one.
+        setCountryPickerCity(query);
+        setCityModal(false);
+        openCountryPicker();
       }
     } catch (error) {
       Alert.alert('City Search', error.message || 'Unable to search for this city right now.');
     } finally {
       setCitySyncTriggering(false);
+    }
+  };
+
+  const openCountryPicker = async () => {
+    setCountryPickerVisible(true);
+    if (countries) return;
+
+    try {
+      setLoadingCountries(true);
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/countries`,
+        { method: 'GET' },
+        'Unable to load countries right now.'
+      );
+      setCountries(data.hotelCountries || []);
+    } catch (error) {
+      Alert.alert('Countries', error.message || 'Unable to load countries right now.');
+    } finally {
+      setLoadingCountries(false);
+    }
+  };
+
+  const filteredCountries = (countries || []).filter((name) =>
+    name.toLowerCase().includes(countrySearch.trim().toLowerCase())
+  );
+
+  const triggerCountrySync = async (countryName) => {
+    try {
+      setCountrySyncTriggering(true);
+      const data = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotel-catalog/search-and-sync-country?countryName=${encodeURIComponent(countryName)}`,
+        { method: 'POST' },
+        'Unable to search this country right now.'
+      );
+
+      setCountryPickerVisible(false);
+      setCountrySearch('');
+
+      if (data.action === 'started' || data.action === 'already-running') {
+        Alert.alert(
+          'Loading this destination',
+          `We're fetching hotels across ${countryName} from our supplier - this can take a few minutes. Search for "${countryPickerCity}" again shortly and it should appear.`
+        );
+      } else if (data.action === 'busy') {
+        Alert.alert('Please try again', "We're already loading a few other destinations right now - try again in a minute.");
+      }
+    } catch (error) {
+      Alert.alert('Country Search', error.message || 'Unable to search this country right now.');
+    } finally {
+      setCountrySyncTriggering(false);
     }
   };
 
@@ -1035,6 +1105,53 @@ const HotelsScreen = ({ navigation }) => {
                 )}
               />
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={countryPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCountryPickerVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setCountryPickerVisible(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Which country is "{countryPickerCity}" in?</Text>
+              <TouchableOpacity onPress={() => setCountryPickerVisible(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalHintText}>
+              We couldn't find this city directly - pick its country and we'll load hotels for the whole country instead.
+            </Text>
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder="Search country..."
+              placeholderTextColor={Colors.textMuted}
+              value={countrySearch}
+              onChangeText={setCountrySearch}
+            />
+            {loadingCountries ? (
+              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+            ) : (
+              <FlatList
+                data={filteredCountries}
+                keyExtractor={(name) => name}
+                style={styles.modalList}
+                renderItem={({ item: name }) => (
+                  <TouchableOpacity
+                    style={styles.modalListRow}
+                    onPress={() => triggerCountrySync(name)}
+                    disabled={countrySyncTriggering}
+                  >
+                    <Text style={styles.modalListRowText}>{name}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+            {countrySyncTriggering && <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />}
           </Pressable>
         </Pressable>
       </Modal>
@@ -1938,6 +2055,12 @@ const styles = StyleSheet.create({
   filtersApplyButtonText: {
     color: Colors.secondary,
     fontWeight: '700',
+  },
+  modalHintText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginBottom: 12,
+    lineHeight: 18,
   },
   modalSearchInput: {
     backgroundColor: Colors.background,
