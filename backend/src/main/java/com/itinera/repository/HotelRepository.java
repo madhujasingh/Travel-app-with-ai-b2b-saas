@@ -4,6 +4,7 @@ import com.itinera.model.Hotel;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -34,6 +35,15 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
            "FROM hotels WHERE city IS NOT NULL AND city <> '' " +
            "GROUP BY INITCAP(city), INITCAP(country_name) ORDER BY INITCAP(city) ASC", nativeQuery = true)
     List<CityCount> findCityCounts();
+
+    // Admin cleanup - trims an over-broad country sync (a full country scan
+    // pulls in every city TripJack has, most never searched) down to a
+    // specific set of cities worth keeping. Bulk delete, same reasoning as
+    // clearHeavyContent - one statement rather than loading/deleting rows
+    // one at a time.
+    @Modifying
+    @Query("DELETE FROM Hotel h WHERE UPPER(h.countryName) = UPPER(:countryName) AND UPPER(h.city) NOT IN :keepCitiesUpper")
+    int deleteByCountryNameExceptCities(@Param("countryName") String countryName, @Param("keepCitiesUpper") List<String> keepCitiesUpper);
 
     interface CityCount {
         String getCity();

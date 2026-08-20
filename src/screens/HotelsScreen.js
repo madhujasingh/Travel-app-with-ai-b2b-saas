@@ -710,6 +710,19 @@ const HotelsScreen = ({ navigation }) => {
         scrollEventThrottle={200}
       >
         <View style={styles.formCard}>
+          <Text style={styles.fieldLabel}>Destination</Text>
+          <TouchableOpacity style={styles.browseButton} onPress={openCityModal} disabled={selectingCity}>
+            <Ionicons name="location-outline" size={18} color={Colors.accentBlue} />
+            <Text style={styles.browseButtonText}>
+              {selectingCity ? 'Loading hotels...' : destinationLabel || 'Where do you want to go?'}
+            </Text>
+            {selectingCity ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+            )}
+          </TouchableOpacity>
+
           <View style={styles.dateRow}>
             <View style={styles.dateField}>
               <Text style={styles.fieldLabel}>Check-in</Text>
@@ -736,19 +749,6 @@ const HotelsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-
-          <Text style={styles.fieldLabel}>Destination</Text>
-          <TouchableOpacity style={styles.browseButton} onPress={openCityModal} disabled={selectingCity}>
-            <Ionicons name="location-outline" size={18} color={Colors.accentBlue} />
-            <Text style={styles.browseButtonText}>
-              {selectingCity ? 'Loading hotels...' : destinationLabel || 'Where do you want to go?'}
-            </Text>
-            {selectingCity ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
-            ) : (
-              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
-            )}
-          </TouchableOpacity>
 
           <View style={styles.dateRow}>
             <View style={styles.dateField}>

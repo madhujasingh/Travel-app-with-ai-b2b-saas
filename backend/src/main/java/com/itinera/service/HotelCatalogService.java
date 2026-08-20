@@ -182,6 +182,17 @@ public class HotelCatalogService {
         return count == null ? 0 : count;
     }
 
+    // Admin cleanup - a full country sync (see HotelSyncJobRunner.
+    // startCountrySync) pulls in every city TripJack has for that country,
+    // most of which nobody searches for. Trims the catalog down to just the
+    // listed cities, keeping the rest of the country's search results from
+    // being cluttered with places nobody's asked for.
+    @Transactional
+    public int pruneCountryToCities(String countryName, List<String> keepCities) {
+        List<String> keepCitiesUpper = keepCities.stream().map(String::toUpperCase).toList();
+        return hotelRepository.deleteByCountryNameExceptCities(countryName, keepCitiesUpper);
+    }
+
     // Pages fetch-hotel-mapping with whatever filter (countryName or
     // regionIds) the caller puts on the payload, collecting every mapped
     // tjHotelId. Cheap memory-wise (just strings) even for a whole country -

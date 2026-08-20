@@ -164,6 +164,19 @@ public class HotelCatalogController {
         return ResponseEntity.noContent().build();
     }
 
+    // Admin-only (see SecurityConfig) - trims a country's catalog down to
+    // just the given cities (see HotelCatalogService.pruneCountryToCities).
+    // Meant to clean up after a full country sync brought in far more
+    // cities than are actually worth keeping searchable.
+    @DeleteMapping("/cities")
+    public ResponseEntity<?> pruneCountryToCities(
+            @RequestParam String countryName,
+            @RequestParam List<String> keepCities
+    ) {
+        int removed = hotelCatalogService.pruneCountryToCities(countryName, keepCities);
+        return ResponseEntity.ok(Map.of("removedHotels", removed));
+    }
+
     // Public - fetches one hotel's full content (images, amenities,
     // descriptions, policies) live from TripJack rather than our cache,
     // since the bulk catalog sync deliberately doesn't store that heavy

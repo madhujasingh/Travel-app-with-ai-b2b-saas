@@ -80,6 +80,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/hotel-catalog/cleanup-heavy-content").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/hotel-catalog/vacuum").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/hotel-catalog/storage-stats").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/hotel-catalog/cities").hasRole("ADMIN")
                 .requestMatchers("/hotel-catalog/known-cities", "/hotel-catalog/known-cities/**").hasRole("ADMIN")
                 .requestMatchers("/hotel-catalog/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
