@@ -115,6 +115,24 @@ public class HotelCatalogController {
         return ResponseEntity.ok(Map.of("clearedRows", updated));
     }
 
+    // Admin-only (see SecurityConfig) - reclaims the disk space
+    // cleanup-heavy-content's NULLs freed up. Postgres doesn't return that
+    // space on its own until VACUUM runs (autovacuum gets to it eventually,
+    // but not on demand), so this runs VACUUM directly.
+    @PostMapping("/vacuum")
+    public ResponseEntity<?> vacuum() {
+        hotelCatalogService.vacuumHotelsTable();
+        return ResponseEntity.ok(hotelCatalogService.hotelsTableStorageStats());
+    }
+
+    // Admin-only (see SecurityConfig) - real on-disk size of the hotels
+    // table, to verify storage changes actually took effect rather than
+    // trusting a dashboard percentage that may lag or round.
+    @GetMapping("/storage-stats")
+    public ResponseEntity<?> storageStats() {
+        return ResponseEntity.ok(hotelCatalogService.hotelsTableStorageStats());
+    }
+
     // Public - fetches one hotel's full content (images, amenities,
     // descriptions, policies) live from TripJack rather than our cache,
     // since the bulk catalog sync deliberately doesn't store that heavy

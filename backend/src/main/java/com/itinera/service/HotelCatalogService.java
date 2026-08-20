@@ -12,9 +12,16 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 // Downloads TripJack's V3 Hotel Static Content (fetch-hotel-mapping +
@@ -36,19 +43,22 @@ public class HotelCatalogService {
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
     private final EntityManager entityManager;
+    private final DataSource dataSource;
 
     public HotelCatalogService(
             HotelService hotelService,
             HotelRepository hotelRepository,
             ObjectMapper objectMapper,
             PlatformTransactionManager transactionManager,
-            EntityManager entityManager
+            EntityManager entityManager,
+            DataSource dataSource
     ) {
         this.hotelService = hotelService;
         this.hotelRepository = hotelRepository;
         this.objectMapper = objectMapper;
         this.transactionManager = transactionManager;
         this.entityManager = entityManager;
+        this.dataSource = dataSource;
     }
 
     // fetch-hotel-content: up to 100 hotel IDs per call (TripJack's own
@@ -107,6 +117,49 @@ public class HotelCatalogService {
     @Transactional
     public int clearHeavyContent() {
         return hotelRepository.clearHeavyContent();
+    }
+
+    // UPDATE ... SET column = NULL doesn't actually shrink the table on
+    // disk by itself - Postgres's MVCC leaves the old row versions in place
+    // until VACUUM reclaims them, which autovacuum otherwise only gets to on
+    // its own schedule. VACUUM can't run inside a transaction, so this needs
+    // a plain autocommit JDBC connection rather than the JPA/Hibernate
+    // machinery everything else in this class uses.
+    public void vacuumHotelsTable() {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean originalAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(true);
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("VACUUM (ANALYZE) hotels");
+            } finally {
+                connection.setAutoCommit(originalAutoCommit);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("VACUUM failed: " + e.getMessage(), e);
+        }
+    }
+
+    // Real on-disk size of the hotels table (incl. indexes), for verifying
+    // that clearHeavyContent/vacuumHotelsTable actually reclaimed space
+    // instead of trusting a dashboard percentage that may lag or round.
+    public Map<String, Object> hotelsTableStorageStats() {
+        String sql = "SELECT count(*) AS row_count, " +
+                "pg_size_pretty(pg_total_relation_size('hotels')) AS total_size, " +
+                "pg_total_relation_size('hotels') AS total_size_bytes " +
+                "FROM hotels";
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery(sql)) {
+            Map<String, Object> stats = new LinkedHashMap<>();
+            if (rs.next()) {
+                stats.put("rowCount", rs.getLong("row_count"));
+                stats.put("totalSize", rs.getString("total_size"));
+                stats.put("totalSizeBytes", rs.getLong("total_size_bytes"));
+            }
+            return stats;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to read table stats: " + e.getMessage(), e);
+        }
     }
 
     // Runs one syncHotelContent call inside its own short transaction, then
