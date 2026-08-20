@@ -97,7 +97,19 @@ public class HotelSyncJobRunner {
     // stores them on the KnownCity row and kicks off an initial sync so the
     // city is searchable right away. The stored regionIds are what
     // refreshKnownCities reuses later - no re-lookup needed on every refresh.
-    public Map<String, Object> addKnownCity(String cityName, int lookupMaxPages) {
+    //
+    // regionIdsOverride (comma-separated) skips the name lookup entirely -
+    // needed because the lookup only does an exact, case-insensitive
+    // cityName match, which can silently resolve to the wrong place when
+    // multiple countries share a city name (caught once already with Bali,
+    // India vs Bali, Indonesia) or miss entirely when TripJack indexes a
+    // city only under a differently-named metro/region entry (Paris is only
+    // indexed as "METROPOLE DU GRAND PARIS" etc, never a plain "PARIS"/
+    // FRANCE entry - the name lookup instead matched "PARIS"/UNITED STATES).
+    // Always verify a newly-added city's job (GET /sync-jobs/{id}) shows a
+    // non-zero totalMapped before trusting it - a resolved regionId can
+    // still turn out to map to zero hotels.
+    public Map<String, Object> addKnownCity(String cityName, String regionIdsOverride, int lookupMaxPages) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("cityName", cityName);
 
@@ -106,7 +118,9 @@ public class HotelSyncJobRunner {
             return result;
         }
 
-        List<Long> regionIds = hotelCatalogService.findRegionIds(cityName, lookupMaxPages);
+        List<Long> regionIds = (regionIdsOverride != null && !regionIdsOverride.isBlank())
+                ? parseRegionIds(regionIdsOverride)
+                : hotelCatalogService.findRegionIds(cityName, lookupMaxPages);
         if (regionIds.isEmpty()) {
             result.put("action", "not-found");
             return result;

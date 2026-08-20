@@ -143,9 +143,10 @@ public class HotelCatalogController {
     @PostMapping("/known-cities")
     public ResponseEntity<?> addKnownCity(
             @RequestParam String cityName,
+            @RequestParam(required = false) String regionIds,
             @RequestParam(defaultValue = "100") int lookupMaxPages
     ) {
-        return ResponseEntity.ok(hotelSyncJobRunner.addKnownCity(cityName, lookupMaxPages));
+        return ResponseEntity.ok(hotelSyncJobRunner.addKnownCity(cityName, regionIds, lookupMaxPages));
     }
 
     // Admin-only (see SecurityConfig) - the curated city list, with each
