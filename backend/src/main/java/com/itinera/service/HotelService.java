@@ -50,12 +50,13 @@ public class HotelService {
 
     // Step 1 - Listing: search criteria in, hotel list with cheapest rate each.
     // TripJack's dynamic Listing response never includes photos, star rating,
-    // or address - by their own documented schema, that's static content
-    // only, fetched separately and cached in our own `hotels` table (see
-    // HotelCatalogService). Enrich each result here by hotelId so every
-    // consumer of this endpoint gets it without needing its own extra
-    // round-trip per hotel (the customer-facing star-rating filter and
-    // locality-on-card display both depend on this).
+    // address, coordinates, or property type - by their own documented
+    // schema, that's static content only, fetched separately and cached in
+    // our own `hotels` table (see HotelCatalogService). Enrich each result
+    // here by hotelId so every consumer of this endpoint gets it without
+    // needing its own extra round-trip per hotel (the customer-facing
+    // star-rating/property-type filters, map view, and locality-on-card
+    // display all depend on this).
     public JsonNode listing(JsonNode payload) {
         JsonNode response = tripJackClient.postHotel("/hms/v3/hotel/listing", payload);
         JsonNode hotels = response.get("hotels");
@@ -75,6 +76,13 @@ public class HotelService {
                     }
                     if (StringUtils.hasText(hotel.getCity())) {
                         node.put("city", hotel.getCity());
+                    }
+                    if (hotel.getLatitude() != null && hotel.getLongitude() != null) {
+                        node.put("latitude", hotel.getLatitude());
+                        node.put("longitude", hotel.getLongitude());
+                    }
+                    if (StringUtils.hasText(hotel.getPropertyType())) {
+                        node.put("propertyType", hotel.getPropertyType());
                     }
                 });
             }

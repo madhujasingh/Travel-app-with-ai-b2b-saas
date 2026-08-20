@@ -70,13 +70,6 @@ const chunkArray = (arr, size) => {
   return chunks;
 };
 
-const STAR_FILTERS = [
-  { value: 'ALL', label: 'All ratings' },
-  { value: '3', label: '3★+' },
-  { value: '4', label: '4★+' },
-  { value: '5', label: '5★' },
-];
-
 const HotelsScreen = ({ navigation }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -90,7 +83,12 @@ const HotelsScreen = ({ navigation }) => {
   const [searched, setSearched] = useState(false);
   const [hotels, setHotels] = useState([]);
   const [searchSession, setSearchSession] = useState(null);
-  const [starFilter, setStarFilter] = useState('ALL');
+  const [filtersModalVisible, setFiltersModalVisible] = useState(false);
+  const [selectedStars, setSelectedStars] = useState(() => new Set());
+  const [selectedMealBasis, setSelectedMealBasis] = useState(() => new Set());
+  const [selectedPriceBucketKeys, setSelectedPriceBucketKeys] = useState(() => new Set());
+  const [gstApplicableOnly, setGstApplicableOnly] = useState(false);
+  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState(() => new Set());
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
   const [visibleCount, setVisibleCount] = useState(RESULTS_PAGE_SIZE);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -112,6 +110,23 @@ const HotelsScreen = ({ navigation }) => {
 
   const openDatePicker = (field) => setDatePickerField(field);
   const closeDatePicker = () => setDatePickerField(null);
+
+  const clearAllFilters = () => {
+    setSelectedStars(new Set());
+    setSelectedMealBasis(new Set());
+    setSelectedPriceBucketKeys(new Set());
+    setGstApplicableOnly(false);
+    setSelectedPropertyTypes(new Set());
+  };
+
+  const toggleSetValue = (setter, value) => {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  };
 
   const chooseDate = (dateString) => {
     if (datePickerField === 'checkIn') {
@@ -238,7 +253,7 @@ const HotelsScreen = ({ navigation }) => {
       setLoading(true);
       setSearched(true);
       setHotels([]);
-      setStarFilter('ALL');
+      clearAllFilters();
       setViewMode('list');
       setVisibleCount(RESULTS_PAGE_SIZE);
       setSearchSession(null);
@@ -371,7 +386,7 @@ const HotelsScreen = ({ navigation }) => {
       }
 
       setHotelIdsInput(ids.join(', '));
-      setDestinationLabel(`${cityEntry.city}, ${cityEntry.countryName} · ${ids.length} hotel${ids.length === 1 ? '' : 's'}`);
+      setDestinationLabel(`${cityEntry.city}, ${cityEntry.countryName}`);
       setCityModal(false);
       setCitySearch('');
     } catch (error) {
@@ -385,14 +400,132 @@ const HotelsScreen = ({ navigation }) => {
     `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
   );
 
-  const filteredHotels = useMemo(() => {
-    if (starFilter === 'ALL') return hotels;
-    const minStars = Number(starFilter);
-    return hotels.filter((item) => {
-      const stars = parseFloat(item.starRating);
-      return Number.isFinite(stars) && stars >= minStars;
+  // Best practice from the docs: filter out options where inventory.available
+  // is explicitly false before picking what to display. Listing only ever
+  // returns ONE option per hotel (its cheapest) - unlike Detail, which
+  // returns every rate - so every hotel-level filter below (meal basis,
+  // price, GST) reflects that one cheapest option, not the hotel's full
+  // range of rates.
+  const getTopOption = (item) => (item.options || []).find((option) => option.inventory?.available !== false);
+
+  // Filter option lists + counts, computed from the full unfiltered result
+  // set (not filteredHotels) so a count always reflects "how many hotels
+  // this option would show if picked on its own" - matches TripJack's own
+  // per-option counts (see the reference screenshots) rather than counts
+  // that shrink as other filters are layered on.
+  const starRatingOptions = useMemo(() => {
+    const counts = {};
+    hotels.forEach((item) => {
+      const stars = Math.round(parseFloat(item.starRating));
+      if (Number.isFinite(stars) && stars >= 1 && stars <= 5) {
+        counts[stars] = (counts[stars] || 0) + 1;
+      }
     });
-  }, [hotels, starFilter]);
+    return [5, 4, 3, 2, 1].filter((value) => counts[value] > 0).map((value) => ({ value, count: counts[value] }));
+  }, [hotels]);
+
+  const mealBasisOptions = useMemo(() => {
+    const counts = {};
+    hotels.forEach((item) => {
+      const meal = getTopOption(item)?.mealBasis;
+      if (meal) counts[meal] = (counts[meal] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [hotels]);
+
+  const propertyTypeOptions = useMemo(() => {
+    const counts = {};
+    hotels.forEach((item) => {
+      if (item.propertyType) counts[item.propertyType] = (counts[item.propertyType] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [hotels]);
+
+  const gstApplicableCount = useMemo(
+    () =>
+      hotels.filter((item) => {
+        const gst = getTopOption(item)?.compliance?.gstType;
+        return gst && gst !== 'NA';
+      }).length,
+    [hotels]
+  );
+
+  // Roughly-equal-count buckets over the cheapest-option price, same shape
+  // as TripJack's own Price Range filter (see reference screenshots) rather
+  // than fixed-width bands that could leave most buckets empty depending on
+  // the city's price spread.
+  const priceBuckets = useMemo(() => {
+    const prices = hotels
+      .map((item) => getTopOption(item)?.pricing?.totalPrice)
+      .filter((p) => Number.isFinite(p))
+      .sort((a, b) => a - b);
+    if (prices.length === 0) return [];
+    const bucketCount = Math.min(6, prices.length);
+    const buckets = [];
+    for (let i = 0; i < bucketCount; i++) {
+      const startIdx = Math.floor((i / bucketCount) * prices.length);
+      const endIdx = i === bucketCount - 1 ? prices.length - 1 : Math.floor(((i + 1) / bucketCount) * prices.length) - 1;
+      const min = prices[startIdx];
+      const max = prices[Math.max(startIdx, endIdx)];
+      buckets.push({
+        key: `${min}-${max}`,
+        min,
+        max,
+        count: endIdx - startIdx + 1,
+        label:
+          i === 0
+            ? `Up to ₹${Math.round(max).toLocaleString()}`
+            : `₹${Math.round(min).toLocaleString()} – ₹${Math.round(max).toLocaleString()}`,
+      });
+    }
+    return buckets;
+  }, [hotels]);
+
+  const activeFilterCount =
+    selectedStars.size +
+    selectedMealBasis.size +
+    selectedPriceBucketKeys.size +
+    selectedPropertyTypes.size +
+    (gstApplicableOnly ? 1 : 0);
+
+  const filteredHotels = useMemo(() => {
+    return hotels.filter((item) => {
+      if (selectedStars.size > 0) {
+        const stars = Math.round(parseFloat(item.starRating));
+        if (!selectedStars.has(stars)) return false;
+      }
+
+      const topOption = getTopOption(item);
+
+      if (selectedMealBasis.size > 0) {
+        if (!topOption || !selectedMealBasis.has(topOption.mealBasis)) return false;
+      }
+
+      if (selectedPriceBucketKeys.size > 0) {
+        const price = topOption?.pricing?.totalPrice;
+        if (!Number.isFinite(price)) return false;
+        const inSelectedBucket = priceBuckets.some(
+          (bucket) => selectedPriceBucketKeys.has(bucket.key) && price >= bucket.min && price <= bucket.max
+        );
+        if (!inSelectedBucket) return false;
+      }
+
+      if (gstApplicableOnly) {
+        const gst = topOption?.compliance?.gstType;
+        if (!gst || gst === 'NA') return false;
+      }
+
+      if (selectedPropertyTypes.size > 0) {
+        if (!item.propertyType || !selectedPropertyTypes.has(item.propertyType)) return false;
+      }
+
+      return true;
+    });
+  }, [hotels, selectedStars, selectedMealBasis, selectedPriceBucketKeys, gstApplicableOnly, selectedPropertyTypes, priceBuckets]);
 
   const mappableHotels = useMemo(
     () =>
@@ -417,10 +550,6 @@ const HotelsScreen = ({ navigation }) => {
       longitudeDelta: Math.max(maxLng - minLng, 0.05) * 1.4,
     };
   }, [mappableHotels]);
-
-  // Best practice from the docs: filter out options where inventory.available
-  // is explicitly false before picking what to display.
-  const getTopOption = (item) => (item.options || []).find((option) => option.inventory?.available !== false);
 
   const renderHotel = ({ item, index }) => {
     const topOption = getTopOption(item);
@@ -774,23 +903,17 @@ const HotelsScreen = ({ navigation }) => {
 
         {searched && !loading && hotels.length > 0 && (
           <View style={styles.resultsToolbar}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
-              {STAR_FILTERS.map((option) => {
-                const active = starFilter === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => {
-                      setStarFilter(option.value);
-                      setVisibleCount(RESULTS_PAGE_SIZE);
-                    }}
-                  >
-                    <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            <View style={styles.resultsToolbarRow}>
+              <TouchableOpacity style={styles.filtersButton} onPress={() => setFiltersModalVisible(true)}>
+                <Ionicons name="options-outline" size={16} color={Colors.primary} />
+                <Text style={styles.filtersButtonText}>Filters</Text>
+                {activeFilterCount > 0 && (
+                  <View style={styles.filtersBadge}>
+                    <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
             <View style={styles.resultsMetaRow}>
               <Text style={styles.resultsCount}>
                 {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
@@ -818,9 +941,9 @@ const HotelsScreen = ({ navigation }) => {
         {searched && !loading && hotels.length > 0 && filteredHotels.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="filter-outline" size={40} color={Colors.textMuted} />
-            <Text style={styles.emptyStateText}>No hotels match this rating filter.</Text>
-            <TouchableOpacity style={styles.clearFilterButton} onPress={() => setStarFilter('ALL')}>
-              <Text style={styles.clearFilterButtonText}>Clear Filter</Text>
+            <Text style={styles.emptyStateText}>No hotels match these filters.</Text>
+            <TouchableOpacity style={styles.clearFilterButton} onPress={clearAllFilters}>
+              <Text style={styles.clearFilterButtonText}>Clear Filters</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -910,13 +1033,158 @@ const HotelsScreen = ({ navigation }) => {
                       <Text style={styles.modalListRowText}>{item.city}</Text>
                       <Text style={styles.modalListRowMeta}>{item.countryName}</Text>
                     </View>
-                    <Text style={styles.modalListRowMeta}>
-                      {item.hotelCount} hotel{item.hotelCount === 1 ? '' : 's'}
-                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
                   </TouchableOpacity>
                 )}
               />
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={filtersModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFiltersModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setFiltersModalVisible(false)}>
+          <Pressable style={styles.filtersModalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filters</Text>
+              <TouchableOpacity onPress={clearAllFilters}>
+                <Text style={styles.resetFiltersText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.filtersScroll} showsVerticalScrollIndicator={false}>
+              {starRatingOptions.length > 0 && (
+                <>
+                  <Text style={styles.filterSectionTitle}>Star Rating</Text>
+                  <View style={styles.filterOptionsList}>
+                    {starRatingOptions.map(({ value, count }) => {
+                      const active = selectedStars.has(value);
+                      return (
+                        <TouchableOpacity
+                          key={value}
+                          style={styles.filterOptionRow}
+                          onPress={() => toggleSetValue(setSelectedStars, value)}
+                        >
+                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
+                          </View>
+                          <View style={styles.starRow}>
+                            {Array.from({ length: value }).map((_, i) => (
+                              <Ionicons key={i} name="star" size={13} color={Colors.warning} />
+                            ))}
+                          </View>
+                          <Text style={styles.filterOptionCount}>({count})</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {mealBasisOptions.length > 0 && (
+                <>
+                  <Text style={styles.filterSectionTitle}>Meal Basis</Text>
+                  <View style={styles.filterOptionsList}>
+                    {mealBasisOptions.map(({ value, count }) => {
+                      const active = selectedMealBasis.has(value);
+                      return (
+                        <TouchableOpacity
+                          key={value}
+                          style={styles.filterOptionRow}
+                          onPress={() => toggleSetValue(setSelectedMealBasis, value)}
+                        >
+                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
+                          </View>
+                          <Text style={styles.filterOptionLabel}>{value}</Text>
+                          <Text style={styles.filterOptionCount}>({count})</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {priceBuckets.length > 0 && (
+                <>
+                  <Text style={styles.filterSectionTitle}>Price Range</Text>
+                  <View style={styles.filterOptionsList}>
+                    {priceBuckets.map((bucket) => {
+                      const active = selectedPriceBucketKeys.has(bucket.key);
+                      return (
+                        <TouchableOpacity
+                          key={bucket.key}
+                          style={styles.filterOptionRow}
+                          onPress={() => toggleSetValue(setSelectedPriceBucketKeys, bucket.key)}
+                        >
+                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
+                          </View>
+                          <Text style={styles.filterOptionLabel}>{bucket.label}</Text>
+                          <Text style={styles.filterOptionCount}>({bucket.count})</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {gstApplicableCount > 0 && (
+                <>
+                  <Text style={styles.filterSectionTitle}>GST Applicable</Text>
+                  <View style={styles.filterOptionsList}>
+                    <TouchableOpacity
+                      style={styles.filterOptionRow}
+                      onPress={() => setGstApplicableOnly((v) => !v)}
+                    >
+                      <View style={[styles.checkbox, gstApplicableOnly && styles.checkboxActive]}>
+                        {gstApplicableOnly && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
+                      </View>
+                      <Text style={styles.filterOptionLabel}>GST Applicable</Text>
+                      <Text style={styles.filterOptionCount}>({gstApplicableCount})</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+
+              {propertyTypeOptions.length > 0 && (
+                <>
+                  <Text style={styles.filterSectionTitle}>Property Type</Text>
+                  <View style={styles.filterOptionsList}>
+                    {propertyTypeOptions.map(({ value, count }) => {
+                      const active = selectedPropertyTypes.has(value);
+                      return (
+                        <TouchableOpacity
+                          key={value}
+                          style={styles.filterOptionRow}
+                          onPress={() => toggleSetValue(setSelectedPropertyTypes, value)}
+                        >
+                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
+                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
+                          </View>
+                          <Text style={styles.filterOptionLabel}>{value}</Text>
+                          <Text style={styles.filterOptionCount}>({count})</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.filtersFooter}>
+              <TouchableOpacity style={styles.filtersCloseButton} onPress={() => setFiltersModalVisible(false)}>
+                <Text style={styles.filtersCloseButtonText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.filtersApplyButton} onPress={() => setFiltersModalVisible(false)}>
+                <Text style={styles.filtersApplyButtonText}>Apply Filter</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1259,27 +1527,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 4,
   },
-  pill: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  filtersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 999,
     backgroundColor: '#FFF4EC',
-    marginRight: 10,
-    marginBottom: 6,
     borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  pillActive: {
-    backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  pillText: {
+  filtersButtonText: {
     color: Colors.primaryDark,
     fontWeight: '700',
     fontSize: 13,
   },
-  pillTextActive: {
+  filtersBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filtersBadgeText: {
     color: Colors.secondary,
+    fontSize: 11,
+    fontWeight: '700',
   },
   resultsCount: {
     fontSize: 12,
@@ -1519,6 +1796,89 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: Colors.text,
+  },
+  resetFiltersText: {
+    color: Colors.primary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  filtersModalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+    maxHeight: '85%',
+  },
+  filtersScroll: {
+    maxHeight: '100%',
+  },
+  filterSectionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.text,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  filterOptionsList: {
+    gap: 2,
+  },
+  filterOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 9,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  filterOptionLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.text,
+  },
+  filterOptionCount: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  filtersFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  filtersCloseButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  filtersCloseButtonText: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  filtersApplyButton: {
+    flex: 2,
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+  },
+  filtersApplyButtonText: {
+    color: Colors.secondary,
+    fontWeight: '700',
   },
   modalSearchInput: {
     backgroundColor: Colors.background,
