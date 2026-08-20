@@ -76,6 +76,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/hotel-catalog/sync").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/hotel-catalog/sync-country").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/hotel-catalog/sync-city").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/hotel-catalog/sync-jobs/**").hasRole("ADMIN")
                 .requestMatchers("/hotel-catalog/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/itineraries/**").hasRole("ADMIN")

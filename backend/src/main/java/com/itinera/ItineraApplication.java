@@ -4,12 +4,14 @@ import com.itinera.config.TripJackConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 
 @SpringBootApplication
 @EnableConfigurationProperties(TripJackConfig.class)
+@EnableAsync
 public class ItineraApplication {
     public static void main(String[] args) {
         configureDatasourceFromDatabaseUrl();

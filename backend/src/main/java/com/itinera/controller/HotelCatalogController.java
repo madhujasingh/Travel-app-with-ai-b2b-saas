@@ -1,8 +1,12 @@
 package com.itinera.controller;
 
 import com.itinera.model.Hotel;
+import com.itinera.model.HotelSyncJob;
 import com.itinera.repository.HotelRepository;
+import com.itinera.repository.HotelSyncJobRepository;
 import com.itinera.service.HotelCatalogService;
+import com.itinera.service.HotelSyncJobRunner;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,11 +21,20 @@ import java.util.Map;
 public class HotelCatalogController {
 
     private final HotelCatalogService hotelCatalogService;
+    private final HotelSyncJobRunner hotelSyncJobRunner;
     private final HotelRepository hotelRepository;
+    private final HotelSyncJobRepository hotelSyncJobRepository;
 
-    public HotelCatalogController(HotelCatalogService hotelCatalogService, HotelRepository hotelRepository) {
+    public HotelCatalogController(
+            HotelCatalogService hotelCatalogService,
+            HotelSyncJobRunner hotelSyncJobRunner,
+            HotelRepository hotelRepository,
+            HotelSyncJobRepository hotelSyncJobRepository
+    ) {
         this.hotelCatalogService = hotelCatalogService;
+        this.hotelSyncJobRunner = hotelSyncJobRunner;
         this.hotelRepository = hotelRepository;
+        this.hotelSyncJobRepository = hotelSyncJobRepository;
     }
 
     public static class SyncByIdsRequest {
@@ -29,31 +42,40 @@ public class HotelCatalogController {
     }
 
     // Admin-only (see SecurityConfig) - syncs up to 100 explicit TripJack
-    // hotel IDs' static content into our `hotels` table.
+    // hotel IDs' static content into our `hotels` table. Small/bounded
+    // enough to stay synchronous - the OOM risk that made sync-country/
+    // sync-city async only shows up at much larger volumes.
     @PostMapping("/sync")
     public ResponseEntity<?> syncByIds(@RequestBody SyncByIdsRequest request) {
         int count = hotelCatalogService.syncHotelContent(request.hotelIds);
         return ResponseEntity.ok(Map.of("synced", count));
     }
 
-    // Admin-only (see SecurityConfig) - full hotel-mapping + hotel-content
-    // sync for a whole country, per TripJack support's instruction to
-    // download and store all TJ Hotel IDs before Listing/Search will work.
+    // Admin-only (see SecurityConfig) - starts a background job (see
+    // HotelSyncJob) that runs full hotel-mapping + hotel-content sync for a
+    // whole country, per TripJack support's instruction to download and
+    // store all TJ Hotel IDs before Listing/Search will work. Returns
+    // immediately with a job id - poll GET /hotel-catalog/sync-jobs/{id} for
+    // progress. This used to be a single synchronous request, which both
+    // risked the HTTP call timing out on large syncs and OOM-crashed the
+    // backend once by holding thousands of Hotel entities in memory across
+    // one giant transaction - see HotelSyncJobRunner.
     @PostMapping("/sync-country")
     public ResponseEntity<?> syncCountry(
             @RequestParam String countryName,
             @RequestParam(defaultValue = "1") int maxPages
     ) {
-        int count = hotelCatalogService.syncCountry(countryName, maxPages);
-        return ResponseEntity.ok(Map.of("synced", count));
+        HotelSyncJob job = hotelSyncJobRunner.startCountrySync(countryName, maxPages);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
-    // Admin-only (see SecurityConfig) - syncs every hotel TripJack has
-    // mapped for ONE city (resolved to a regionId via fetch-city-regionIds,
-    // then fetch-hotel-mapping filtered by that regionId), instead of
-    // syncCountry's whole-country pull. Use this to fill in a specific
-    // city's coverage - e.g. a low-maxPages country sync can leave a city
-    // with only a fraction of its real hotel count synced.
+    // Admin-only (see SecurityConfig) - starts a background job that syncs
+    // every hotel TripJack has mapped for ONE city (resolved to a regionId
+    // via fetch-city-regionIds, then fetch-hotel-mapping filtered by that
+    // regionId), instead of syncCountry's whole-country pull. Use this to
+    // fill in a specific city's coverage - e.g. a low-maxPages country sync
+    // can leave a city with only a fraction of its real hotel count synced.
+    // Returns immediately with a job id - poll GET /hotel-catalog/sync-jobs/{id}.
     // lookupMaxPages bounds the regionId search (fetch-city-regionIds has no
     // name filter, so finding one city means paging through the global list
     // at 2000/page); mappingMaxPages bounds the hotel-mapping pull once the
@@ -64,8 +86,22 @@ public class HotelCatalogController {
             @RequestParam(defaultValue = "100") int lookupMaxPages,
             @RequestParam(defaultValue = "5") int mappingMaxPages
     ) {
-        Map<String, Object> result = hotelCatalogService.syncCity(cityName, lookupMaxPages, mappingMaxPages);
-        return ResponseEntity.ok(result);
+        HotelSyncJob job = hotelSyncJobRunner.startCitySync(cityName, lookupMaxPages, mappingMaxPages);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+
+    // Admin-only (see SecurityConfig) - poll one sync job's progress/status.
+    @GetMapping("/sync-jobs/{id}")
+    public ResponseEntity<HotelSyncJob> syncJob(@PathVariable Long id) {
+        return hotelSyncJobRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // Admin-only (see SecurityConfig) - the 20 most recently started sync jobs.
+    @GetMapping("/sync-jobs")
+    public ResponseEntity<List<HotelSyncJob>> syncJobs() {
+        return ResponseEntity.ok(hotelSyncJobRepository.findTop20ByOrderByStartedAtDesc());
     }
 
     // Public - powers the "search by city" picker on the frontend. Only

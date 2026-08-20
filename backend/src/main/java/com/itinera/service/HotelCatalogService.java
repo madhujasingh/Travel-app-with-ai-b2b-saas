@@ -6,33 +6,48 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.itinera.model.Hotel;
 import com.itinera.repository.HotelRepository;
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 // Downloads TripJack's V3 Hotel Static Content (fetch-hotel-mapping +
 // fetch-hotel-content) into our own `hotels` table, per TripJack support's
 // instructions. This is entirely separate from the dynamic pricing layer
-// (Listing/Detail, which returns zero results for this sandbox key
-// regardless - see project memory) - static content sync doesn't affect
-// that, it's only what lets us know which hotel IDs exist so a search UI has
-// something to query Listing/Detail with in the first place.
+// (Listing/Detail) - static content sync doesn't affect that, it's only
+// what lets us know which hotel IDs exist so a search UI has something to
+// query Listing/Detail with in the first place.
+//
+// Orchestration (background jobs, progress tracking) lives in
+// HotelSyncJobRunner - this class only holds the TripJack-facing mechanics:
+// paging the mapping endpoint, batch-fetching+saving content, and resolving
+// a city name to a regionId.
 @Service
 public class HotelCatalogService {
 
     private final HotelService hotelService;
     private final HotelRepository hotelRepository;
     private final ObjectMapper objectMapper;
+    private final PlatformTransactionManager transactionManager;
+    private final EntityManager entityManager;
 
-    public HotelCatalogService(HotelService hotelService, HotelRepository hotelRepository, ObjectMapper objectMapper) {
+    public HotelCatalogService(
+            HotelService hotelService,
+            HotelRepository hotelRepository,
+            ObjectMapper objectMapper,
+            PlatformTransactionManager transactionManager,
+            EntityManager entityManager
+    ) {
         this.hotelService = hotelService;
         this.hotelRepository = hotelRepository;
         this.objectMapper = objectMapper;
+        this.transactionManager = transactionManager;
+        this.entityManager = entityManager;
     }
 
     // fetch-hotel-content: up to 100 hotel IDs per call (TripJack's own
@@ -58,78 +73,32 @@ public class HotelCatalogService {
         return count;
     }
 
-    // fetch-hotel-mapping (paginated, up to 2000/page) followed by batched
-    // fetch-hotel-content calls (100 IDs at a time) for every mapped hotel.
-    // A full-country sync can be thousands of hotels, and should be
-    // triggered deliberately (and probably scheduled/rate-limited) rather
-    // than fired off as a side effect of browsing.
-    public int syncCountry(String countryName, int maxPages) {
-        return mapAndSyncHotels(payload -> payload.put("countryName", countryName), maxPages);
+    // Runs one syncHotelContent call inside its own short transaction, then
+    // flushes and clears the persistence context. Without this, a long-running
+    // sync processing thousands of hotels in one request/transaction keeps
+    // every saved Hotel entity (each with sizeable images/amenities/
+    // descriptions/policies JSON columns) in Hibernate's first-level cache
+    // for the entire run - that's what OOM-crashed the backend on an earlier
+    // attempt at syncing ~10,000 hotels in one call. Scoping the transaction
+    // (and the persistence context with it) to one 100-hotel batch keeps
+    // memory use bounded no matter how many total hotels a job processes.
+    public int syncHotelContentBatch(List<String> tjHotelIds) {
+        TransactionTemplate tx = new TransactionTemplate(transactionManager);
+        Integer count = tx.execute(status -> {
+            int synced = syncHotelContent(tjHotelIds);
+            entityManager.flush();
+            entityManager.clear();
+            return synced;
+        });
+        return count == null ? 0 : count;
     }
 
-    // City-scoped counterpart to syncCountry - captures every hotel TripJack
-    // has mapped for ONE city (via fetch-hotel-mapping's regionIds filter)
-    // instead of pulling a whole country's worth just to cover one city.
-    // Needed because syncCountry with a low maxPages only captures whatever
-    // fraction of a country's hotels happen to sort into that page range -
-    // e.g. Ahmedabad had only 38/321 hotels synced this way, while TripJack's
-    // own site (querying live) shows all 321.
-    public Map<String, Object> syncCity(String cityName, int lookupMaxPages, int mappingMaxPages) {
-        List<Long> regionIds = findRegionIds(cityName, lookupMaxPages);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("cityName", cityName);
-        result.put("regionIds", regionIds);
-        if (regionIds.isEmpty()) {
-            result.put("found", false);
-            result.put("synced", 0);
-            return result;
-        }
-
-        int synced = mapAndSyncHotels(payload -> {
-            ArrayNode regionIdsNode = payload.putArray("regionIds");
-            regionIds.forEach(id -> regionIdsNode.add(String.valueOf(id)));
-        }, mappingMaxPages);
-        result.put("found", true);
-        result.put("synced", synced);
-        return result;
-    }
-
-    // fetch-city-regionIds has no name filter (per TripJack's docs) - the
-    // only way to find one city's regionId is to page through the full
-    // global list (2000 records/page) looking for an exact, case-insensitive
-    // cityName match. Capped at maxLookupPages so an unmatched/misspelled
-    // city name doesn't scan indefinitely; stops as soon as a page yields at
-    // least one match (a given city name is expected to appear together on
-    // one page, not scattered across the whole list).
-    private List<Long> findRegionIds(String cityName, int maxLookupPages) {
-        List<Long> matches = new ArrayList<>();
-        String cursor = null;
-        for (int i = 0; i < maxLookupPages; i++) {
-            JsonNode response = hotelService.cityRegionIds(2000, cursor);
-            for (JsonNode entry : response.path("hotelCityRegionIds")) {
-                if (cityName.equalsIgnoreCase(entry.path("cityName").asText())) {
-                    matches.add(entry.path("cityRegionId").asLong());
-                }
-            }
-            if (!matches.isEmpty()) {
-                break;
-            }
-            if (!response.path("hasMore").asBoolean(false)) {
-                break;
-            }
-            cursor = response.path("nextCursor").asText(null);
-            if (cursor == null) {
-                break;
-            }
-        }
-        return matches;
-    }
-
-    // Shared by syncCountry/syncCity - pages fetch-hotel-mapping with
-    // whatever filter (countryName or regionIds) the caller puts on the
-    // payload, then batch-syncs full content (100 IDs/call) for every
-    // mapped hotel ID found.
-    private int mapAndSyncHotels(Consumer<ObjectNode> payloadFilter, int maxPages) {
+    // Pages fetch-hotel-mapping with whatever filter (countryName or
+    // regionIds) the caller puts on the payload, collecting every mapped
+    // tjHotelId. Cheap memory-wise (just strings) even for a whole country -
+    // the OOM risk is entirely in the content-fetch/save phase, handled by
+    // syncHotelContentBatch above.
+    List<String> collectMappedIds(Consumer<ObjectNode> payloadFilter, int maxPages) {
         List<String> allIds = new ArrayList<>();
         int page = 0;
         while (page < maxPages) {
@@ -156,13 +125,38 @@ public class HotelCatalogService {
                 break;
             }
         }
+        return allIds;
+    }
 
-        int synced = 0;
-        for (int i = 0; i < allIds.size(); i += 100) {
-            List<String> batch = allIds.subList(i, Math.min(i + 100, allIds.size()));
-            synced += syncHotelContent(batch);
+    // fetch-city-regionIds has no name filter (per TripJack's docs) - the
+    // only way to find one city's regionId is to page through the full
+    // global list (2000 records/page) looking for an exact, case-insensitive
+    // cityName match. Capped at maxLookupPages so an unmatched/misspelled
+    // city name doesn't scan indefinitely; stops as soon as a page yields at
+    // least one match (a given city name is expected to appear together on
+    // one page, not scattered across the whole list).
+    List<Long> findRegionIds(String cityName, int maxLookupPages) {
+        List<Long> matches = new ArrayList<>();
+        String cursor = null;
+        for (int i = 0; i < maxLookupPages; i++) {
+            JsonNode response = hotelService.cityRegionIds(2000, cursor);
+            for (JsonNode entry : response.path("hotelCityRegionIds")) {
+                if (cityName.equalsIgnoreCase(entry.path("cityName").asText())) {
+                    matches.add(entry.path("cityRegionId").asLong());
+                }
+            }
+            if (!matches.isEmpty()) {
+                break;
+            }
+            if (!response.path("hasMore").asBoolean(false)) {
+                break;
+            }
+            cursor = response.path("nextCursor").asText(null);
+            if (cursor == null) {
+                break;
+            }
         }
-        return synced;
+        return matches;
     }
 
     private Hotel mapToHotel(JsonNode node) {
