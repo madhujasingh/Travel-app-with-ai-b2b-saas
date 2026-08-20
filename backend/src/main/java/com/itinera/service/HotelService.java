@@ -48,13 +48,19 @@ public class HotelService {
         return tripJackClient.postHotel("/hms/v3/content/fetch-hotel-content", payload);
     }
 
-    // Same host as flights/nationalities (apitest.tripjack.com, not the v3
-    // hotel-content host) despite the /hms/v3 path - a "what's new or
-    // changed" delta feed (lastUpdateTime) that returns tjHotelId directly,
-    // unlike its older v1 counterpart which only gave unicaId. TripJack's
-    // own docs recommend syncing this every 7 days.
-    public JsonNode fetchStaticHotels(JsonNode payload) {
-        return tripJackClient.post("/hms/v3/fetch-static-hotels", payload);
+    // Purpose-built delta feeds for keeping the catalog in sync without a
+    // full city/country re-scan - given a lastUpdateTime, returns just the
+    // tjHotelIds that are newly created, updated, or (via the separate
+    // deleted-mapping endpoint) removed since then. Cursor-paginated, up to
+    // 2000/page. Unlike fetch-hotel-mapping (which needs a city/regionId or
+    // countryName to know where to look), this needs no location filter at
+    // all - it covers every hotel TripJack has, globally, in one sweep.
+    public JsonNode hotelMappingSync(JsonNode payload) {
+        return tripJackClient.postHotel("/hms/v3/content/fetch-hotel-mapping-sync", payload);
+    }
+
+    public JsonNode deletedHotelMappingSync(JsonNode payload) {
+        return tripJackClient.postHotel("/hms/v3/content/fetch-deleted-hotel-mapping", payload);
     }
 
     // Step 1 - Listing: search criteria in, hotel list with cheapest rate each.

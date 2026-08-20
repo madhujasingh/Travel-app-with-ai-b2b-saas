@@ -89,12 +89,18 @@ public class HotelController {
         return ResponseEntity.ok(hotelService.hotelContent(payload));
     }
 
-    // Admin-only (see SecurityConfig) - passthrough to TripJack's older v1
-    // static-hotels feed, being evaluated as a possible replacement for the
-    // per-city regionId refresh (see HotelSyncJobRunner) since it supports a
-    // proper lastUpdateTime delta rather than a full re-scan.
-    @PostMapping("/static-hotels")
-    public ResponseEntity<JsonNode> staticHotels(@RequestBody JsonNode payload) {
-        return ResponseEntity.ok(hotelService.fetchStaticHotels(payload));
+    // Admin-only (see SecurityConfig) - passthroughs to TripJack's dedicated
+    // NEW/UPDATE/DELETE hotel-mapping delta feeds, replacing the per-city
+    // regionId refresh (see HotelSyncJobRunner) - no city/country filter
+    // needed, so no risk of the same-name-wrong-country mismatch hit twice
+    // already (Bali, Paris).
+    @PostMapping("/hotel-mapping-sync")
+    public ResponseEntity<JsonNode> hotelMappingSync(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(hotelService.hotelMappingSync(payload));
+    }
+
+    @PostMapping("/deleted-hotel-mapping")
+    public ResponseEntity<JsonNode> deletedHotelMappingSync(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(hotelService.deletedHotelMappingSync(payload));
     }
 }
