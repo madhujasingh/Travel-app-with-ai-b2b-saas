@@ -1174,43 +1174,53 @@ const HotelsScreen = ({ navigation }) => {
             />
             {loadingCities ? (
               <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
-            ) : filteredCities.length === 0 ? (
-              <View style={styles.citySyncPrompt}>
-                <Text style={styles.modalEmptyText}>
-                  No synced cities match "{citySearch.trim()}".
-                </Text>
-                {citySearch.trim().length > 0 && (
-                  <TouchableOpacity
-                    style={styles.citySyncButton}
-                    onPress={triggerCitySync}
-                    disabled={citySyncTriggering}
-                  >
-                    {citySyncTriggering ? (
-                      <ActivityIndicator size="small" color={Colors.secondary} />
-                    ) : (
-                      <>
-                        <Ionicons name="cloud-download-outline" size={16} color={Colors.secondary} />
-                        <Text style={styles.citySyncButtonText}>Search "{citySearch.trim()}" anyway</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
             ) : (
-              <FlatList
-                data={filteredCities}
-                keyExtractor={(item) => `${item.city}-${item.countryName}`}
-                style={styles.modalList}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectCity(item)} disabled={selectingCity}>
-                    <View>
-                      <Text style={styles.modalListRowText}>{item.city}</Text>
-                      <Text style={styles.modalListRowMeta}>{item.countryName}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                  </TouchableOpacity>
+              <>
+                {filteredCities.length === 0 ? (
+                  <Text style={styles.modalEmptyText}>No synced cities match "{citySearch.trim()}".</Text>
+                ) : (
+                  // Same-named places in different countries are real (e.g.
+                  // there's a town called "Bali" in India, distinct from the
+                  // Indonesian island) - matches here don't necessarily mean
+                  // the city the customer actually wants is covered, so
+                  // "Search anyway" stays available below regardless.
+                  <FlatList
+                    data={filteredCities}
+                    keyExtractor={(item) => `${item.city}-${item.countryName}`}
+                    style={styles.modalList}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity style={styles.modalListRow} onPress={() => selectCity(item)} disabled={selectingCity}>
+                        <View>
+                          <Text style={styles.modalListRowText}>{item.city}</Text>
+                          <Text style={styles.modalListRowMeta}>{item.countryName}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
+                  />
                 )}
-              />
+                {citySearch.trim().length > 0 && (
+                  <View style={styles.citySyncPrompt}>
+                    {filteredCities.length > 0 && (
+                      <Text style={styles.modalHintText}>Not the right one? It might be in a different country.</Text>
+                    )}
+                    <TouchableOpacity
+                      style={styles.citySyncButton}
+                      onPress={triggerCitySync}
+                      disabled={citySyncTriggering}
+                    >
+                      {citySyncTriggering ? (
+                        <ActivityIndicator size="small" color={Colors.secondary} />
+                      ) : (
+                        <>
+                          <Ionicons name="cloud-download-outline" size={16} color={Colors.secondary} />
+                          <Text style={styles.citySyncButtonText}>Search "{citySearch.trim()}" anyway</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
             )}
           </Pressable>
         </Pressable>
