@@ -48,11 +48,13 @@ public class HotelService {
         return tripJackClient.postHotel("/hms/v3/content/fetch-hotel-content", payload);
     }
 
-    // Older v1 Hotel API, same host as flights/nationalities (apitest.tripjack.com,
-    // not the v3 hotel-content host) - exists to verify whether its hotelId matches
-    // our v3 tjHotelId or unicaId before this feeds any real sync logic.
+    // Same host as flights/nationalities (apitest.tripjack.com, not the v3
+    // hotel-content host) despite the /hms/v3 path - a "what's new or
+    // changed" delta feed (lastUpdateTime) that returns tjHotelId directly,
+    // unlike its older v1 counterpart which only gave unicaId. TripJack's
+    // own docs recommend syncing this every 7 days.
     public JsonNode fetchStaticHotels(JsonNode payload) {
-        return tripJackClient.post("/hms/v1/fetch-static-hotels", payload);
+        return tripJackClient.post("/hms/v3/fetch-static-hotels", payload);
     }
 
     // Step 1 - Listing: search criteria in, hotel list with cheapest rate each.
