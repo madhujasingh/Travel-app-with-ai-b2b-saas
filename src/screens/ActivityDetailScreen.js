@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
@@ -43,39 +44,62 @@ const ActivityDetailScreen = ({ route, navigation }) => {
   const [activity, setActivity] = useState(null);
   const [selectedRate, setSelectedRate] = useState(null);
 
-  useEffect(() => {
-    const fetchDetail = async () => {
-      try {
-        setLoading(true);
-        // Deliberately NOT sending modalityCode even when we have one - confirmed
-        // live that HotelBeds' API 500s when it's included (at least in this
-        // test environment), while omitting it succeeds and simply returns
-        // every modality for the activity instead of just one.
-        const payload = {
-          code: activityCode,
-          from,
-          to,
-          language: 'en',
-          paxes: Array.from({ length: adults || 1 }, () => ({ age: 30 })),
-        };
-        const response = await fetch(`${API_CONFIG.BASE_URL}/activities/details`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await response.json();
-        if (!response.ok || data?.errors) {
-          throw new Error(parseActivitiesError(data, 'Unable to load activity details.'));
+  // useFocusEffect (not a plain useEffect) - React Navigation keeps this
+  // screen mounted when the booking screen pushes on top of it, so a plain
+  // useEffect would only ever fetch once and never again on the way back.
+  // Since rateKeys expire after ~30 minutes and can't be reused once tried
+  // (confirmed live - a failed confirm attempt still burns the rateKey),
+  // every time this screen comes back into focus needs a fresh fetch, not
+  // the same stale rateKey that just failed.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      const fetchDetail = async () => {
+        try {
+          setLoading(true);
+          setSelectedRate(null);
+          // Deliberately NOT sending modalityCode even when we have one -
+          // confirmed live that HotelBeds' API 500s when it's included (at
+          // least in this test environment), while omitting it succeeds and
+          // simply returns every modality for the activity instead of just one.
+          const payload = {
+            code: activityCode,
+            from,
+            to,
+            language: 'en',
+            paxes: Array.from({ length: adults || 1 }, () => ({ age: 30 })),
+          };
+          const response = await fetch(`${API_CONFIG.BASE_URL}/activities/details`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await response.json();
+          if (!response.ok || data?.errors) {
+            throw new Error(parseActivitiesError(data, 'Unable to load activity details.'));
+          }
+          if (!cancelled) {
+            setActivity(data?.activity || null);
+          }
+        } catch (error) {
+          if (!cancelled) {
+            Alert.alert('Activity Details', error.message || 'Unable to load activity details.');
+          }
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+          }
         }
-        setActivity(data?.activity || null);
-      } catch (error) {
-        Alert.alert('Activity Details', error.message || 'Unable to load activity details.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchDetail();
-  }, [activityCode, from, to, adults]);
+      };
+
+      fetchDetail();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [activityCode, from, to, adults])
+  );
 
   const heroImage = getHeroImage(activity?.content);
 
