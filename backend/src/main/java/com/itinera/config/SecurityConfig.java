@@ -66,6 +66,7 @@ public class SecurityConfig {
                 // in FlightBookingController/-Service) - unlike the TripJack
                 // passthrough endpoints above, these need a real logged-in user.
                 .requestMatchers("/flight-bookings/**").authenticated()
+                .requestMatchers("/activity-bookings/**").authenticated()
                 // Same split as flights - Listing/Detail/Review/Static-Detail are
                 // pre-booking discovery, public; Book/Confirm-Book/Booking
                 // Details/Cancel move money or expose a specific booking's PII.

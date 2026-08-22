@@ -39,6 +39,10 @@ const CustomerProfileScreen = ({ navigation }) => {
   const [flightBookingsLoading, setFlightBookingsLoading] = useState(false);
   const [flightBookingsLoaded, setFlightBookingsLoaded] = useState(false);
 
+  const [activityBookings, setActivityBookings] = useState([]);
+  const [activityBookingsLoading, setActivityBookingsLoading] = useState(false);
+  const [activityBookingsLoaded, setActivityBookingsLoaded] = useState(false);
+
   // This screen stays mounted across navigations (pushed on top of
   // CustomerTabs), so the "loaded once" flags below would otherwise cache a
   // stale/empty result forever - e.g. visiting Bookings before making a
@@ -168,6 +172,44 @@ const CustomerProfileScreen = ({ navigation }) => {
     };
   }, [activeTab, token, flightBookingsLoaded]);
 
+  useEffect(() => {
+    if (activeTab !== 'bookings' || !token || activityBookingsLoaded) {
+      return;
+    }
+
+    let active = true;
+
+    const loadActivityBookings = async () => {
+      setActivityBookingsLoading(true);
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/activity-bookings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || data?.error || 'Unable to load activity bookings');
+        }
+        if (active) {
+          setActivityBookings(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (active) {
+          setActivityBookings([]);
+        }
+      } finally {
+        if (active) {
+          setActivityBookingsLoading(false);
+          setActivityBookingsLoaded(true);
+        }
+      }
+    };
+
+    loadActivityBookings();
+    return () => {
+      active = false;
+    };
+  }, [activeTab, token, activityBookingsLoaded]);
+
   const getStatusColor = (status) => {
     switch ((status || '').toUpperCase()) {
       case 'COMPLETED': return '#4CAF50';
@@ -235,7 +277,7 @@ const CustomerProfileScreen = ({ navigation }) => {
         );
 
       case 'bookings': {
-        const combinedLoading = bookingsLoading || flightBookingsLoading;
+        const combinedLoading = bookingsLoading || flightBookingsLoading || activityBookingsLoading;
         const combinedBookings = [
           ...bookings.map((booking) => ({
             key: `itinerary-${booking.id}`,
@@ -245,6 +287,16 @@ const CustomerProfileScreen = ({ navigation }) => {
             status: booking.status,
             date: booking.travelDate || booking.bookingDate,
             amount: booking.amount,
+          })),
+          ...activityBookings.map((activity) => ({
+            key: `activity-${activity.id}`,
+            kind: 'activity',
+            icon: 'ticket-outline',
+            title: activity.activityName || 'Activity',
+            status: activity.status,
+            date: activity.visitDateFrom || activity.createdAt,
+            amount: activity.totalAmount,
+            reference: activity.bookingReference,
           })),
           ...flightBookings.map((flight) => ({
             key: `flight-${flight.id}`,
@@ -265,9 +317,12 @@ const CustomerProfileScreen = ({ navigation }) => {
               renderEmptyState('calendar-outline', 'No bookings yet', 'Trips you book will show up here.')
             ) : (
               combinedBookings.map((item) => {
-                const CardWrapper = item.kind === 'flight' ? TouchableOpacity : View;
+                const isTappable = item.kind === 'flight' || item.kind === 'activity';
+                const CardWrapper = isTappable ? TouchableOpacity : View;
                 const wrapperProps = item.kind === 'flight'
                   ? { activeOpacity: 0.7, onPress: () => navigation.navigate('MyFlightBookings') }
+                  : item.kind === 'activity'
+                  ? { activeOpacity: 0.7, onPress: () => navigation.navigate('ActivityBooking', { bookingReference: item.reference }) }
                   : {};
                 return (
                   <CardWrapper key={item.key} style={styles.bookingCard} {...wrapperProps}>

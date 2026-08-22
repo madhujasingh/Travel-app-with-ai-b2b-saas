@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,18 @@ const buildInitialTravelers = (adults) =>
 
 const ActivityBookingScreen = ({ route, navigation }) => {
   const { token } = useAuth();
-  const { activityCode, name, rateKey, from, to, adults, price, currency, questions } = route.params;
+  const {
+    activityCode,
+    name,
+    rateKey,
+    from,
+    to,
+    adults,
+    price,
+    currency,
+    questions,
+    bookingReference,
+  } = route.params;
 
   const [holderName, setHolderName] = useState('');
   const [holderSurname, setHolderSurname] = useState('');
@@ -42,6 +53,57 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   const [booking, setBooking] = useState(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  // Set only when opened from Profile > Bookings (an existing booking, not a
+  // new one) - shows a loading state instead of the booking form while the
+  // real HotelBeds status is fetched.
+  const [resuming, setResuming] = useState(Boolean(bookingReference));
+
+  // Keeps our own local record (see ActivityBookingController) in sync
+  // with whatever HotelBeds' response actually says - this is purely for
+  // Profile > Bookings history, HotelBeds stays the source of truth.
+  const persistLocalRecord = (b) => {
+    if (!b?.reference) return;
+    const activity = b.activities?.[0];
+    fetch(`${API_CONFIG.BASE_URL}/activity-bookings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        bookingReference: b.reference,
+        activityName: activity?.name || name,
+        visitDateFrom: activity?.dateFrom || from,
+        visitDateTo: activity?.dateTo || to,
+        totalAmount: b.total,
+        currency: b.currency,
+        status: b.status,
+      }),
+    }).catch(() => {
+      // Best-effort - a failure here shouldn't block showing the booking
+      // result, since HotelBeds already has the real booking either way.
+    });
+  };
+
+  useEffect(() => {
+    if (!bookingReference) return;
+    const fetchExisting = async () => {
+      try {
+        setResuming(true);
+        const response = await fetch(
+          `${API_CONFIG.BASE_URL}/activities/bookings/en/${bookingReference}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await response.json();
+        if (!response.ok || data?.errors) {
+          throw new Error(parseActivitiesError(data, 'Unable to load this booking.'));
+        }
+        setBooking(data?.booking || null);
+      } catch (error) {
+        Alert.alert('Booking', error.message || 'Unable to load this booking.');
+      } finally {
+        setResuming(false);
+      }
+    };
+    fetchExisting();
+  }, [bookingReference]);
 
   const updateTraveler = (index, field, value) => {
     setTravelers((current) =>
@@ -125,6 +187,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
         throw new Error(parseActivitiesError(data, 'Unable to confirm this booking.'));
       }
       setBooking(data?.booking || null);
+      persistLocalRecord(data?.booking);
     } catch (error) {
       Alert.alert('Booking Failed', error.message || 'Unable to confirm this booking.');
     } finally {
@@ -144,6 +207,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
         throw new Error(parseActivitiesError(data, 'Unable to check booking status.'));
       }
       setBooking(data?.booking || booking);
+      persistLocalRecord(data?.booking);
     } catch (error) {
       Alert.alert('Booking Status', error.message || 'Unable to check booking status.');
     } finally {
@@ -193,6 +257,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
                         throw new Error(parseActivitiesError(data, 'Unable to cancel this booking.'));
                       }
                       setBooking(data?.booking || booking);
+                      persistLocalRecord(data?.booking);
                     } catch (error) {
                       Alert.alert('Cancel Booking', error.message || 'Unable to cancel this booking.');
                     } finally {
@@ -210,6 +275,17 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       },
     ]);
   };
+
+  if (resuming && !booking) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.centerState}>
+          <ActivityIndicator color={Colors.primary} size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (booking) {
     return (
@@ -467,6 +543,11 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     fontWeight: '700',
     fontSize: 15,
+  },
+  centerState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   confirmedState: {
     flex: 1,
