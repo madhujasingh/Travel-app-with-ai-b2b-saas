@@ -39,6 +39,9 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/health").permitAll()
                 .requestMatchers(HttpMethod.POST, "/ai/**").permitAll()
+                // Activities (HotelBeds/HBX Group, separate provider) - search
+                // only for now, same public-discovery reasoning as hotels/flights.
+                .requestMatchers(HttpMethod.POST, "/activities/search").permitAll()
                 // Only the discovery/pricing phase of the TripJack flight
                 // passthrough is public (browsing without an account) - Book,
                 // Confirm-Book, Booking Details, Release PNR, Amendments,

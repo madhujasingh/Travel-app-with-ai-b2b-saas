@@ -21,6 +21,7 @@ import HotelsScreen from './src/screens/HotelsScreen';
 import HotelDetailScreen from './src/screens/HotelDetailScreen';
 import HotelBookingScreen from './src/screens/HotelBookingScreen';
 import FlightsScreen from './src/screens/FlightsScreen';
+import ActivitiesScreen from './src/screens/ActivitiesScreen';
 import FlightBookingScreen from './src/screens/FlightBookingScreen';
 import FlightReissueScreen from './src/screens/FlightReissueScreen';
 import MyFlightBookingsScreen from './src/screens/MyFlightBookingsScreen';
@@ -253,10 +254,18 @@ export default function App() {
   return (
     <AuthContext.Provider value={authContextValue}>
       <CartProvider>
-        <NavigationContainer>
+        {/* Without an explicit flex here, react-native-web lets the whole tree
+            grow to fit content instead of being capped at the viewport, so
+            nothing anywhere ever scrolls - it just clips at body's edge. */}
+        <NavigationContainer style={{ flex: 1 }}>
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
+            // @react-navigation/stack positions each screen with
+            // absolute-fill for card transitions; on web that box needs an
+            // explicit flex: 1 or it never gets capped to the viewport,
+            // which is what was letting the whole page grow unbounded.
+            cardStyle: { flex: 1 },
           }}
         >
           {!authContextValue.isAuthenticated ? (
@@ -287,6 +296,7 @@ export default function App() {
               <Stack.Screen name="HotelDetail" component={HotelDetailScreen} />
               <Stack.Screen name="HotelBooking" component={HotelBookingScreen} />
               <Stack.Screen name="Flights" component={FlightsScreen} />
+              <Stack.Screen name="Activities" component={ActivitiesScreen} />
               <Stack.Screen name="FlightBooking" component={FlightBookingScreen} />
               <Stack.Screen name="FlightReissue" component={FlightReissueScreen} />
               <Stack.Screen name="MyFlightBookings" component={MyFlightBookingsScreen} />

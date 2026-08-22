@@ -70,6 +70,13 @@ const HomeScreen = ({ navigation }) => {
       screen: 'GroupTripPlanner',
       color: '#C95A24',
     },
+    {
+      id: 5,
+      title: 'Activities',
+      icon: 'ticket-confirmation',
+      screen: 'Activities',
+      color: '#E8622C',
+    },
   ];
 
   const handleSearch = () => {

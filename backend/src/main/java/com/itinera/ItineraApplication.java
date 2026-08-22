@@ -1,5 +1,6 @@
 package com.itinera;
 
+import com.itinera.config.ActivitiesConfig;
 import com.itinera.config.TripJackConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -11,7 +12,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 @SpringBootApplication
-@EnableConfigurationProperties(TripJackConfig.class)
+@EnableConfigurationProperties({TripJackConfig.class, ActivitiesConfig.class})
 @EnableAsync
 @EnableScheduling
 public class ItineraApplication {
