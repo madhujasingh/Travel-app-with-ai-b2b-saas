@@ -39,6 +39,8 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const updateTraveler = (index, field, value) => {
     setTravelers((current) =>
@@ -129,15 +131,119 @@ const ActivityBookingScreen = ({ route, navigation }) => {
     }
   };
 
+  const checkStatus = async () => {
+    try {
+      setCheckingStatus(true);
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}/activities/bookings/en/${booking.reference}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await response.json();
+      if (!response.ok || data?.errors) {
+        throw new Error(data?.errors?.[0]?.text || data?.message || 'Unable to check booking status.');
+      }
+      setBooking(data?.booking || booking);
+    } catch (error) {
+      Alert.alert('Booking Status', error.message || 'Unable to check booking status.');
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
+  // Always simulate first (no charge, no state change) to show the real
+  // cancellation fee before actually cancelling - same two-step pattern
+  // HotelBookingScreen uses for hotel cancellations.
+  const cancelBooking = () => {
+    Alert.alert('Cancel booking', 'Check cancellation charges before cancelling?', [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes, check',
+        onPress: async () => {
+          try {
+            setCancelling(true);
+            const simResponse = await fetch(
+              `${API_CONFIG.BASE_URL}/activities/bookings/en/${booking.reference}?cancellationFlag=SIMULATION`,
+              { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+            );
+            const simData = await simResponse.json();
+            if (!simResponse.ok || simData?.errors) {
+              throw new Error(simData?.errors?.[0]?.text || simData?.message || 'Unable to check cancellation charges.');
+            }
+            const fee = simData?.booking?.cancelValuationAmount ?? 0;
+
+            Alert.alert(
+              'Confirm cancellation',
+              fee > 0
+                ? `Cancelling now will incur a fee of ${booking.currency} ${fee}. Continue?`
+                : 'This booking can be cancelled free of charge. Continue?',
+              [
+                { text: 'No', style: 'cancel', onPress: () => setCancelling(false) },
+                {
+                  text: 'Yes, cancel',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      const response = await fetch(
+                        `${API_CONFIG.BASE_URL}/activities/bookings/en/${booking.reference}?cancellationFlag=CANCELLATION`,
+                        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+                      );
+                      const data = await response.json();
+                      if (!response.ok || data?.errors) {
+                        throw new Error(data?.errors?.[0]?.text || data?.message || 'Unable to cancel this booking.');
+                      }
+                      setBooking(data?.booking || booking);
+                    } catch (error) {
+                      Alert.alert('Cancel Booking', error.message || 'Unable to cancel this booking.');
+                    } finally {
+                      setCancelling(false);
+                    }
+                  },
+                },
+              ]
+            );
+          } catch (error) {
+            setCancelling(false);
+            Alert.alert('Cancel Booking', error.message || 'Unable to check cancellation charges.');
+          }
+        },
+      },
+    ]);
+  };
+
   if (booking) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
         <View style={styles.confirmedState}>
-          <Ionicons name="checkmark-circle" size={64} color={Colors.success} />
-          <Text style={styles.confirmedTitle}>Booking Confirmed</Text>
+          <Ionicons
+            name={booking.status === 'CANCELLED' ? 'close-circle' : 'checkmark-circle'}
+            size={64}
+            color={booking.status === 'CANCELLED' ? Colors.error : Colors.success}
+          />
+          <Text style={styles.confirmedTitle}>
+            {booking.status === 'CANCELLED' ? 'Booking Cancelled' : 'Booking Confirmed'}
+          </Text>
           <Text style={styles.confirmedReference}>Reference: {booking.reference}</Text>
           <Text style={styles.confirmedStatus}>Status: {booking.status}</Text>
+
+          <TouchableOpacity style={styles.secondaryButton} onPress={checkStatus} disabled={checkingStatus}>
+            {checkingStatus ? (
+              <ActivityIndicator color={Colors.primary} />
+            ) : (
+              <Text style={styles.secondaryButtonText}>Check latest status</Text>
+            )}
+          </TouchableOpacity>
+
+          {booking.status !== 'CANCELLED' && (
+            <TouchableOpacity style={styles.cancelButton} onPress={cancelBooking} disabled={cancelling}>
+              {cancelling ? (
+                <ActivityIndicator color={Colors.error} />
+              ) : (
+                <Text style={styles.cancelButtonText}>Cancel booking</Text>
+              )}
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.doneButton}
             onPress={() => navigation.popToTop()}
@@ -374,6 +480,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textMuted,
     marginTop: 4,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    marginTop: 24,
+  },
+  secondaryButtonText: {
+    color: Colors.primary,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  cancelButton: {
+    borderWidth: 1,
+    borderColor: Colors.error,
+    borderRadius: 999,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    marginTop: 14,
+  },
+  cancelButtonText: {
+    color: Colors.error,
+    fontWeight: '700',
+    fontSize: 14,
   },
   doneButton: {
     backgroundColor: Colors.primary,
