@@ -187,7 +187,19 @@ const ActivitiesScreen = ({ navigation }) => {
             const name = item?.content?.name || 'Activity';
             const destinationName = item?.country?.destinations?.[0]?.name || '';
             return (
-              <TouchableOpacity style={styles.resultCard}>
+              <TouchableOpacity
+                style={styles.resultCard}
+                onPress={() =>
+                  navigation.navigate('ActivityDetail', {
+                    activityCode: item?.content?.activityCode,
+                    modalityCode: item?.content?.modalityCode,
+                    name,
+                    from: fromDate,
+                    to: toDate,
+                    adults: Math.max(1, parseInt(adults, 10) || 1),
+                  })
+                }
+              >
                 {imageUrl ? (
                   <Image source={{ uri: imageUrl }} style={styles.resultImage} />
                 ) : (

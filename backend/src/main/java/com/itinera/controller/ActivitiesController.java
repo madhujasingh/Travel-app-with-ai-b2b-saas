@@ -26,4 +26,14 @@ public class ActivitiesController {
     public ResponseEntity<JsonNode> search(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(activitiesService.search(payload));
     }
+
+    @PostMapping("/details")
+    public ResponseEntity<JsonNode> details(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(activitiesService.detail(payload));
+    }
+
+    @PostMapping("/details/full")
+    public ResponseEntity<JsonNode> detailsFull(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(activitiesService.detailFull(payload));
+    }
 }
