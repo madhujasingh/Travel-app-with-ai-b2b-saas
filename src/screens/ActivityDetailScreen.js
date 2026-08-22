@@ -127,7 +127,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                     <TouchableOpacity
                       key={detail.rateKey}
                       style={[styles.rateRow, isSelected && styles.rateRowSelected]}
-                      onPress={() => setSelectedRate(detail)}
+                      onPress={() => setSelectedRate({ ...detail, questions: modality.questions })}
                     >
                       <View style={{ flex: 1 }}>
                         {detail.languages?.[0]?.description && (
@@ -172,6 +172,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                 adults,
                 price: selectedRate.totalAmount?.amount,
                 currency: activity?.currency,
+                questions: selectedRate.questions || [],
               })
             }
           >

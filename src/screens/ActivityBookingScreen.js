@@ -26,7 +26,7 @@ const buildInitialTravelers = (adults) =>
 
 const ActivityBookingScreen = ({ route, navigation }) => {
   const { token } = useAuth();
-  const { activityCode, name, rateKey, from, to, adults, price, currency } = route.params;
+  const { activityCode, name, rateKey, from, to, adults, price, currency, questions } = route.params;
 
   const [holderName, setHolderName] = useState('');
   const [holderSurname, setHolderSurname] = useState('');
@@ -36,6 +36,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   const [zipCode, setZipCode] = useState('');
   const [country, setCountry] = useState('IN');
   const [travelers, setTravelers] = useState(() => buildInitialTravelers(adults));
+  const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState(null);
 
@@ -45,6 +46,10 @@ const ActivityBookingScreen = ({ route, navigation }) => {
     );
   };
 
+  const updateAnswer = (code, value) => {
+    setAnswers((current) => ({ ...current, [code]: value }));
+  };
+
   const submitBooking = async () => {
     if (!holderName.trim() || !holderSurname.trim() || !email.trim() || !phone.trim()) {
       Alert.alert('Missing details', 'Please fill in your name, email, and phone number.');
@@ -52,6 +57,11 @@ const ActivityBookingScreen = ({ route, navigation }) => {
     }
     if (travelers.some((t) => !t.name.trim() || !t.surname.trim())) {
       Alert.alert('Missing traveler details', 'Please provide a name and surname for every traveler.');
+      return;
+    }
+    const missingRequired = (questions || []).find((q) => q.required && !answers[q.code]?.trim());
+    if (missingRequired) {
+      Alert.alert('Missing information', missingRequired.text || 'Please answer all required questions.');
       return;
     }
 
@@ -83,6 +93,19 @@ const ActivityBookingScreen = ({ route, navigation }) => {
             surname: t.surname.trim(),
             type: 'ADULT',
           })),
+          // Some activities (per Detail's modality.questions) require extra
+          // info before they can be confirmed - e.g. "what hotel are you
+          // staying at", passport numbers. Confirmed live: omitting these
+          // when required gets rejected with one E_REQUEST_INVALID error per
+          // unanswered question.
+          ...((questions || []).length > 0
+            ? {
+                answers: questions.map((q) => ({
+                  question: { code: q.code, text: q.text, required: q.required },
+                  answer: answers[q.code]?.trim() || '',
+                })),
+              }
+            : {}),
         },
       ],
     };
@@ -204,6 +227,22 @@ const ActivityBookingScreen = ({ route, navigation }) => {
           autoCapitalize="characters"
           maxLength={2}
         />
+
+        {(questions || []).length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Additional information</Text>
+            {questions.map((q) => (
+              <TextInput
+                key={q.code}
+                style={styles.input}
+                placeholder={q.text || q.code}
+                placeholderTextColor={Colors.textMuted}
+                value={answers[q.code] || ''}
+                onChangeText={(value) => updateAnswer(q.code, value)}
+              />
+            ))}
+          </>
+        )}
 
         <Text style={styles.sectionTitle}>Traveler names</Text>
         {travelers.map((traveler, index) => (
