@@ -192,7 +192,6 @@ const ActivitiesScreen = ({ navigation }) => {
                 onPress={() =>
                   navigation.navigate('ActivityDetail', {
                     activityCode: item?.content?.activityCode,
-                    modalityCode: item?.content?.modalityCode,
                     name,
                     from: fromDate,
                     to: toDate,

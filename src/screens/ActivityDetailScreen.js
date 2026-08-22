@@ -37,7 +37,7 @@ const getHeroImage = (content) => {
 };
 
 const ActivityDetailScreen = ({ route, navigation }) => {
-  const { activityCode, modalityCode, name, from, to, adults } = route.params;
+  const { activityCode, name, from, to, adults } = route.params;
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState(null);
 
@@ -45,9 +45,12 @@ const ActivityDetailScreen = ({ route, navigation }) => {
     const fetchDetail = async () => {
       try {
         setLoading(true);
+        // Deliberately NOT sending modalityCode even when we have one - confirmed
+        // live that HotelBeds' API 500s when it's included (at least in this
+        // test environment), while omitting it succeeds and simply returns
+        // every modality for the activity instead of just one.
         const payload = {
           code: activityCode,
-          ...(modalityCode ? { modalityCode } : {}),
           from,
           to,
           language: 'en',
@@ -70,7 +73,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
       }
     };
     fetchDetail();
-  }, [activityCode, modalityCode, from, to, adults]);
+  }, [activityCode, from, to, adults]);
 
   const heroImage = getHeroImage(activity?.content);
 
