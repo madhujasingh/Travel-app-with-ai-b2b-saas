@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import DatePickerModal from '../components/DatePickerModal';
+import { parseActivitiesError } from '../utils/activitiesApiErrors';
 
 const formatDisplayDate = (isoDate) => {
   if (!isoDate) return '';
@@ -97,7 +98,7 @@ const ActivitiesScreen = ({ navigation }) => {
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.message || 'Unable to search activities right now.');
+        throw new Error(parseActivitiesError(data, 'Unable to search activities right now.'));
       }
       setResults(Array.isArray(data?.activities) ? data.activities : []);
     } catch (error) {

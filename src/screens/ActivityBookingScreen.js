@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
+import { parseActivitiesError } from '../utils/activitiesApiErrors';
 
 // Free-text agency reference HotelBeds stores alongside the booking (up to
 // 20 chars per the docs) - generated rather than asked from the customer,
@@ -121,7 +122,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       });
       const data = await response.json();
       if (!response.ok || data?.errors) {
-        throw new Error(data?.errors?.[0]?.text || data?.message || 'Unable to confirm this booking.');
+        throw new Error(parseActivitiesError(data, 'Unable to confirm this booking.'));
       }
       setBooking(data?.booking || null);
     } catch (error) {
@@ -140,7 +141,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       );
       const data = await response.json();
       if (!response.ok || data?.errors) {
-        throw new Error(data?.errors?.[0]?.text || data?.message || 'Unable to check booking status.');
+        throw new Error(parseActivitiesError(data, 'Unable to check booking status.'));
       }
       setBooking(data?.booking || booking);
     } catch (error) {
@@ -167,7 +168,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
             );
             const simData = await simResponse.json();
             if (!simResponse.ok || simData?.errors) {
-              throw new Error(simData?.errors?.[0]?.text || simData?.message || 'Unable to check cancellation charges.');
+              throw new Error(parseActivitiesError(simData, 'Unable to check cancellation charges.'));
             }
             const fee = simData?.booking?.cancelValuationAmount ?? 0;
 
@@ -189,7 +190,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
                       );
                       const data = await response.json();
                       if (!response.ok || data?.errors) {
-                        throw new Error(data?.errors?.[0]?.text || data?.message || 'Unable to cancel this booking.');
+                        throw new Error(parseActivitiesError(data, 'Unable to cancel this booking.'));
                       }
                       setBooking(data?.booking || booking);
                     } catch (error) {

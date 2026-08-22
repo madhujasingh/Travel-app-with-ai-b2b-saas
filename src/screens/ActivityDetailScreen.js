@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
+import { parseActivitiesError } from '../utils/activitiesApiErrors';
 
 // Content descriptions come back as HTML (<br />, <strong>, etc.) - RN has
 // no HTML renderer wired up here, so this strips tags down to plain text
@@ -64,7 +65,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
         });
         const data = await response.json();
         if (!response.ok || data?.errors) {
-          throw new Error(data?.errors?.[0]?.text || data?.message || 'Unable to load activity details.');
+          throw new Error(parseActivitiesError(data, 'Unable to load activity details.'));
         }
         setActivity(data?.activity || null);
       } catch (error) {
