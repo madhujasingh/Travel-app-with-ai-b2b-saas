@@ -40,6 +40,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
   const { activityCode, name, from, to, adults } = route.params;
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState(null);
+  const [selectedRateKey, setSelectedRateKey] = useState(null);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -120,28 +121,57 @@ const ActivityDetailScreen = ({ route, navigation }) => {
             <View key={modality.code} style={styles.modalityCard}>
               <Text style={styles.modalityName}>{modality.name}</Text>
               {(modality.rates || []).map((rate) =>
-                (rate.rateDetails || []).map((detail) => (
-                  <View key={detail.rateKey} style={styles.rateRow}>
-                    <View style={{ flex: 1 }}>
-                      {detail.languages?.[0]?.description && (
-                        <Text style={styles.rateLanguage}>{detail.languages[0].description}</Text>
-                      )}
-                      {detail.sessions?.[0]?.name && (
-                        <Text style={styles.rateSession}>Session: {detail.sessions[0].name}</Text>
-                      )}
-                      {rate.freeCancellation === false && (
-                        <Text style={styles.rateCancellation}>Non-refundable</Text>
-                      )}
-                    </View>
-                    <Text style={styles.ratePrice}>
-                      {activity?.currency} {Number(detail.totalAmount?.amount || 0).toLocaleString()}
-                    </Text>
-                  </View>
-                ))
+                (rate.rateDetails || []).map((detail) => {
+                  const isSelected = selectedRateKey === detail.rateKey;
+                  return (
+                    <TouchableOpacity
+                      key={detail.rateKey}
+                      style={[styles.rateRow, isSelected && styles.rateRowSelected]}
+                      onPress={() => setSelectedRateKey(detail.rateKey)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        {detail.languages?.[0]?.description && (
+                          <Text style={styles.rateLanguage}>{detail.languages[0].description}</Text>
+                        )}
+                        {detail.sessions?.[0]?.name && (
+                          <Text style={styles.rateSession}>Session: {detail.sessions[0].name}</Text>
+                        )}
+                        {rate.freeCancellation === false && (
+                          <Text style={styles.rateCancellation}>Non-refundable</Text>
+                        )}
+                      </View>
+                      <Text style={styles.ratePrice}>
+                        {activity?.currency} {Number(detail.totalAmount?.amount || 0).toLocaleString()}
+                      </Text>
+                      <Ionicons
+                        name={isSelected ? 'checkmark-circle' : 'chevron-forward'}
+                        size={20}
+                        color={isSelected ? Colors.primary : Colors.textMuted}
+                        style={{ marginLeft: 10 }}
+                      />
+                    </TouchableOpacity>
+                  );
+                })
               )}
             </View>
           ))}
         </ScrollView>
+      )}
+
+      {selectedRateKey && (
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() =>
+              Alert.alert(
+                'Option selected',
+                "Booking isn't built yet - this is where you'd continue to enter traveler details and confirm."
+              )
+            }
+          >
+            <Text style={styles.continueButtonText}>Continue with this option</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -231,8 +261,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: Colors.border,
+    borderRadius: 10,
     paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 6,
     marginTop: 8,
+  },
+  rateRowSelected: {
+    backgroundColor: Colors.primarySoft,
+    borderColor: Colors.primary,
   },
   rateLanguage: {
     fontSize: 12,
@@ -253,6 +290,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: Colors.primary,
+  },
+  footer: {
+    padding: 16,
+    backgroundColor: Colors.card,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  continueButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 999,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  continueButtonText: {
+    color: Colors.secondary,
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
 
