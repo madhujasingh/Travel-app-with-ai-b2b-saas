@@ -38,7 +38,14 @@ const getActivityImage = (activity) => {
 const getActivityPrice = (activity) => {
   const amounts = activity?.amountsFrom;
   if (!Array.isArray(amounts) || amounts.length === 0) return null;
-  const cheapest = amounts.reduce((min, a) => (a.amount < min.amount ? a : min), amounts[0]);
+  // amountsFrom includes an entry per paxType regardless of what was actually
+  // searched for - an untouched paxType (e.g. CHILD, when the search only
+  // sent adult paxes) can carry a placeholder amount of 0, which would look
+  // like "the cheapest price" but isn't a real price. Prefer the ADULT entry
+  // (every search here always includes at least one adult pax) over blindly
+  // taking the numeric minimum across all paxTypes.
+  const adult = amounts.find((a) => a.paxType === 'ADULT' && a.amount > 0);
+  const cheapest = adult || amounts.filter((a) => a.amount > 0).reduce((min, a) => (a.amount < min.amount ? a : min), amounts[0]);
   return { amount: cheapest.amount, currency: activity?.currencyName || activity?.content?.currency };
 };
 
