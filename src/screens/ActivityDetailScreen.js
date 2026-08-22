@@ -40,7 +40,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
   const { activityCode, name, from, to, adults } = route.params;
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState(null);
-  const [selectedRateKey, setSelectedRateKey] = useState(null);
+  const [selectedRate, setSelectedRate] = useState(null);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -122,12 +122,12 @@ const ActivityDetailScreen = ({ route, navigation }) => {
               <Text style={styles.modalityName}>{modality.name}</Text>
               {(modality.rates || []).map((rate) =>
                 (rate.rateDetails || []).map((detail) => {
-                  const isSelected = selectedRateKey === detail.rateKey;
+                  const isSelected = selectedRate?.rateKey === detail.rateKey;
                   return (
                     <TouchableOpacity
                       key={detail.rateKey}
                       style={[styles.rateRow, isSelected && styles.rateRowSelected]}
-                      onPress={() => setSelectedRateKey(detail.rateKey)}
+                      onPress={() => setSelectedRate(detail)}
                     >
                       <View style={{ flex: 1 }}>
                         {detail.languages?.[0]?.description && (
@@ -158,15 +158,21 @@ const ActivityDetailScreen = ({ route, navigation }) => {
         </ScrollView>
       )}
 
-      {selectedRateKey && (
+      {selectedRate && (
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.continueButton}
             onPress={() =>
-              Alert.alert(
-                'Option selected',
-                "Booking isn't built yet - this is where you'd continue to enter traveler details and confirm."
-              )
+              navigation.navigate('ActivityBooking', {
+                activityCode,
+                name: activity?.content?.name || name,
+                rateKey: selectedRate.rateKey,
+                from,
+                to,
+                adults,
+                price: selectedRate.totalAmount?.amount,
+                currency: activity?.currency,
+              })
             }
           >
             <Text style={styles.continueButtonText}>Continue with this option</Text>

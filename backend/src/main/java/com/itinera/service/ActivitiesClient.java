@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.function.Supplier;
 
 // HotelBeds/HBX Group Activities API client. Unlike TripJackClient's static
 // apikey header, this API's X-Signature is SHA256(apiKey + secret + current
@@ -45,16 +46,51 @@ public class ActivitiesClient {
     }
 
     public JsonNode post(String path, JsonNode payload) {
+        return execute(() -> restClient.post()
+                .uri(path)
+                .header("Api-key", activitiesConfig.getApiKey())
+                .header("X-Signature", computeSignature())
+                .body(payload)
+                .retrieve()
+                .body(JsonNode.class));
+    }
+
+    // Confirm/Preconfirm/Reconfirm all use PUT per the docs.
+    public JsonNode put(String path, JsonNode payload) {
+        return execute(() -> restClient.put()
+                .uri(path)
+                .header("Api-key", activitiesConfig.getApiKey())
+                .header("X-Signature", computeSignature())
+                .body(payload)
+                .retrieve()
+                .body(JsonNode.class));
+    }
+
+    public JsonNode get(String path) {
+        return execute(() -> restClient.get()
+                .uri(path)
+                .header("Api-key", activitiesConfig.getApiKey())
+                .header("X-Signature", computeSignature())
+                .retrieve()
+                .body(JsonNode.class));
+    }
+
+    // Cancel takes cancellationFlag as a query param - callers build the full
+    // path+query string (see ActivitiesService.cancelBooking).
+    public JsonNode delete(String path) {
+        return execute(() -> restClient.delete()
+                .uri(path)
+                .header("Api-key", activitiesConfig.getApiKey())
+                .header("X-Signature", computeSignature())
+                .retrieve()
+                .body(JsonNode.class));
+    }
+
+    private JsonNode execute(Supplier<JsonNode> call) {
         requireCredentials();
 
         try {
-            return restClient.post()
-                    .uri(path)
-                    .header("Api-key", activitiesConfig.getApiKey())
-                    .header("X-Signature", computeSignature())
-                    .body(payload)
-                    .retrieve()
-                    .body(JsonNode.class);
+            return call.get();
         } catch (HttpStatusCodeException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,

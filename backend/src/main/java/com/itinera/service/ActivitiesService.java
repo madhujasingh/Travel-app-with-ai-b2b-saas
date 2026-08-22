@@ -38,4 +38,41 @@ public class ActivitiesService {
     public JsonNode detailFull(JsonNode payload) {
         return activitiesClient.post("/activity-api/3.0/activities/details/full", payload);
     }
+
+    // PUT /activity-api/3.0/bookings - single-step confirm. Unlike TripJack's
+    // hotel/flight booking, there's no paymentInfos/amount in this request at
+    // all - HotelBeds bills against the agency account directly, so there's
+    // no payment-gateway dependency blocking this the way there was for
+    // hotels. rateKey (from detail(), valid 30 min) identifies what's being
+    // booked.
+    public JsonNode confirmBooking(JsonNode payload) {
+        return activitiesClient.put("/activity-api/3.0/bookings", payload);
+    }
+
+    // Two-step alternative to confirmBooking(), for when a payment gateway
+    // needs to sit in between (preconfirm locks stock for 30 min, reconfirm
+    // finalizes after payment succeeds). Not currently used by the frontend -
+    // confirmBooking() covers the account-billed flow we actually need.
+    public JsonNode preconfirmBooking(JsonNode payload) {
+        return activitiesClient.put("/activity-api/3.0/bookings/preconfirm", payload);
+    }
+
+    public JsonNode reconfirmBooking(JsonNode payload) {
+        return activitiesClient.put("/activity-api/3.0/bookings/reconfirm", payload);
+    }
+
+    // GET /activity-api/3.0/bookings/{language}/{reference} - status +
+    // full booking info, same shape as the confirm response.
+    public JsonNode bookingDetail(String language, String reference) {
+        return activitiesClient.get("/activity-api/3.0/bookings/" + language + "/" + reference);
+    }
+
+    // DELETE /activity-api/3.0/bookings/{language}/{reference}?cancellationFlag=X
+    // - cancellationFlag must be "SIMULATION" (preview charges, no-op) or
+    // "CANCELLATION" (actually cancels). Always simulate first in the UI.
+    public JsonNode cancelBooking(String language, String reference, String cancellationFlag) {
+        return activitiesClient.delete(
+                "/activity-api/3.0/bookings/" + language + "/" + reference + "?cancellationFlag=" + cancellationFlag
+        );
+    }
 }
