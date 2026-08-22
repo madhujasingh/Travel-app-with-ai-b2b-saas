@@ -270,6 +270,9 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryName} numberOfLines={2}>{name}</Text>
+          <Text style={styles.summaryDate}>
+            {from === to ? `Visit date: ${from}` : `${from} - ${to}`}
+          </Text>
           {price != null && (
             <Text style={styles.summaryPrice}>{currency} {Number(price).toLocaleString()}</Text>
           )}
@@ -414,6 +417,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: Colors.text,
+  },
+  summaryDate: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 4,
   },
   summaryPrice: {
     fontSize: 16,

@@ -187,19 +187,27 @@ const ActivityDetailScreen = ({ route, navigation }) => {
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.continueButton}
-            onPress={() =>
+            onPress={() => {
+              // Confirm requires from/to to span exactly the modality's
+              // duration (e.g. a 1-day pass needs from === to) - confirmed
+              // live that passing the broader search date range instead
+              // gets rejected as "rateKey ... does not exist", which reads
+              // like an invalid-key error but is actually a date mismatch.
+              // operationDates lists the specific valid date(s) for this
+              // rate; default to the first one rather than the search range.
+              const bookingDates = selectedRate.operationDates?.[0];
               navigation.navigate('ActivityBooking', {
                 activityCode,
                 name: activity?.content?.name || name,
                 rateKey: selectedRate.rateKey,
-                from,
-                to,
+                from: bookingDates?.from || from,
+                to: bookingDates?.to || to,
                 adults,
                 price: selectedRate.totalAmount?.amount,
                 currency: activity?.currency,
                 questions: selectedRate.questions || [],
-              })
-            }
+              });
+            }}
           >
             <Text style={styles.continueButtonText}>Continue with this option</Text>
           </TouchableOpacity>
