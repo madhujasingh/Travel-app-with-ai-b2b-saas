@@ -52,6 +52,7 @@ const CustomerProfileScreen = ({ navigation }) => {
     useCallback(() => {
       setBookingsLoaded(false);
       setFlightBookingsLoaded(false);
+      setActivityBookingsLoaded(false);
     }, [])
   );
 
