@@ -76,6 +76,7 @@ const HomeScreen = ({ navigation }) => {
       icon: 'ticket-confirmation',
       screen: 'Activities',
       color: '#E8622C',
+      wide: true,
     },
   ];
 
@@ -160,12 +161,22 @@ const HomeScreen = ({ navigation }) => {
             {services.map((service) => (
               <TouchableOpacity
                 key={service.id}
-                style={[styles.serviceCard, { backgroundColor: service.color }]}
+                style={[
+                  service.wide ? styles.serviceCardWide : styles.serviceCard,
+                  { backgroundColor: service.color },
+                ]}
                 onPress={() => navigation.navigate(service.screen)}
                 activeOpacity={0.8}
               >
-                <MaterialCommunityIcons name={service.icon} size={32} color={Colors.secondary} style={styles.serviceIcon} />
-                <Text style={styles.serviceTitle}>{service.title}</Text>
+                <MaterialCommunityIcons
+                  name={service.icon}
+                  size={service.wide ? 28 : 32}
+                  color={Colors.secondary}
+                  style={service.wide ? styles.serviceIconWide : styles.serviceIcon}
+                />
+                <Text style={[styles.serviceTitle, service.wide && styles.serviceTitleWide]}>
+                  {service.title}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -459,6 +470,32 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.secondary,
     textAlign: 'center',
+  },
+  // Spans both grid columns (full row width) instead of the standard 48%
+  // square tile - laid out as a row (icon beside title) rather than the
+  // centered icon-over-text column, since a full-width square would be far
+  // taller than the content needs.
+  serviceCardWide: {
+    width: '100%',
+    aspectRatio: undefined,
+    height: 72,
+    borderRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 7,
+    marginBottom: 12,
+  },
+  serviceIconWide: {
+    marginBottom: 0,
+  },
+  serviceTitleWide: {
+    fontSize: 14,
   },
   searchSection: {
     paddingHorizontal: 20,
