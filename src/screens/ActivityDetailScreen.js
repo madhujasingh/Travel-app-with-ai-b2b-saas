@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
+import { formatInrEquivalent } from '../utils/currencyConversion';
 
 // Content descriptions come back as HTML (<br />, <strong>, etc.) - RN has
 // no HTML renderer wired up here, so this strips tags down to plain text
@@ -165,9 +166,16 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                           <Text style={styles.rateCancellation}>Non-refundable</Text>
                         )}
                       </View>
-                      <Text style={styles.ratePrice}>
-                        {activity?.currency} {Number(detail.totalAmount?.amount || 0).toLocaleString()}
-                      </Text>
+                      <View>
+                        <Text style={styles.ratePrice}>
+                          {activity?.currency} {Number(detail.totalAmount?.amount || 0).toLocaleString()}
+                        </Text>
+                        {!!formatInrEquivalent(detail.totalAmount?.amount, activity?.currency) && (
+                          <Text style={styles.ratePriceInr}>
+                            {formatInrEquivalent(detail.totalAmount?.amount, activity?.currency)}
+                          </Text>
+                        )}
+                      </View>
                       <Ionicons
                         name={isSelected ? 'checkmark-circle' : 'chevron-forward'}
                         size={20}
@@ -330,6 +338,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: Colors.primary,
+  },
+  ratePriceInr: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 2,
+    textAlign: 'right',
   },
   footer: {
     padding: 16,

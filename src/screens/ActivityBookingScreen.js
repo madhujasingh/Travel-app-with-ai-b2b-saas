@@ -16,6 +16,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
+import { formatInrEquivalent } from '../utils/currencyConversion';
 
 // Free-text agency reference HotelBeds stores alongside the booking (up to
 // 20 chars per the docs) - generated rather than asked from the customer,
@@ -350,7 +351,12 @@ const ActivityBookingScreen = ({ route, navigation }) => {
             {from === to ? `Visit date: ${from}` : `${from} - ${to}`}
           </Text>
           {price != null && (
-            <Text style={styles.summaryPrice}>{currency} {Number(price).toLocaleString()}</Text>
+            <>
+              <Text style={styles.summaryPrice}>{currency} {Number(price).toLocaleString()}</Text>
+              {!!formatInrEquivalent(price, currency) && (
+                <Text style={styles.summaryPriceInr}>{formatInrEquivalent(price, currency)}</Text>
+              )}
+            </>
           )}
         </View>
 
@@ -504,6 +510,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.primary,
     marginTop: 6,
+  },
+  summaryPriceInr: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
   sectionTitle: {
     fontSize: 14,

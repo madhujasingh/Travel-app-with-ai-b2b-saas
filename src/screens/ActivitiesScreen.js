@@ -19,6 +19,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import DatePickerModal from '../components/DatePickerModal';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
+import { formatInrEquivalent } from '../utils/currencyConversion';
 
 const formatDisplayDate = (isoDate) => {
   if (!isoDate) return '';
@@ -336,9 +337,14 @@ const ActivitiesScreen = ({ navigation }) => {
                   <Text style={styles.resultName} numberOfLines={2}>{name}</Text>
                   {!!destinationName && <Text style={styles.resultDestination}>{destinationName}</Text>}
                   {price && (
-                    <Text style={styles.resultPrice}>
-                      From {price.currency || ''} {Number(price.amount).toLocaleString()}
-                    </Text>
+                    <>
+                      <Text style={styles.resultPrice}>
+                        From {price.currency || ''} {Number(price.amount).toLocaleString()}
+                      </Text>
+                      {!!formatInrEquivalent(price.amount, price.currency) && (
+                        <Text style={styles.resultPriceInr}>{formatInrEquivalent(price.amount, price.currency)}</Text>
+                      )}
+                    </>
                   )}
                 </View>
               </TouchableOpacity>
@@ -593,6 +599,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary,
     marginTop: 6,
+  },
+  resultPriceInr: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,
