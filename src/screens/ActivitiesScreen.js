@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
   SafeAreaView,
   StatusBar,
 } from 'react-native';
@@ -51,7 +53,8 @@ const getActivityPrice = (activity) => {
 };
 
 const ActivitiesScreen = ({ navigation }) => {
-  const [destination, setDestination] = useState('');
+  const [destinationCode, setDestinationCode] = useState('');
+  const [destinationLabel, setDestinationLabel] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [adults, setAdults] = useState('1');
@@ -60,16 +63,81 @@ const ActivitiesScreen = ({ navigation }) => {
   const [results, setResults] = useState(null);
   const [searched, setSearched] = useState(false);
 
+  const [countries, setCountries] = useState(null);
+  const [countryModal, setCountryModal] = useState(false);
+  const [countrySearch, setCountrySearch] = useState('');
+  const [loadingCountries, setLoadingCountries] = useState(false);
+
+  const [destinations, setDestinations] = useState(null);
+  const [destinationModal, setDestinationModal] = useState(false);
+  const [destinationSearch, setDestinationSearch] = useState('');
+  const [loadingDestinations, setLoadingDestinations] = useState(false);
+  const [activeCountry, setActiveCountry] = useState(null);
+
   const handleDateRangeSelected = (start, end) => {
     setFromDate(start);
     setToDate(end);
     setDatePickerVisible(false);
   };
 
+  const openCountryPicker = async () => {
+    setCountryModal(true);
+    if (countries) return;
+    try {
+      setLoadingCountries(true);
+      const response = await fetch(`${API_CONFIG.BASE_URL}/activities/countries/en`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(parseActivitiesError(data, 'Unable to load countries right now.'));
+      }
+      setCountries(data?.countries || []);
+    } catch (error) {
+      Alert.alert('Countries', error.message || 'Unable to load countries right now.');
+    } finally {
+      setLoadingCountries(false);
+    }
+  };
+
+  const selectCountry = async (country) => {
+    setActiveCountry(country);
+    // Two RN Modals visible at once silently fails to open the second one -
+    // close this one before opening the destination picker.
+    setCountryModal(false);
+    setCountrySearch('');
+    setDestinationModal(true);
+    setDestinations(null);
+    try {
+      setLoadingDestinations(true);
+      const response = await fetch(`${API_CONFIG.BASE_URL}/activities/destinations/en/${country.code}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(parseActivitiesError(data, 'Unable to load destinations right now.'));
+      }
+      setDestinations(data?.country?.destinations || []);
+    } catch (error) {
+      Alert.alert('Destinations', error.message || 'Unable to load destinations right now.');
+    } finally {
+      setLoadingDestinations(false);
+    }
+  };
+
+  const selectDestination = (dest) => {
+    setDestinationCode(dest.code);
+    setDestinationLabel(`${dest.name}, ${activeCountry?.name || ''}`);
+    setDestinationModal(false);
+    setDestinationSearch('');
+  };
+
+  const filteredCountries = (countries || []).filter((c) =>
+    c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())
+  );
+  const filteredDestinations = (destinations || []).filter((d) =>
+    d.name.toLowerCase().includes(destinationSearch.trim().toLowerCase())
+  );
+
   const runSearch = async () => {
-    const destinationCode = destination.trim().toUpperCase();
     if (!destinationCode) {
-      Alert.alert('Destination required', 'Enter a destination code (e.g. BCN).');
+      Alert.alert('Destination required', 'Choose a destination to search.');
       return;
     }
     if (!fromDate || !toDate) {
@@ -121,18 +189,14 @@ const ActivitiesScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.formCard}>
-        <Text style={styles.fieldLabel}>Destination code</Text>
-        <View style={styles.inputWithIcon}>
+        <Text style={styles.fieldLabel}>Destination</Text>
+        <TouchableOpacity style={styles.inputWithIcon} onPress={openCountryPicker}>
           <Ionicons name="location-outline" size={17} color={Colors.primary} />
-          <TextInput
-            style={styles.inputIconTextField}
-            placeholder="e.g. BCN, MCO"
-            placeholderTextColor={Colors.textMuted}
-            value={destination}
-            onChangeText={setDestination}
-            autoCapitalize="characters"
-          />
-        </View>
+          <Text style={[styles.inputIconText, destinationLabel ? styles.pickerText : styles.pickerPlaceholder]}>
+            {destinationLabel || 'Where do you want to go?'}
+          </Text>
+          <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
+        </TouchableOpacity>
 
         <Text style={styles.fieldLabel}>Dates</Text>
         <TouchableOpacity style={styles.inputWithIcon} onPress={() => setDatePickerVisible(true)}>
@@ -229,6 +293,78 @@ const ActivitiesScreen = ({ navigation }) => {
         onSelectRange={handleDateRangeSelected}
         onClose={() => setDatePickerVisible(false)}
       />
+
+      <Modal visible={countryModal} transparent animationType="fade" onRequestClose={() => setCountryModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setCountryModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose a country</Text>
+              <TouchableOpacity onPress={() => setCountryModal(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder="Search country..."
+              placeholderTextColor={Colors.textMuted}
+              value={countrySearch}
+              onChangeText={setCountrySearch}
+            />
+            {loadingCountries ? (
+              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+            ) : (
+              <FlatList
+                data={filteredCountries}
+                keyExtractor={(item) => item.code}
+                style={styles.modalList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectCountry(item)}>
+                    <Text style={styles.modalListRowText}>{item.name}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={destinationModal} transparent animationType="fade" onRequestClose={() => setDestinationModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setDestinationModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose a destination</Text>
+              <TouchableOpacity onPress={() => setDestinationModal(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder="Search destination..."
+              placeholderTextColor={Colors.textMuted}
+              value={destinationSearch}
+              onChangeText={setDestinationSearch}
+            />
+            {loadingDestinations ? (
+              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+            ) : filteredDestinations.length === 0 ? (
+              <Text style={styles.modalEmptyText}>No destinations found for {activeCountry?.name}.</Text>
+            ) : (
+              <FlatList
+                data={filteredDestinations}
+                keyExtractor={(item) => item.code}
+                style={styles.modalList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectDestination(item)}>
+                    <Text style={styles.modalListRowText}>{item.name}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -358,6 +494,62 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.primary,
     marginTop: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    padding: 18,
+    maxHeight: '75%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  modalSearchInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  modalLoading: {
+    marginVertical: 30,
+  },
+  modalEmptyText: {
+    textAlign: 'center',
+    color: Colors.textMuted,
+    marginVertical: 30,
+  },
+  modalList: {
+    maxHeight: 380,
+  },
+  modalListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalListRowText: {
+    fontSize: 14,
+    color: Colors.text,
   },
 });
 

@@ -47,6 +47,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/activities/search").permitAll()
                 .requestMatchers(HttpMethod.POST, "/activities/details").permitAll()
                 .requestMatchers(HttpMethod.POST, "/activities/details/full").permitAll()
+                .requestMatchers(HttpMethod.GET, "/activities/countries/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/activities/destinations/**").permitAll()
                 .requestMatchers("/activities/**").authenticated()
                 // Only the discovery/pricing phase of the TripJack flight
                 // passthrough is public (browsing without an account) - Book,

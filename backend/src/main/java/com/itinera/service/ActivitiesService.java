@@ -75,4 +75,16 @@ public class ActivitiesService {
                 "/activity-api/3.0/bookings/" + language + "/" + reference + "?cancellationFlag=" + cancellationFlag
         );
     }
+
+    // Content API (activity-content-api/3.0) - separate base path from the
+    // booking product above, but same host/credentials. Static reference
+    // data (countries/destinations) that powers the search form's picker,
+    // so customers pick a real destination instead of typing a raw code.
+    public JsonNode countries(String language) {
+        return activitiesClient.get("/activity-content-api/3.0/countries/" + language);
+    }
+
+    public JsonNode destinations(String language, String countryCode) {
+        return activitiesClient.get("/activity-content-api/3.0/destinations/" + language + "/" + countryCode);
+    }
 }

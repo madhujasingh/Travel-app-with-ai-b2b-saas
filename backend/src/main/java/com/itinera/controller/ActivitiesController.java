@@ -58,4 +58,16 @@ public class ActivitiesController {
     ) {
         return ResponseEntity.ok(activitiesService.cancelBooking(language, reference, cancellationFlag));
     }
+
+    // Public (see SecurityConfig) - static reference data, powers the search
+    // form's country/destination picker.
+    @GetMapping("/countries/{language}")
+    public ResponseEntity<JsonNode> countries(@PathVariable String language) {
+        return ResponseEntity.ok(activitiesService.countries(language));
+    }
+
+    @GetMapping("/destinations/{language}/{country}")
+    public ResponseEntity<JsonNode> destinations(@PathVariable String language, @PathVariable String country) {
+        return ResponseEntity.ok(activitiesService.destinations(language, country));
+    }
 }
