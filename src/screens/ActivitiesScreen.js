@@ -74,6 +74,15 @@ const ActivitiesScreen = ({ navigation }) => {
   const [loadingDestinations, setLoadingDestinations] = useState(false);
   const [activeCountry, setActiveCountry] = useState(null);
 
+  // Flattened from segmentationGroups[].segments[] - {code, name, groupName}.
+  // Only one segment can be applied per search (per the Availability docs),
+  // and it must be combined with destination/hotel/GPS, never used alone.
+  const [segments, setSegments] = useState(null);
+  const [segmentModal, setSegmentModal] = useState(false);
+  const [segmentSearch, setSegmentSearch] = useState('');
+  const [loadingSegments, setLoadingSegments] = useState(false);
+  const [selectedSegment, setSelectedSegment] = useState(null);
+
   const handleDateRangeSelected = (start, end) => {
     setFromDate(start);
     setToDate(end);
@@ -128,11 +137,41 @@ const ActivitiesScreen = ({ navigation }) => {
     setDestinationSearch('');
   };
 
+  const openSegmentPicker = async () => {
+    setSegmentModal(true);
+    if (segments) return;
+    try {
+      setLoadingSegments(true);
+      const response = await fetch(`${API_CONFIG.BASE_URL}/activities/segments/en`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(parseActivitiesError(data, 'Unable to load categories right now.'));
+      }
+      const flattened = (data?.segmentationGroups || []).flatMap((group) =>
+        (group.segments || []).map((segment) => ({ ...segment, groupName: group.name }))
+      );
+      setSegments(flattened);
+    } catch (error) {
+      Alert.alert('Categories', error.message || 'Unable to load categories right now.');
+    } finally {
+      setLoadingSegments(false);
+    }
+  };
+
+  const selectSegment = (segment) => {
+    setSelectedSegment(segment);
+    setSegmentModal(false);
+    setSegmentSearch('');
+  };
+
   const filteredCountries = (countries || []).filter((c) =>
     c.name.toLowerCase().includes(countrySearch.trim().toLowerCase())
   );
   const filteredDestinations = (destinations || []).filter((d) =>
     d.name.toLowerCase().includes(destinationSearch.trim().toLowerCase())
+  );
+  const filteredSegments = (segments || []).filter((s) =>
+    s.name.toLowerCase().includes(segmentSearch.trim().toLowerCase())
   );
 
   const runSearch = async () => {
@@ -146,8 +185,15 @@ const ActivitiesScreen = ({ navigation }) => {
     }
     const adultsCount = Math.max(1, parseInt(adults, 10) || 1);
 
+    // Segment can't be used alone - always paired with destination in the
+    // same searchFilterItems array, per the Availability docs.
+    const searchFilterItems = [{ type: 'destination', value: destinationCode }];
+    if (selectedSegment) {
+      searchFilterItems.push({ type: 'segment', value: String(selectedSegment.code) });
+    }
+
     const payload = {
-      filters: [{ searchFilterItems: [{ type: 'destination', value: destinationCode }] }],
+      filters: [{ searchFilterItems }],
       from: fromDate,
       to: toDate,
       paxes: Array.from({ length: adultsCount }, () => ({ age: 30 })),
@@ -219,6 +265,21 @@ const ActivitiesScreen = ({ navigation }) => {
             keyboardType="number-pad"
           />
         </View>
+
+        <Text style={styles.fieldLabel}>Category (optional)</Text>
+        <TouchableOpacity style={styles.inputWithIcon} onPress={openSegmentPicker}>
+          <Ionicons name="pricetags-outline" size={17} color={Colors.primary} />
+          <Text style={[styles.inputIconText, selectedSegment ? styles.pickerText : styles.pickerPlaceholder]}>
+            {selectedSegment ? selectedSegment.name : 'Any category'}
+          </Text>
+          {selectedSegment ? (
+            <TouchableOpacity onPress={() => setSelectedSegment(null)}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          ) : (
+            <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
+          )}
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.searchButton} onPress={runSearch} disabled={searching}>
           {searching ? (
@@ -357,6 +418,44 @@ const ActivitiesScreen = ({ navigation }) => {
                 renderItem={({ item }) => (
                   <TouchableOpacity style={styles.modalListRow} onPress={() => selectDestination(item)}>
                     <Text style={styles.modalListRowText}>{item.name}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={segmentModal} transparent animationType="fade" onRequestClose={() => setSegmentModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setSegmentModal(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Choose a category</Text>
+              <TouchableOpacity onPress={() => setSegmentModal(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalSearchInput}
+              placeholder="Search category..."
+              placeholderTextColor={Colors.textMuted}
+              value={segmentSearch}
+              onChangeText={setSegmentSearch}
+            />
+            {loadingSegments ? (
+              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
+            ) : (
+              <FlatList
+                data={filteredSegments}
+                keyExtractor={(item) => `${item.groupName}-${item.code}`}
+                style={styles.modalList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectSegment(item)}>
+                    <View>
+                      <Text style={styles.modalListRowText}>{item.name}</Text>
+                      <Text style={styles.resultDestination}>{item.groupName}</Text>
+                    </View>
                     <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
                   </TouchableOpacity>
                 )}

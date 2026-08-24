@@ -87,4 +87,12 @@ public class ActivitiesService {
     public JsonNode destinations(String language, String countryCode) {
         return activitiesClient.get("/activity-content-api/3.0/destinations/" + language + "/" + countryCode);
     }
+
+    // Category taxonomy (City Tours, Water Sports, ...) - powers the search
+    // form's optional category filter. Per the Availability docs, only ONE
+    // segment code is allowed per search, and it must be combined with a
+    // destination/hotel/GPS filter, never used alone.
+    public JsonNode segments(String language) {
+        return activitiesClient.get("/activity-content-api/3.0/segments/" + language);
+    }
 }

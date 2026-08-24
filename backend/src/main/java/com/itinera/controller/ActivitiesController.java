@@ -70,4 +70,9 @@ public class ActivitiesController {
     public ResponseEntity<JsonNode> destinations(@PathVariable String language, @PathVariable String country) {
         return ResponseEntity.ok(activitiesService.destinations(language, country));
     }
+
+    @GetMapping("/segments/{language}")
+    public ResponseEntity<JsonNode> segments(@PathVariable String language) {
+        return ResponseEntity.ok(activitiesService.segments(language));
+    }
 }
