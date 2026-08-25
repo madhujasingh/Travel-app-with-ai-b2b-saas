@@ -2,6 +2,9 @@ package com.itinera.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.itinera.service.FlightService;
+import com.itinera.service.FlightTicketPdfService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class FlightController {
 
     private final FlightService flightService;
+    private final FlightTicketPdfService flightTicketPdfService;
 
-    public FlightController(FlightService flightService) {
+    public FlightController(FlightService flightService, FlightTicketPdfService flightTicketPdfService) {
         this.flightService = flightService;
+        this.flightTicketPdfService = flightTicketPdfService;
     }
 
     @PostMapping("/search")
@@ -122,5 +127,18 @@ public class FlightController {
     @GetMapping("/user-balance")
     public ResponseEntity<JsonNode> userBalance() {
         return ResponseEntity.ok(flightService.userBalance());
+    }
+
+    // Ministry of Civil Aviation mandates a 2D barcode on every flight
+    // itinerary - see BoardingPassBarcodeBuilder/FlightTicketPdfService.
+    // Request body is already-parsed passenger/leg/PNR data (the frontend
+    // has this from booking-details), not a raw TripJack payload.
+    @PostMapping(value = "/ticket-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> ticketPdf(@RequestBody JsonNode payload) {
+        byte[] pdf = flightTicketPdfService.generate(payload);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"itinerary.pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 }

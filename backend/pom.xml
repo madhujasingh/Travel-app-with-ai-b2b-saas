@@ -80,6 +80,27 @@
             <artifactId>google-http-client-jackson2</artifactId>
             <version>1.46.3</version>
         </dependency>
+        <!-- Flight ticket PDF generation (MoCA-mandated 2D barcode itinerary) -
+             OpenPDF (LGPL/MPL) rather than iText 7 (AGPL), since this is a
+             commercial app. -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>1.3.42</version>
+        </dependency>
+        <!-- PDF417 barcode encoding (the "2D Barcode" TripJack's spec refers
+             to - same symbology real airline boarding passes use for the
+             IATA BCBP M1 string). -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>3.5.3</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

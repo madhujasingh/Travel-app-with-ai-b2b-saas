@@ -14,6 +14,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import DatePickerModal from '../components/DatePickerModal';
@@ -1091,6 +1093,111 @@ const FlightBookingScreen = ({ route, navigation }) => {
     }
   };
 
+  // One "leg" here = one TripJack trip (tripInfos[] entry), matching the
+  // barcode spec's own worked example ("a return trip for 2 pax = 4
+  // barcodes"). For a connecting trip we use its first segment's
+  // carrier/flight number - TripJack's pnrDetails is itself keyed per trip
+  // (e.g. "BOM-MLE"), not per individual connecting segment, so a real
+  // boarding-pass-per-segment barcode isn't derivable from this response
+  // anyway.
+  const bookingLegsFromDetails = () => {
+    const tripInfos = bookingDetails?.itemInfos?.AIR?.tripInfos || [];
+    return tripInfos
+      .map((trip) => (Array.isArray(trip?.sI) ? trip.sI : []))
+      .filter((segments) => segments.length)
+      .map((segments) => {
+        const first = segments[0];
+        const last = segments[segments.length - 1];
+        return {
+          routeKey: `${first?.da?.code || ''}-${last?.aa?.code || ''}`,
+          from: first?.da?.code || first?.da?.city || '',
+          to: last?.aa?.code || last?.aa?.city || '',
+          carrierCode: first?.fD?.aI?.code || '',
+          flightNumber: first?.fD?.fN || '',
+          airlineName: first?.fD?.aI?.name || '',
+          departureTime: first?.dt || null,
+          arrivalTime: last?.at || null,
+        };
+      });
+  };
+
+  // Builds the request body for POST /flights/ticket-pdf, reading passengers
+  // straight from bookingDetails.itemInfos.AIR.travellerInfos (same source
+  // the "Add Baggage / Meal / Seat" flow above already uses) rather than the
+  // local `travellers` form state - that state is only populated on a fresh
+  // booking flow and is empty when this screen is opened in "resume" mode
+  // from My Trips (bookingId-only route params). Excludes infants (Ministry
+  // of Civil Aviation spec: no barcode for infants). PNR is looked up by
+  // routeKey first (matches pnrDetails' own "FROM-TO" key format exactly),
+  // falling back to positional/first-value matching for anything that
+  // doesn't line up.
+  const buildTicketPdfRequest = () => {
+    const legs = bookingLegsFromDetails();
+    const travellerInfos = bookingDetails?.itemInfos?.AIR?.travellerInfos || [];
+
+    const passengers = travellerInfos
+      .filter((info) => info?.pt !== 'INFANT')
+      .map((info) => {
+        const pnrDetails = info?.pnrDetails || travellerInfos?.[0]?.pnrDetails || {};
+        const pnrValues = Object.values(pnrDetails);
+
+        const legsWithPnr = legs.map((leg, legIndex) => ({
+          pnr: pnrDetails[leg.routeKey] || pnrValues[legIndex] || pnrValues[0] || '',
+          from: leg.from,
+          to: leg.to,
+          carrierCode: leg.carrierCode,
+          flightNumber: leg.flightNumber,
+          airlineName: leg.airlineName,
+          date: leg.departureTime,
+          departureTime: leg.departureTime,
+          arrivalTime: leg.arrivalTime,
+        }));
+
+        return { title: info?.ti || '', firstName: info?.fN || '', lastName: info?.lN || '', legs: legsWithPnr };
+      });
+
+    return {
+      bookingReference: bookingId,
+      agencyName: 'Itinera Travels',
+      passengers,
+    };
+  };
+
+  const handleDownloadTicket = async () => {
+    if (!bookingDetails?.itemInfos?.AIR?.travellerInfos?.length) {
+      Alert.alert('Ticket Not Ready', 'Tap Refresh Status once, then try downloading again.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/flights/ticket-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(buildTicketPdfRequest()),
+      });
+      if (!response.ok) {
+        throw new Error('Could not generate your ticket PDF. Please try again.');
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const file = new FileSystem.File(FileSystem.Paths.cache, `itinerary-${bookingId}.pdf`);
+      file.create({ overwrite: true });
+      file.write(new Uint8Array(arrayBuffer));
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Flight Ticket' });
+      } else {
+        Alert.alert('Ticket Saved', `Saved to ${file.uri}`);
+      }
+    } catch (error) {
+      Alert.alert('Download Failed', error.message || 'Could not download your ticket.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const pnrEntries = Object.entries(bookingDetails?.itemInfos?.AIR?.travellerInfos?.[0]?.pnrDetails || {});
   const ticketEntries = Object.entries(bookingDetails?.itemInfos?.AIR?.travellerInfos?.[0]?.ticketNumberDetails || {});
   const isCancelled = cancelled || bookingDetails?.order?.status === 'CANCELLED';
@@ -1716,6 +1823,13 @@ const FlightBookingScreen = ({ route, navigation }) => {
               <Ionicons name="refresh" size={15} color={Colors.primaryDark} />
               <Text style={styles.secondaryButtonText}>Refresh Status</Text>
             </TouchableOpacity>
+
+            {phase === 'confirmed' && !isCancelled ? (
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleDownloadTicket} disabled={busy}>
+                <Ionicons name="download-outline" size={15} color={Colors.primaryDark} />
+                <Text style={styles.secondaryButtonText}>Download Ticket</Text>
+              </TouchableOpacity>
+            ) : null}
 
             {phase === 'confirmed' && !isCancelled ? (
               <TouchableOpacity style={styles.secondaryButton} onPress={openAncillaryModal} disabled={busy}>

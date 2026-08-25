@@ -448,6 +448,7 @@ const mapFlightsFromResponse = (data) => {
       departure: formatTime(firstSegment?.dt),
       departureRaw: firstSegment?.dt || null,
       arrival: formatTime(lastSegment?.at),
+      arrivalRaw: lastSegment?.at || null,
       duration: formatDuration(totalDuration || firstSegment?.duration),
       durationMinutes: Number(totalDuration || firstSegment?.duration || 0),
       stops: totalStops === 0 ? 'Non-stop' : `${totalStops} stop`,
