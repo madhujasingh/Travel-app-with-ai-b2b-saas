@@ -175,6 +175,12 @@ const ItineraryListScreen = ({ route, navigation }) => {
     >
       <View style={styles.cardHeader}>
         <Ionicons name={item.image} size={60} color={Colors.secondary} style={styles.cardImage} />
+        {item.aiGenerated ? (
+          <View style={styles.aiBadge}>
+            <Ionicons name="sparkles" size={11} color={Colors.secondary} />
+            <Text style={styles.aiBadgeText}>AI Suggested</Text>
+          </View>
+        ) : null}
         <View style={styles.cardBadge}>
           <Text style={styles.badgeText}>{item.type.toUpperCase()}</Text>
         </View>
@@ -401,6 +407,23 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   cardImage: {},
+  aiBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    color: Colors.secondary,
+    fontWeight: 'bold',
+  },
   cardBadge: {
     position: 'absolute',
     top: 10,

@@ -15,6 +15,11 @@ public interface ItineraryRepository extends JpaRepository<Itinerary, Long> {
     List<Itinerary> findByIsActiveTrue();
     List<Itinerary> findByDestinationContainingIgnoreCaseAndCategoryAndIsActiveTrue(String destination, Itinerary.Category category);
 
+    // ai_generated is NULL on rows created before that column existed (old
+    // hand-seeded demo packages) - match both so the one-time cleanup in
+    // RemoveSeededItinerariesRunner catches all of them, not just aiGenerated=false.
+    List<Itinerary> findByAiGeneratedFalseOrAiGeneratedIsNull();
+
     // Powers the destination picker for group trip creation (and any other
     // "pick from known destinations" UI) - only destinations with a real,
     // publicly-visible package are offered, mirroring how

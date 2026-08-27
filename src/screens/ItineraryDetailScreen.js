@@ -178,6 +178,18 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
 
+        {itinerary.aiGenerated ? (
+          <View style={styles.aiDisclaimerSection}>
+            <View style={styles.aiDisclaimerCard}>
+              <Ionicons name="sparkles" size={18} color={Colors.primaryDark} />
+              <Text style={styles.aiDisclaimerText}>
+                This is an AI-generated starting point to give you an idea of the trip and pricing. Once you
+                book, one of our travel agents will personally put together your actual itinerary.
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.groupPlanSection}>
           <View style={styles.groupPlanCard}>
             <View style={styles.groupPlanCopy}>
@@ -505,6 +517,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  aiDisclaimerSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+  },
+  aiDisclaimerCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#F0D4C1',
+  },
+  aiDisclaimerText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textLight,
+    lineHeight: 19,
   },
   groupPlanSection: {
     paddingHorizontal: 20,

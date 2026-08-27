@@ -2,6 +2,7 @@ package com.itinera.controller;
 
 import com.itinera.model.Itinerary;
 import com.itinera.repository.ItineraryRepository;
+import com.itinera.service.AiItineraryService;
 import com.itinera.service.ItineraryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,9 @@ public class ItineraryController {
 
     @Autowired
     private ItineraryService itineraryService;
+
+    @Autowired
+    private AiItineraryService aiItineraryService;
 
     @GetMapping
     public ResponseEntity<List<Itinerary>> getAllItineraries() {
@@ -40,12 +44,20 @@ public class ItineraryController {
     public ResponseEntity<List<Itinerary>> searchItineraries(
             @RequestParam String destination,
             @RequestParam(required = false) String category) {
-        if (category != null) {
-            return ResponseEntity.ok(
-                itineraryService.searchByDestinationAndCategory(destination, category)
-            );
+        List<Itinerary> results = category != null
+                ? itineraryService.searchByDestinationAndCategory(destination, category)
+                : itineraryService.searchByDestination(destination);
+
+        // No curated packages exist for this destination yet - hand-authoring
+        // one for every possible destination isn't realistic, so generate AI
+        // options on the fly instead. Persisted (see AiItineraryService) so
+        // the next search for the same destination is a normal DB read, not
+        // another Gemini call.
+        if (results.isEmpty()) {
+            results = aiItineraryService.generateForDestination(destination);
         }
-        return ResponseEntity.ok(itineraryService.searchByDestination(destination));
+
+        return ResponseEntity.ok(results);
     }
 
     @GetMapping("/category/{category}")
