@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Image,
+  ImageBackground,
   Modal,
   Pressable,
   SafeAreaView,
@@ -21,6 +22,7 @@ import API_CONFIG from '../config/api';
 import { useCart } from '../context/CartContext';
 import { AIRPORT_OPTIONS } from '../data/airports';
 import { AIRLINE_LOGOS } from '../data/airlineLogos';
+import { parseTripJackError } from '../utils/tripjackErrors';
 
 const TRIP_TYPES = [
   { label: 'One Way', value: 'ONE_WAY' },
@@ -156,6 +158,16 @@ const getAirportSuggestions = (query) => {
   ).slice(0, 6);
 };
 
+// TripJack's segment city names come back inconsistently cased (e.g. "Navi
+// mumbai", "Delhi") - title-case each word so they read as proper names.
+const titleCaseCityName = (value) => {
+  if (!value) return null;
+  return value
+    .split(' ')
+    .map((word) => (word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word))
+    .join(' ');
+};
+
 const formatTime = (isoDateTime) => {
   if (!isoDateTime) return '--';
 
@@ -177,6 +189,43 @@ const formatDuration = (minutes) => {
   const mins = minutes % 60;
   return `${hours}h ${mins}m`;
 };
+
+const minutesBetweenIso = (isoStart, isoEnd) => {
+  const start = new Date(isoStart);
+  const end = new Date(isoEnd);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return Math.round((end.getTime() - start.getTime()) / 60000);
+};
+
+// Per-segment breakdown for the "View flight details" expand panel - the
+// layover between two segments isn't a field TripJack provides directly,
+// it's just the gap between one segment's arrival and the next one's
+// departure, which we already have from the same search response.
+const buildSegmentBreakdown = (segments) =>
+  segments.map((segment, index) => {
+    const nextSegment = segments[index + 1];
+    const gapMinutes = nextSegment ? minutesBetweenIso(segment?.at, nextSegment?.dt) : null;
+
+    return {
+      id: segment?.id || `segment-${index}`,
+      airline: segment?.fD?.aI?.name || 'Airline',
+      flightNo: `${segment?.fD?.aI?.code || ''}-${segment?.fD?.fN || ''}`.replace(/^-|-$/g, ''),
+      fromCode: segment?.da?.code || '--',
+      fromCity: titleCaseCityName(segment?.da?.city),
+      toCode: segment?.aa?.code || '--',
+      toCity: titleCaseCityName(segment?.aa?.city),
+      departure: formatTime(segment?.dt),
+      arrival: formatTime(segment?.at),
+      durationLabel: formatDuration(Number(segment?.duration || 0)),
+      layover: nextSegment
+        ? {
+            label: gapMinutes != null ? formatDuration(gapMinutes) : null,
+            airportCode: segment?.aa?.code || null,
+            cityName: titleCaseCityName(segment?.aa?.city),
+          }
+        : null,
+    };
+  });
 
 const getBaggageLabel = (fareDetails) => {
   const carry = fareDetails?.bI?.cB;
@@ -398,7 +447,16 @@ const mapFlightsFromResponse = (data) => {
     );
     const airlineCode = distinctCarrierCodes.size > 1 ? 'MULTI' : firstSegment?.fD?.aI?.code || null;
     const totalDuration = primaryLegSegments.reduce((sum, segment) => sum + Number(segment?.duration || 0), 0);
-    const totalStops = primaryLegSegments.reduce((sum, segment) => sum + Number(segment?.stops || 0), 0);
+    // segment.stops is each individual flight's own technical stopover count
+    // (rare, usually 0) - it does NOT count the connections between segments
+    // themselves. A leg with 2 segments and a layover (e.g. NMI -> PAT via a
+    // plane change) has both segments individually non-stop, so summing just
+    // segment.stops always read 0 and mislabeled every connecting itinerary
+    // as "Non-stop". The real stop count is (segments - 1) connections, plus
+    // whatever technical stops each individual segment additionally has.
+    const totalStops =
+      (primaryLegSegments.length - 1) +
+      primaryLegSegments.reduce((sum, segment) => sum + Number(segment?.stops || 0), 0);
     const additionalLegSummaries = additionalLegs.map((legSegments) => {
       const legFirst = legSegments[0];
       const legLast = legSegments[legSegments.length - 1];
@@ -429,6 +487,13 @@ const mapFlightsFromResponse = (data) => {
         // The Review API expects exactly one price id per leg.
         priceIds: priceOption?.id ? [priceOption.id] : [],
         passengerPricing: getPassengerPricing(priceOption?.fd),
+        // Special Return fares (fareIdentifier === 'SPECIAL_RETURN') are
+        // priced as a matched onward+return pair per TripJack's FAQ: this
+        // fare's own "sri" tag must appear in the OTHER leg's selected
+        // fare's "msri" list (and vice versa) - see validateFarePairing.
+        // Ordinary fares have no sri and an empty msri, i.e. no constraint.
+        sri: priceOption?.sri || null,
+        msri: Array.isArray(priceOption?.msri) ? priceOption.msri : [],
       };
     });
     const cheapestFareIndex = fareOptions.reduce(
@@ -444,7 +509,13 @@ const mapFlightsFromResponse = (data) => {
       airlineCode,
       flightNo: `${firstSegment?.fD?.aI?.code || ''}-${firstSegment?.fD?.fN || ''}`.replace(/^-|-$/g, ''),
       from: firstSegment?.da?.code || firstSegment?.da?.city || '--',
+      // A city search (e.g. "Mumbai") can return itineraries departing from
+      // a DIFFERENT airport serving that same metro area (e.g. NMI - Navi
+      // Mumbai Intl - instead of BOM) - showing the bare code with no city
+      // name made a perfectly correct connecting itinerary look broken.
+      fromCityName: titleCaseCityName(firstSegment?.da?.city),
       to: lastSegment?.aa?.code || lastSegment?.aa?.city || '--',
+      toCityName: titleCaseCityName(lastSegment?.aa?.city),
       departure: formatTime(firstSegment?.dt),
       departureRaw: firstSegment?.dt || null,
       arrival: formatTime(lastSegment?.at),
@@ -456,6 +527,7 @@ const mapFlightsFromResponse = (data) => {
       image: 'airplane',
       journeyLabel,
       segmentCount: segments.length,
+      segments: buildSegmentBreakdown(primaryLegSegments),
       fareOptions,
       defaultFareIndex: cheapestFareIndex,
       // Mirror the default (cheapest) fare at the top level so sorting,
@@ -487,6 +559,7 @@ const FlightsScreen = ({ navigation }) => {
   const [connectionFilter, setConnectionFilter] = useState('BOTH');
   const [sortBy, setSortBy] = useState('BEST');
   const [stopsFilter, setStopsFilter] = useState('ALL');
+  const [returnLayoutMode, setReturnLayoutMode] = useState('split');
   const [fareType, setFareType] = useState('REGULAR');
   const [preferredAirlines, setPreferredAirlines] = useState('');
   const [loading, setLoading] = useState(false);
@@ -498,6 +571,7 @@ const FlightsScreen = ({ navigation }) => {
   // Which fare (Classic/Flex/...) is toggled on for each flight card, keyed
   // by flight.id. Falls back to that card's cheapest fare when untouched.
   const [selectedFareIndexById, setSelectedFareIndexById] = useState({});
+  const [expandedDetailIds, setExpandedDetailIds] = useState({});
   const [activeGroupKey, setActiveGroupKey] = useState(null);
   const [showFilters, setShowFilters] = useState(true);
   const [travellerModalVisible, setTravellerModalVisible] = useState(false);
@@ -803,7 +877,7 @@ const FlightsScreen = ({ navigation }) => {
       const data = await response.json();
       console.log('[review] RESPONSE', JSON.stringify(data));
       if (!response.ok) {
-        throw new Error(data?.message || 'Unable to review this fare right now.');
+        throw parseTripJackError(data, 'Unable to review this fare right now.');
       }
 
       const passengerCounts = {
@@ -883,12 +957,18 @@ const FlightsScreen = ({ navigation }) => {
       fareTags: fare.fareTags,
       priceIds: fare.priceIds,
       passengerPricing: fare.passengerPricing,
+      sri: fare.sri,
+      msri: fare.msri,
       // Kept separate from `id` (which stays the flight card's id, used for
       // leg-selection matching in isSelected/selectedByGroup) so cart items
       // built from different fares of the same flight get distinct ids
       // instead of one overwriting the other - see buildFlightCartItem.
       fareId: fare.id,
     };
+  };
+
+  const toggleFlightDetails = (flightId) => {
+    setExpandedDetailIds((prev) => ({ ...prev, [flightId]: !prev[flightId] }));
   };
 
   const chooseFareForFlight = (flight, fareIndex) => {
@@ -916,10 +996,45 @@ const FlightsScreen = ({ navigation }) => {
     setReviewedFare(null);
   };
 
+  // Per TripJack's FAQ ("How to support Special Return Fare in case of
+  // Domestic Return?"): a SPECIAL_RETURN fare's own "sri" tag must appear in
+  // the OTHER leg's selected fare's "msri" list, and vice versa - it's
+  // priced as a matched pair, not an independent per-leg choice. Catches
+  // the mismatch before hitting TripJack's review endpoint (error 1080)
+  // instead of after.
+  const validateSpecialReturnPairing = (onwardFare, returnFare) => {
+    if (!onwardFare || !returnFare) return null;
+
+    const onwardIsSpecial = onwardFare.fareType === 'SPECIAL_RETURN' && onwardFare.sri;
+    const returnIsSpecial = returnFare.fareType === 'SPECIAL_RETURN' && returnFare.sri;
+
+    if (!onwardIsSpecial && !returnIsSpecial) {
+      return null;
+    }
+
+    const onwardMatchesReturn = onwardIsSpecial && (returnFare.sri ? (onwardFare.msri || []).includes(returnFare.sri) : false);
+    const returnMatchesOnward = returnIsSpecial && (onwardFare.sri ? (returnFare.msri || []).includes(onwardFare.sri) : false);
+
+    if (onwardIsSpecial && returnIsSpecial && onwardMatchesReturn && returnMatchesOnward) {
+      return null;
+    }
+
+    return 'Your onward and return fares don\'t match up. A "Special Return" fare on one leg can only be booked with its paired "Special Return" fare on the other leg - pick matching fares for both, or switch both legs to a regular fare instead.';
+  };
+
   const reviewSelectedFares = () => {
     if (!allLegsSelected) {
       return;
     }
+
+    if (groupKeys.length === 2) {
+      const pairingIssue = validateSpecialReturnPairing(selectedByGroup[groupKeys[0]], selectedByGroup[groupKeys[1]]);
+      if (pairingIssue) {
+        Alert.alert('Fares Don\'t Match', pairingIssue);
+        return;
+      }
+    }
+
     runReview(groupKeys.map((key) => selectedByGroup[key]));
   };
 
@@ -950,7 +1065,12 @@ const FlightsScreen = ({ navigation }) => {
 
     const { flights, reviewResponse, passengerCounts } = reviewedFare;
     setReviewedFare(null);
-    navigation.navigate('FlightBooking', { flights, reviewResponse, passengerCounts });
+    // push, not navigate - if a FlightBooking screen from an earlier hold is
+    // already in the stack, navigate() would jump back to that existing
+    // instance instead of opening a new one, silently popping this Flights
+    // screen out of the stack in between. That left the back button on the
+    // booking screen going all the way to Home instead of back to search.
+    navigation.push('FlightBooking', { flights, reviewResponse, passengerCounts });
   };
 
   const renderFlight = ({ item }) => {
@@ -988,6 +1108,9 @@ const FlightsScreen = ({ navigation }) => {
           <View style={styles.timeContainer}>
             <Text style={styles.time}>{item.departure}</Text>
             <Text style={styles.city}>{item.from}</Text>
+            {item.fromCityName ? (
+              <Text style={styles.cityName} numberOfLines={1}>{item.fromCityName}</Text>
+            ) : null}
           </View>
 
           <View style={styles.durationContainer}>
@@ -1005,8 +1128,72 @@ const FlightsScreen = ({ navigation }) => {
           <View style={styles.timeContainer}>
             <Text style={styles.time}>{item.arrival}</Text>
             <Text style={styles.city}>{item.to}</Text>
+            {item.toCityName ? (
+              <Text style={styles.cityName} numberOfLines={1}>{item.toCityName}</Text>
+            ) : null}
           </View>
         </View>
+
+        {item.segmentCount > 1 ? (
+          <TouchableOpacity
+            style={styles.detailsToggle}
+            activeOpacity={0.7}
+            onPress={() => toggleFlightDetails(item.id)}
+          >
+            <Text style={styles.detailsToggleText}>
+              {expandedDetailIds[item.id] ? 'Hide flight details' : 'View flight details'}
+            </Text>
+            <Ionicons
+              name={expandedDetailIds[item.id] ? 'chevron-up' : 'chevron-down'}
+              size={14}
+              color={Colors.primaryDark}
+            />
+          </TouchableOpacity>
+        ) : null}
+
+        {item.segmentCount > 1 && expandedDetailIds[item.id] ? (
+          <View style={styles.segmentBreakdown}>
+            {item.segments.map((segment) => (
+              <React.Fragment key={segment.id}>
+                <View style={styles.segmentRow}>
+                  <View style={styles.segmentTimeCol}>
+                    <Text style={styles.segmentTime}>{segment.departure}</Text>
+                    <Text style={styles.segmentCode}>{segment.fromCode}</Text>
+                    {segment.fromCity ? (
+                      <Text style={styles.segmentCityName} numberOfLines={1}>{segment.fromCity}</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.segmentMidCol}>
+                    <Ionicons name="airplane" size={13} color={Colors.primary} />
+                    <Text style={styles.segmentFlightNo} numberOfLines={1}>
+                      {segment.airline} · {segment.flightNo}
+                    </Text>
+                    <Text style={styles.segmentDuration}>{segment.durationLabel}</Text>
+                  </View>
+                  <View style={styles.segmentTimeCol}>
+                    <Text style={styles.segmentTime}>{segment.arrival}</Text>
+                    <Text style={styles.segmentCode}>{segment.toCode}</Text>
+                    {segment.toCity ? (
+                      <Text style={styles.segmentCityName} numberOfLines={1}>{segment.toCity}</Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                {segment.layover ? (
+                  <View style={styles.layoverRow}>
+                    <Ionicons name="time-outline" size={13} color="#8A6100" />
+                    <Text style={styles.layoverText}>
+                      {segment.layover.label ? `${segment.layover.label} layover` : 'Layover'}
+                      {segment.layover.cityName
+                        ? ` at ${segment.layover.cityName} (${segment.layover.airportCode})`
+                        : ''}
+                    </Text>
+                  </View>
+                ) : null}
+              </React.Fragment>
+            ))}
+          </View>
+        ) : null}
 
         {hasFareChoice && (
           <View style={styles.fareOptionsRow}>
@@ -1158,8 +1345,23 @@ const FlightsScreen = ({ navigation }) => {
     }));
   };
 
+  // Picking a standalone Return date (not the combined departure+return range
+  // session) must not allow a date before the already-chosen departure - the
+  // day grid only ever disabled dates before today, so a return date earlier
+  // than departure was selectable in the UI and only rejected later by the
+  // search request.
+  const getCalendarMinDate = () => {
+    if (calendarState.target === 'return' && !calendarState.rangeMode) {
+      const departureDate = parseDisplayDate(routes[0]?.travelDate);
+      if (departureDate && departureDate > today) {
+        return departureDate;
+      }
+    }
+    return today;
+  };
+
   const handleCalendarDateSelect = (date) => {
-    if (date < today) {
+    if (date < getCalendarMinDate()) {
       return;
     }
 
@@ -1209,24 +1411,635 @@ const FlightsScreen = ({ navigation }) => {
     return { routeLabel, dateLabel, paxCount };
   }, [routes, tripType, returnDate, adults, children, infants]);
 
+  const calendarMinDate = getCalendarMinDate();
   const canGoToPreviousMonth =
-    startOfMonth(calendarState.month) > startOfMonth(today);
+    startOfMonth(calendarState.month) > startOfMonth(calendarMinDate);
   const calendarDays = buildCalendarDays(calendarState.month);
+
+  // Round trips get a side-by-side Onward/Return comparison instead of the
+  // tap-a-chip-to-switch single list every other trip type uses - with only
+  // 2 legs ever, both columns comfortably fit on screen at once and can be
+  // scrolled independently to compare combinations directly.
+  // The header's back button used to always call navigation.goBack(), which
+  // exited the Flights screen entirely straight from the results view -
+  // skipping past the search form. When results are showing (collapsed
+  // form), first reveal the form again instead, matching what "Edit" does;
+  // only actually leave the screen once the form itself is what's visible.
+  const handleHeaderBack = () => {
+    if (searched && !showFilters) {
+      setShowFilters(true);
+      return;
+    }
+    navigation.goBack();
+  };
+  // Only split into dual columns once the form is actually collapsed - the
+  // header (summary bar + sort/stop pills) is then guaranteed small, so the
+  // columns below always get the rest of the screen with no leftover gap.
+  // While editing (showFilters), fall back to the normal full-page form.
+  const isReturnDualView =
+    tripType === 'RETURN' &&
+    isMultiLeg &&
+    searched &&
+    groupKeys.length === 2 &&
+    !showFilters &&
+    returnLayoutMode === 'split';
+
+  const renderReturnLayoutToggle = () => (
+    <View style={styles.layoutToggleRow}>
+      <TouchableOpacity
+        style={[styles.layoutToggleButton, returnLayoutMode === 'split' && styles.layoutToggleButtonActive]}
+        onPress={() => setReturnLayoutMode('split')}
+      >
+        <Ionicons
+          name="grid-outline"
+          size={13}
+          color={returnLayoutMode === 'split' ? Colors.secondary : Colors.accentBlueDark}
+        />
+        <Text style={[styles.layoutToggleText, returnLayoutMode === 'split' && styles.layoutToggleTextActive]}>
+          Side by side
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.layoutToggleButton, returnLayoutMode === 'single' && styles.layoutToggleButtonActive]}
+        onPress={() => setReturnLayoutMode('single')}
+      >
+        <Ionicons
+          name="list-outline"
+          size={13}
+          color={returnLayoutMode === 'single' ? Colors.secondary : Colors.accentBlueDark}
+        />
+        <Text style={[styles.layoutToggleText, returnLayoutMode === 'single' && styles.layoutToggleTextActive]}>
+          One at a time
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const getFlightsForGroup = (groupKey) => {
+    let list = flights.filter((flight) => flight.groupKey === groupKey);
+    if (stopsFilter === 'NONSTOP') {
+      list = list.filter((flight) => flight.stopsCount === 0);
+    } else if (stopsFilter === 'ONE_PLUS') {
+      list = list.filter((flight) => flight.stopsCount > 0);
+    }
+    const comparator = SORT_COMPARATORS[sortBy];
+    if (!comparator) return list;
+    return [...list].sort(comparator);
+  };
+
+  const dualColumnFlights = isReturnDualView ? groupKeys.map((key) => getFlightsForGroup(key)) : null;
+
+  // Compact card for the dual-column view - the full renderFlight card (fare
+  // toggle, amenities, segment breakdown) is too much detail for a half-width
+  // column; this keeps just what's needed to compare and pick a leg.
+  const renderCompactFlight = (groupKey) => ({ item }) => {
+    const isSelected = selectedByGroup[groupKey]?.id === item.id;
+    const selectedFareIndex = getSelectedFareIndex(item);
+    const selectedFare = item.fareOptions?.[selectedFareIndex] || item;
+    const hasFareChoice = (item.fareOptions?.length || 0) > 1;
+    const detailsExpanded = !!expandedDetailIds[item.id];
+
+    return (
+      <TouchableOpacity
+        style={[styles.compactCard, isSelected && styles.compactCardSelected]}
+        activeOpacity={0.8}
+        onPress={() => selectFlightForGroup(getFlightWithFare(item, selectedFareIndex))}
+      >
+        {isSelected ? (
+          <View style={styles.compactSelectedBadge}>
+            <Ionicons name="checkmark" size={11} color={Colors.secondary} />
+          </View>
+        ) : null}
+
+        <View style={styles.compactCardHeader}>
+          {AIRLINE_LOGOS[item.airlineCode] ? (
+            <Image source={AIRLINE_LOGOS[item.airlineCode]} style={styles.compactAirlineLogo} resizeMode="contain" />
+          ) : (
+            <Ionicons name={item.image} size={15} color={Colors.accentBlue} />
+          )}
+          <Text style={styles.compactFlightNo} numberOfLines={1}>{item.flightNo}</Text>
+        </View>
+        <Text style={styles.compactTimes} numberOfLines={1}>{item.departure} → {item.arrival}</Text>
+        <Text style={styles.compactStops} numberOfLines={1}>{item.duration} · {item.stops}</Text>
+        <Text style={styles.compactPrice}>₹{selectedFare.price.toLocaleString()}</Text>
+
+        {hasFareChoice ? (
+          <>
+            <View style={styles.compactSelectedFareBadge}>
+              <Text style={styles.compactSelectedFareBadgeText} numberOfLines={1}>
+                {selectedFare.fareType} ₹{selectedFare.price.toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.compactFareList}>
+              {item.fareOptions.map((fare, index) => {
+                if (index === selectedFareIndex) return null;
+                return (
+                  <TouchableOpacity
+                    key={fare.id}
+                    style={styles.compactFareListRow}
+                    activeOpacity={0.6}
+                    onPress={() => chooseFareForFlight(item, index)}
+                  >
+                    <Text style={styles.compactFareListLabel} numberOfLines={1}>{fare.fareType}</Text>
+                    <Text style={styles.compactFareListPrice}>₹{fare.price.toLocaleString()}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+
+        {item.segmentCount > 1 ? (
+          <TouchableOpacity
+            style={styles.compactDetailsToggle}
+            activeOpacity={0.7}
+            onPress={() => toggleFlightDetails(item.id)}
+          >
+            <Text style={styles.compactDetailsToggleText}>
+              {detailsExpanded ? 'Hide details' : 'View flight details'}
+            </Text>
+            <Ionicons
+              name={detailsExpanded ? 'chevron-up' : 'chevron-down'}
+              size={12}
+              color={Colors.accentBlue}
+            />
+          </TouchableOpacity>
+        ) : null}
+
+        {item.segmentCount > 1 && detailsExpanded ? (
+          <View style={styles.compactSegmentBreakdown}>
+            {item.segments.map((segment) => (
+              <React.Fragment key={segment.id}>
+                <Text style={styles.compactSegmentLine} numberOfLines={1}>
+                  {segment.departure} {segment.fromCode} → {segment.arrival} {segment.toCode}
+                </Text>
+                <Text style={styles.compactSegmentSub} numberOfLines={1}>
+                  {segment.airline} · {segment.flightNo} · {segment.durationLabel}
+                </Text>
+                {segment.layover ? (
+                  <View style={styles.compactLayoverRow}>
+                    <Ionicons name="time-outline" size={11} color="#8A6100" />
+                    <Text style={styles.compactLayoverText} numberOfLines={1}>
+                      {segment.layover.label ? `${segment.layover.label} layover` : 'Layover'}
+                      {segment.layover.cityName ? ` at ${segment.layover.cityName}` : ''}
+                    </Text>
+                  </View>
+                ) : null}
+              </React.Fragment>
+            ))}
+          </View>
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSearchFormHeader = () => (
+    <View style={styles.searchForm}>
+      {!showFilters && searched ? (
+        <TouchableOpacity
+          style={styles.summaryBar}
+          activeOpacity={0.85}
+          onPress={() => setShowFilters(true)}
+        >
+          <View style={styles.summaryBarIcon}>
+            <Ionicons name="airplane" size={18} color={Colors.secondary} />
+          </View>
+          <View style={styles.summaryBarText}>
+            <Text style={styles.summaryBarRoute} numberOfLines={1}>{searchSummary.routeLabel}</Text>
+            <Text style={styles.summaryBarMeta} numberOfLines={1}>
+              {searchSummary.dateLabel} • {searchSummary.paxCount} traveller{searchSummary.paxCount === 1 ? '' : 's'} • {cabinClass.replace(/_/g, ' ')}
+            </Text>
+          </View>
+          <View style={styles.summaryBarEdit}>
+            <Ionicons name="create-outline" size={15} color={Colors.primary} />
+            <Text style={styles.summaryBarEditText}>Edit</Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
+      {showFilters ? (
+        <>
+      <View style={styles.formSurface}>
+        <View style={styles.tripTypeRow}>
+          {TRIP_TYPES.map((option) => {
+            const active = tripType === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.tripTypeTab, active && styles.tripTypeTabActive]}
+                onPress={() => setTripTypeWithDefaults(option.value)}
+              >
+                <Text style={[styles.tripTypeTabText, active && styles.tripTypeTabTextActive]}>{option.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={styles.sectionBlock}>
+          {routes.map((route, index) => (
+            <View key={`route-${index}`} style={styles.routeCard}>
+              <View style={styles.routeHeader}>
+                <View style={styles.routeTag}>
+                  <Text style={styles.routeTagText}>Leg {index + 1}</Text>
+                </View>
+                {tripType === 'MULTI_CITY' && routes.length > 2 ? (
+                  <TouchableOpacity style={styles.routeDeleteButton} onPress={() => removeMultiCityRoute(index)}>
+                    <Ionicons name="trash-outline" size={16} color={Colors.error} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <View style={styles.routeGrid}>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>From</Text>
+                  <View style={styles.inputShell}>
+                    <Ionicons name="airplane-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="City or airport code"
+                      placeholderTextColor={Colors.textMuted}
+                      value={route.from}
+                      onChangeText={(value) => {
+                        updateRoute(index, 'from', value);
+                        setAirportSuggestFor({ routeIndex: index, field: 'from' });
+                      }}
+                      onFocus={() => setAirportSuggestFor({ routeIndex: index, field: 'from' })}
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.inputContainer, styles.routeFieldStacked]}>
+                  <Text style={styles.inputLabel}>To</Text>
+                  <View style={styles.inputShell}>
+                    <Ionicons name="location-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="City or airport code"
+                      placeholderTextColor={Colors.textMuted}
+                      value={route.to}
+                      onChangeText={(value) => {
+                        updateRoute(index, 'to', value);
+                        setAirportSuggestFor({ routeIndex: index, field: 'to' });
+                      }}
+                      onFocus={() => setAirportSuggestFor({ routeIndex: index, field: 'to' })}
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.swapButtonFloating} onPress={() => swapRouteCities(index)}>
+                  <Ionicons name="swap-vertical" size={18} color={Colors.secondary} />
+                </TouchableOpacity>
+              </View>
+
+              {airportSuggestFor?.routeIndex === index ? (() => {
+                const suggestions = getAirportSuggestions(route[airportSuggestFor.field]);
+                if (!suggestions.length) return null;
+                return (
+                  <View style={styles.airportSuggestBox}>
+                    {suggestions.map((option) => (
+                      <TouchableOpacity
+                        key={option.code}
+                        style={styles.airportSuggestRow}
+                        onPress={() => chooseAirportSuggestion(index, airportSuggestFor.field, option)}
+                      >
+                        <Ionicons name="location-outline" size={15} color={Colors.primaryDark} />
+                        <Text style={styles.airportSuggestCity}>{option.city}</Text>
+                        <Text style={styles.airportSuggestCode}>{option.code}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })() : null}
+
+              {tripType !== 'RETURN' ? (
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>Departure</Text>
+                  <Pressable
+                    style={styles.inputShell}
+                    onPress={() =>
+                      openCalendar({
+                        target: 'route',
+                        routeIndex: index,
+                        currentValue: route.travelDate,
+                      })
+                    }
+                  >
+                    <Ionicons name="calendar-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                    <Text style={[styles.dateDisplayText, !route.travelDate && styles.dateDisplayPlaceholder]}>
+                      {route.travelDate || 'Select departure date'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          ))}
+
+          {tripType === 'MULTI_CITY' ? (
+            <TouchableOpacity style={styles.secondaryButton} onPress={addMultiCityRoute}>
+              <Ionicons name="add-circle-outline" size={18} color={Colors.primaryDark} />
+              <Text style={styles.secondaryButtonText}>Add Route Leg</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {tripType === 'RETURN' ? (
+            // Departure + Return shown side by side as one connected
+            // control (like a real travel site's combo date field)
+            // instead of two full-width boxes stacked on top of each
+            // other, which read as unrelated/disconnected fields.
+            <View style={styles.dateRow}>
+              <View style={[styles.inputContainer, styles.routeField]}>
+                <Text style={styles.inputLabel}>Departure</Text>
+                <Pressable
+                  style={styles.inputShell}
+                  onPress={() =>
+                    openCalendar({
+                      target: 'route',
+                      routeIndex: 0,
+                      currentValue: routes[0]?.travelDate,
+                      // Round trip: pick departure + return together in
+                      // one session instead of two separate opens.
+                      rangeMode: true,
+                    })
+                  }
+                >
+                  <Ionicons name="calendar-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                  <Text style={[styles.dateDisplayText, !routes[0]?.travelDate && styles.dateDisplayPlaceholder]}>
+                    {routes[0]?.travelDate || 'Select date'}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.dateRowDivider} />
+
+              <View style={[styles.inputContainer, styles.routeField]}>
+                <Text style={styles.inputLabel}>Return</Text>
+                <Pressable
+                  style={styles.inputShell}
+                  onPress={() =>
+                    openCalendar({
+                      target: 'return',
+                      // Falls back to the already-picked departure date
+                      // so the calendar opens on that month instead of
+                      // always jumping back to the current month.
+                      currentValue: returnDate || routes[0]?.travelDate,
+                    })
+                  }
+                >
+                  <Ionicons name="calendar-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+                  <Text style={[styles.dateDisplayText, !returnDate && styles.dateDisplayPlaceholder]}>
+                    {returnDate || 'Select date'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+        </View>
+
+        <TouchableOpacity style={styles.travellerSummaryRow} onPress={() => setTravellerModalVisible(true)}>
+          <Ionicons name="people-outline" size={18} color={Colors.primaryDark} />
+          <Text style={styles.travellerSummaryText} numberOfLines={1}>
+            {Number(adults) + Number(children) + Number(infants)} traveller{Number(adults) + Number(children) + Number(infants) === 1 ? '' : 's'} · {cabinClass.replace(/_/g, ' ')}
+            {fareType !== 'REGULAR' ? ` · ${PASSENGER_FARE_TYPES.find((f) => f.value === fareType)?.label}` : ''}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+        </TouchableOpacity>
+
+        <View style={styles.pillWrap}>
+          {CONNECTION_FILTERS.map((option) => {
+            const active = connectionFilter === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.pill, active && styles.pillActive]}
+                onPress={() => setConnectionFilter(option.value)}
+              >
+                <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {showAirlineInput ? (
+          <View style={styles.inputContainer}>
+            <View style={styles.inputShell}>
+              <Ionicons name="sparkles-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Airline codes, e.g. SG, 6E, AI"
+                placeholderTextColor={Colors.textMuted}
+                value={preferredAirlines}
+                onChangeText={setPreferredAirlines}
+                autoCapitalize="characters"
+              />
+            </View>
+            <Text style={styles.helperText}>Up to 10 airline codes, separated by commas.</Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.inlineLinkButton} onPress={() => setShowAirlineInput(true)}>
+            <Ionicons name="add" size={16} color={Colors.primaryDark} />
+            <Text style={styles.inlineLinkText}>Preferred airlines (optional)</Text>
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity style={styles.searchButton} onPress={searchFlights} disabled={loading}>
+          <View>
+            <Text style={styles.searchButtonText}>{loading ? 'Searching live fares...' : 'Search Flights'}</Text>
+            <Text style={styles.searchButtonSubtext}>Best live options across your selected route</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={20} color={Colors.secondary} />
+        </TouchableOpacity>
+      </View>
+        </>
+      ) : null}
+
+      {searched && flights.length > 0 && !isReturnDualView ? (
+        <View style={styles.resultsToolbar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
+            {SORT_OPTIONS.map((option) => {
+              const active = sortBy === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.pill, styles.sortPill, active && styles.pillActive]}
+                  onPress={() => setSortBy(option.value)}
+                >
+                  <Ionicons name={option.icon} size={13} color={active ? Colors.secondary : Colors.primaryDark} />
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
+            {STOPS_FILTERS.map((option) => {
+              const active = stopsFilter === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.pill, styles.sortPill, active && styles.pillActiveBlue]}
+                  onPress={() => setStopsFilter(option.value)}
+                >
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <Text style={styles.resultsCount}>
+            {visibleFlights.length} of {isMultiLeg ? flights.filter((f) => f.groupKey === effectiveActiveGroupKey).length : flights.length} option{flights.length === 1 ? '' : 's'}
+            {isMultiLeg ? ` for ${buildJourneyLabel(effectiveActiveGroupKey)}` : ''}
+          </Text>
+          {tripType === 'RETURN' && isMultiLeg && groupKeys.length === 2 ? renderReturnLayoutToggle() : null}
+        </View>
+      ) : null}
+
+      {isReturnDualView ? (
+        <View style={styles.resultsToolbar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
+            {SORT_OPTIONS.map((option) => {
+              const active = sortBy === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.pill, styles.sortPill, active && styles.pillActive]}
+                  onPress={() => setSortBy(option.value)}
+                >
+                  <Ionicons name={option.icon} size={13} color={active ? Colors.secondary : Colors.primaryDark} />
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
+            {STOPS_FILTERS.map((option) => {
+              const active = stopsFilter === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.pill, styles.sortPill, active && styles.pillActiveBlue]}
+                  onPress={() => setStopsFilter(option.value)}
+                >
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <Text style={styles.resultsCount}>
+            {groupKeys
+              .map(
+                (key, index) =>
+                  `${dualColumnFlights[index].length} of ${flights.filter((f) => f.groupKey === key).length} for ${buildJourneyLabel(key)}`
+              )
+              .join('  •  ')}
+          </Text>
+          {renderReturnLayoutToggle()}
+        </View>
+      ) : null}
+
+      {isMultiLeg && searched && !isReturnDualView ? (
+        <View style={styles.legSelectionCard}>
+          <Text style={styles.legSelectionTitle}>
+            {tripType === 'MULTI_CITY' ? 'Pick one flight per route leg' : 'Pick your onward and return flight'}
+          </Text>
+          <Text style={styles.legSelectionHint}>
+            Tap a leg below to switch what's shown, tap a flight card to pick it - the next leg comes up
+            automatically. TripJack prices these as a single itinerary.
+          </Text>
+          <View style={styles.legSelectionChips}>
+            {groupKeys.map((key) => {
+              const selection = selectedByGroup[key];
+              const isActive = key === effectiveActiveGroupKey;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.legSelectionChip,
+                    selection && styles.legSelectionChipDone,
+                    isActive && styles.legSelectionChipActive,
+                  ]}
+                  onPress={() => setActiveGroupKey(key)}
+                >
+                  <Ionicons
+                    name={selection ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={16}
+                    color={selection ? Colors.success : isActive ? Colors.primaryDark : Colors.textMuted}
+                  />
+                  <Text
+                    style={[styles.legSelectionChipText, isActive && styles.legSelectionChipTextActive]}
+                    numberOfLines={1}
+                  >
+                    {buildJourneyLabel(key)}{selection ? `: ₹${selection.price.toLocaleString()}` : ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Flights</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('MyFlightBookings')}>
-          <Ionicons name="briefcase-outline" size={24} color={Colors.secondary} />
-        </TouchableOpacity>
-      </View>
+      <ImageBackground
+        source={require('../../assets/flights/hero-sunset.jpg')}
+        style={styles.heroHeader}
+        imageStyle={styles.heroHeaderImage}
+      >
+        <View style={styles.heroOverlay} />
 
+        <View style={styles.heroTopRow}>
+          <TouchableOpacity style={styles.heroCircleButton} onPress={handleHeaderBack}>
+            <Ionicons name="chevron-back" size={22} color={Colors.accentBlueDark} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.heroCircleButton} onPress={() => navigation.navigate('MyFlightBookings')}>
+            <Ionicons name="briefcase-outline" size={19} color={Colors.accentBlueDark} />
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.heroTitle}>Flights</Text>
+      </ImageBackground>
+
+      {isReturnDualView ? (
+        <>
+          <View style={styles.dualHeaderPadding}>{renderSearchFormHeader()}</View>
+          <View style={styles.dualColumnsRow}>
+            <View style={styles.dualColumn}>
+              <View style={styles.dualColumnTitleRow}>
+                <Ionicons name="airplane" size={14} color={Colors.accentBlue} />
+                <Text style={styles.dualColumnTitle}>
+                  Onward{selectedByGroup[groupKeys[0]] ? ` · ₹${selectedByGroup[groupKeys[0]].price.toLocaleString()}` : ''}
+                </Text>
+              </View>
+              <FlatList
+                data={dualColumnFlights[0]}
+                renderItem={renderCompactFlight(groupKeys[0])}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.dualColumnListContent}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={<Text style={styles.dualColumnEmpty}>No options match your filters.</Text>}
+              />
+            </View>
+            <View style={styles.dualColumnDivider} />
+            <View style={styles.dualColumn}>
+              <View style={styles.dualColumnTitleRow}>
+                <Ionicons name="airplane" size={14} color={Colors.accentBlue} style={{ transform: [{ scaleX: -1 }] }} />
+                <Text style={styles.dualColumnTitle}>
+                  Return{selectedByGroup[groupKeys[1]] ? ` · ₹${selectedByGroup[groupKeys[1]].price.toLocaleString()}` : ''}
+                </Text>
+              </View>
+              <FlatList
+                data={dualColumnFlights[1]}
+                renderItem={renderCompactFlight(groupKeys[1])}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.dualColumnListContent}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={<Text style={styles.dualColumnEmpty}>No options match your filters.</Text>}
+              />
+            </View>
+          </View>
+        </>
+      ) : (
       <FlatList
         data={visibleFlights}
         renderItem={renderFlight}
@@ -1237,315 +2050,10 @@ const FlightsScreen = ({ navigation }) => {
           isMultiLeg && searched && flights.length > 0 ? styles.listContainerWithFooter : null,
         ]}
         showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-          <View style={styles.searchForm}>
-            {!showFilters && searched ? (
-              <TouchableOpacity
-                style={styles.summaryBar}
-                activeOpacity={0.85}
-                onPress={() => setShowFilters(true)}
-              >
-                <View style={styles.summaryBarIcon}>
-                  <Ionicons name="airplane" size={18} color={Colors.secondary} />
-                </View>
-                <View style={styles.summaryBarText}>
-                  <Text style={styles.summaryBarRoute} numberOfLines={1}>{searchSummary.routeLabel}</Text>
-                  <Text style={styles.summaryBarMeta} numberOfLines={1}>
-                    {searchSummary.dateLabel} • {searchSummary.paxCount} traveller{searchSummary.paxCount === 1 ? '' : 's'} • {cabinClass.replace(/_/g, ' ')}
-                  </Text>
-                </View>
-                <View style={styles.summaryBarEdit}>
-                  <Ionicons name="create-outline" size={16} color={Colors.primaryDark} />
-                  <Text style={styles.summaryBarEditText}>Edit</Text>
-                </View>
-              </TouchableOpacity>
-            ) : null}
-
-            {showFilters ? (
-              <>
-            <View style={styles.formSurface}>
-              <View style={styles.tripTypeRow}>
-                {TRIP_TYPES.map((option) => {
-                  const active = tripType === option.value;
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.tripTypeTab, active && styles.tripTypeTabActive]}
-                      onPress={() => setTripTypeWithDefaults(option.value)}
-                    >
-                      <Text style={[styles.tripTypeTabText, active && styles.tripTypeTabTextActive]}>{option.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <View style={styles.sectionBlock}>
-                {routes.map((route, index) => (
-                  <View key={`route-${index}`} style={styles.routeCard}>
-                    <View style={styles.routeHeader}>
-                      <View style={styles.routeTag}>
-                        <Text style={styles.routeTagText}>Leg {index + 1}</Text>
-                      </View>
-                      {tripType === 'MULTI_CITY' && routes.length > 2 ? (
-                        <TouchableOpacity style={styles.routeDeleteButton} onPress={() => removeMultiCityRoute(index)}>
-                          <Ionicons name="trash-outline" size={16} color={Colors.error} />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-
-                    <View style={styles.routeGrid}>
-                      <View style={[styles.inputContainer, styles.routeField]}>
-                        <Text style={styles.inputLabel}>From</Text>
-                        <View style={styles.inputShell}>
-                          <Ionicons name="airplane-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
-                          <TextInput
-                            style={styles.input}
-                            placeholder="City or airport code"
-                            placeholderTextColor={Colors.textMuted}
-                            value={route.from}
-                            onChangeText={(value) => {
-                              updateRoute(index, 'from', value);
-                              setAirportSuggestFor({ routeIndex: index, field: 'from' });
-                            }}
-                            onFocus={() => setAirportSuggestFor({ routeIndex: index, field: 'from' })}
-                          />
-                        </View>
-                      </View>
-
-                      <TouchableOpacity style={styles.swapButton} onPress={() => swapRouteCities(index)}>
-                        <Ionicons name="swap-horizontal" size={18} color={Colors.secondary} />
-                      </TouchableOpacity>
-
-                      <View style={[styles.inputContainer, styles.routeField]}>
-                        <Text style={styles.inputLabel}>To</Text>
-                        <View style={styles.inputShell}>
-                          <Ionicons name="location-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
-                          <TextInput
-                            style={styles.input}
-                            placeholder="City or airport code"
-                            placeholderTextColor={Colors.textMuted}
-                            value={route.to}
-                            onChangeText={(value) => {
-                              updateRoute(index, 'to', value);
-                              setAirportSuggestFor({ routeIndex: index, field: 'to' });
-                            }}
-                            onFocus={() => setAirportSuggestFor({ routeIndex: index, field: 'to' })}
-                          />
-                        </View>
-                      </View>
-                    </View>
-
-                    {airportSuggestFor?.routeIndex === index ? (() => {
-                      const suggestions = getAirportSuggestions(route[airportSuggestFor.field]);
-                      if (!suggestions.length) return null;
-                      return (
-                        <View style={styles.airportSuggestBox}>
-                          {suggestions.map((option) => (
-                            <TouchableOpacity
-                              key={option.code}
-                              style={styles.airportSuggestRow}
-                              onPress={() => chooseAirportSuggestion(index, airportSuggestFor.field, option)}
-                            >
-                              <Ionicons name="location-outline" size={15} color={Colors.primaryDark} />
-                              <Text style={styles.airportSuggestCity}>{option.city}</Text>
-                              <Text style={styles.airportSuggestCode}>{option.code}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      );
-                    })() : null}
-
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>Departure</Text>
-                      <Pressable
-                        style={styles.inputShell}
-                        onPress={() =>
-                          openCalendar({
-                            target: 'route',
-                            routeIndex: index,
-                            currentValue: route.travelDate,
-                            // Round trip: pick departure + return together in
-                            // one session instead of two separate opens.
-                            rangeMode: tripType === 'RETURN',
-                          })
-                        }
-                      >
-                        <Ionicons name="calendar-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
-                        <Text style={[styles.dateDisplayText, !route.travelDate && styles.dateDisplayPlaceholder]}>
-                          {route.travelDate || 'Select departure date'}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ))}
-
-                {tripType === 'MULTI_CITY' ? (
-                  <TouchableOpacity style={styles.secondaryButton} onPress={addMultiCityRoute}>
-                    <Ionicons name="add-circle-outline" size={18} color={Colors.primaryDark} />
-                    <Text style={styles.secondaryButtonText}>Add Route Leg</Text>
-                  </TouchableOpacity>
-                ) : null}
-
-                {tripType === 'RETURN' ? (
-                  <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Return Date</Text>
-                    <Pressable
-                      style={styles.inputShell}
-                      onPress={() =>
-                        openCalendar({
-                          target: 'return',
-                          currentValue: returnDate,
-                        })
-                      }
-                    >
-                      <Ionicons name="calendar-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
-                      <Text style={[styles.dateDisplayText, !returnDate && styles.dateDisplayPlaceholder]}>
-                        {returnDate || 'Select return date'}
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : null}
-              </View>
-
-              <TouchableOpacity style={styles.travellerSummaryRow} onPress={() => setTravellerModalVisible(true)}>
-                <Ionicons name="people-outline" size={18} color={Colors.primaryDark} />
-                <Text style={styles.travellerSummaryText} numberOfLines={1}>
-                  {Number(adults) + Number(children) + Number(infants)} traveller{Number(adults) + Number(children) + Number(infants) === 1 ? '' : 's'} · {cabinClass.replace(/_/g, ' ')}
-                  {fareType !== 'REGULAR' ? ` · ${PASSENGER_FARE_TYPES.find((f) => f.value === fareType)?.label}` : ''}
-                </Text>
-                <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
-              </TouchableOpacity>
-
-              <View style={styles.pillWrap}>
-                {CONNECTION_FILTERS.map((option) => {
-                  const active = connectionFilter === option.value;
-                  return (
-                    <TouchableOpacity
-                      key={option.value}
-                      style={[styles.pill, active && styles.pillActive]}
-                      onPress={() => setConnectionFilter(option.value)}
-                    >
-                      <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {showAirlineInput ? (
-                <View style={styles.inputContainer}>
-                  <View style={styles.inputShell}>
-                    <Ionicons name="sparkles-outline" size={16} color={Colors.primaryDark} style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Airline codes, e.g. SG, 6E, AI"
-                      placeholderTextColor={Colors.textMuted}
-                      value={preferredAirlines}
-                      onChangeText={setPreferredAirlines}
-                      autoCapitalize="characters"
-                    />
-                  </View>
-                  <Text style={styles.helperText}>Up to 10 airline codes, separated by commas.</Text>
-                </View>
-              ) : (
-                <TouchableOpacity style={styles.inlineLinkButton} onPress={() => setShowAirlineInput(true)}>
-                  <Ionicons name="add" size={16} color={Colors.primaryDark} />
-                  <Text style={styles.inlineLinkText}>Preferred airlines (optional)</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity style={styles.searchButton} onPress={searchFlights} disabled={loading}>
-                <View>
-                  <Text style={styles.searchButtonText}>{loading ? 'Searching live fares...' : 'Search Flights'}</Text>
-                  <Text style={styles.searchButtonSubtext}>Best live options across your selected route</Text>
-                </View>
-                <Ionicons name="arrow-forward" size={20} color={Colors.secondary} />
-              </TouchableOpacity>
-            </View>
-              </>
-            ) : null}
-
-            {searched && flights.length > 0 ? (
-              <View style={styles.resultsToolbar}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
-                  {SORT_OPTIONS.map((option) => {
-                    const active = sortBy === option.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.pill, styles.sortPill, active && styles.pillActive]}
-                        onPress={() => setSortBy(option.value)}
-                      >
-                        <Ionicons name={option.icon} size={13} color={active ? Colors.secondary : Colors.primaryDark} />
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.resultsToolbarRow}>
-                  {STOPS_FILTERS.map((option) => {
-                    const active = stopsFilter === option.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.pill, styles.sortPill, active && styles.pillActive]}
-                        onPress={() => setStopsFilter(option.value)}
-                      >
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{option.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-                <Text style={styles.resultsCount}>
-                  {visibleFlights.length} of {isMultiLeg ? flights.filter((f) => f.groupKey === effectiveActiveGroupKey).length : flights.length} option{flights.length === 1 ? '' : 's'}
-                  {isMultiLeg ? ` for ${buildJourneyLabel(effectiveActiveGroupKey)}` : ''}
-                </Text>
-              </View>
-            ) : null}
-
-            {isMultiLeg && searched ? (
-              <View style={styles.legSelectionCard}>
-                <Text style={styles.legSelectionTitle}>
-                  {tripType === 'MULTI_CITY' ? 'Pick one flight per route leg' : 'Pick your onward and return flight'}
-                </Text>
-                <Text style={styles.legSelectionHint}>
-                  Tap a leg below to switch what's shown, tap a flight card to pick it - the next leg comes up
-                  automatically. TripJack prices these as a single itinerary.
-                </Text>
-                <View style={styles.legSelectionChips}>
-                  {groupKeys.map((key) => {
-                    const selection = selectedByGroup[key];
-                    const isActive = key === effectiveActiveGroupKey;
-                    return (
-                      <TouchableOpacity
-                        key={key}
-                        style={[
-                          styles.legSelectionChip,
-                          selection && styles.legSelectionChipDone,
-                          isActive && styles.legSelectionChipActive,
-                        ]}
-                        onPress={() => setActiveGroupKey(key)}
-                      >
-                        <Ionicons
-                          name={selection ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={16}
-                          color={selection ? Colors.success : isActive ? Colors.primaryDark : Colors.textMuted}
-                        />
-                        <Text
-                          style={[styles.legSelectionChipText, isActive && styles.legSelectionChipTextActive]}
-                          numberOfLines={1}
-                        >
-                          {buildJourneyLabel(key)}{selection ? `: ₹${selection.price.toLocaleString()}` : ''}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-          </View>
-        }
+        ListHeaderComponent={renderSearchFormHeader()}
         ListEmptyComponent={renderEmptyState}
       />
+      )}
 
       {isMultiLeg && searched && flights.length > 0 ? (
         <View style={styles.stickyFooter}>
@@ -1556,6 +2064,8 @@ const FlightsScreen = ({ navigation }) => {
             <Text style={styles.stickyFooterSubtitle} numberOfLines={1}>
               {allLegsSelected
                 ? groupKeys.map((key) => `${buildJourneyLabel(key)} ₹${selectedByGroup[key].price.toLocaleString()}`).join('  •  ')
+                : tripType === 'RETURN'
+                ? 'Select an onward and return flight'
                 : 'Tap a flight card above for each leg'}
             </Text>
           </View>
@@ -1564,7 +2074,14 @@ const FlightsScreen = ({ navigation }) => {
             onPress={reviewSelectedFares}
             disabled={!allLegsSelected || loading}
           >
-            <Text style={styles.stickyFooterButtonText}>{loading ? 'Reviewing...' : 'Review Combined Fare'}</Text>
+            <Text
+              style={[
+                styles.stickyFooterButtonText,
+                (!allLegsSelected || loading) && styles.legReviewButtonTextDisabled,
+              ]}
+            >
+              {loading ? 'Reviewing...' : 'Review Combined Fare'}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -1763,7 +2280,7 @@ const FlightsScreen = ({ navigation }) => {
             <View style={styles.calendarGrid}>
               {calendarDays.map((date) => {
                 const isCurrentMonth = date.getMonth() === calendarState.month.getMonth();
-                const isPast = date < today;
+                const isPast = date < calendarMinDate;
                 const isSelected = isSameDay(date, calendarState.selected);
 
                 return (
@@ -1792,7 +2309,11 @@ const FlightsScreen = ({ navigation }) => {
               })}
             </View>
 
-            <Text style={styles.calendarHint}>Past dates are disabled for flight search.</Text>
+            <Text style={styles.calendarHint}>
+              {calendarState.target === 'return' && !calendarState.rangeMode && calendarMinDate > today
+                ? `Dates before your departure (${formatDateForDisplay(calendarMinDate)}) are disabled.`
+                : 'Past dates are disabled for flight search.'}
+            </Text>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1884,7 +2405,10 @@ const FlightsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    // Extremely light blue-gray rather than the app's default warm
+    // off-white - this screen's premium travel-booking redesign leans on a
+    // blue+orange palette instead of the usual all-orange one.
+    backgroundColor: '#F7FAFC',
   },
   // Without an explicit flex here, react-native-web sizes the FlatList to its
   // content instead of the available screen height, so it never becomes a
@@ -1892,18 +2416,187 @@ const styles = StyleSheet.create({
   flatListFlex: {
     flex: 1,
   },
-  header: {
-    backgroundColor: '#FF6A21',
+  // Matches listContainer's padding (used by the non-dual FlatList) so the
+  // collapsed summary bar/filters don't sit flush against the screen edges
+  // the way they briefly did before this was added.
+  dualHeaderPadding: {
+    paddingHorizontal: 15,
+  },
+  dualColumnsRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  dualColumn: {
+    flex: 1,
+  },
+  dualColumnDivider: {
+    width: 1,
+    backgroundColor: '#E1E8F0',
+  },
+  dualColumnTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  dualColumnTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.accentBlueDark,
+  },
+  dualColumnListContent: {
+    paddingHorizontal: 8,
+    paddingBottom: 120,
+  },
+  dualColumnEmpty: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    paddingHorizontal: 12,
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  compactCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E7ECF2',
+    padding: 12,
+    marginBottom: 10,
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  compactCardSelected: {
+    borderColor: Colors.accentBlue,
+    borderWidth: 2,
+    backgroundColor: Colors.accentBlueSoft,
+  },
+  compactSelectedBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.accentBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  compactCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  compactAirlineLogo: {
+    width: 16,
+    height: 16,
+  },
+  compactFlightNo: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textMuted,
+  },
+  compactTimes: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.accentBlueDark,
+  },
+  compactStops: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 3,
+  },
+  compactPrice: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.accentBlueDark,
+    marginTop: 8,
+  },
+  compactSelectedFareBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.accentBlueDark,
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginTop: 8,
+  },
+  compactSelectedFareBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.secondary,
+  },
+  compactFareList: {
+    marginTop: 6,
+  },
+  compactFareListRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 5,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F3F7',
+  },
+  compactFareListLabel: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.textLight,
+  },
+  compactFareListPrice: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textLight,
+  },
+  compactDetailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.background,
+  },
+  compactDetailsToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.accentBlue,
+  },
+  compactSegmentBreakdown: {
+    marginTop: 8,
+  },
+  compactSegmentLine: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.text,
+    marginTop: 6,
+  },
+  compactSegmentSub: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  compactLayoverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFF8E8',
+    borderRadius: 8,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    marginTop: 4,
+  },
+  compactLayoverText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#8A6100',
+    flexShrink: 1,
   },
   headerTitle: {
     fontSize: 19,
@@ -1911,8 +2604,52 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     letterSpacing: 0.2,
   },
+  heroHeader: {
+    paddingTop: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 46,
+    overflow: 'hidden',
+  },
+  heroHeaderImage: {
+    resizeMode: 'cover',
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    // Tints the photo so the white buttons/title stay legible regardless of
+    // how bright the sky is in that particular crop.
+    backgroundColor: 'rgba(11,59,102,0.35)',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  heroCircleButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  heroTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: Colors.secondary,
+    marginTop: 18,
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
   searchForm: {
-    paddingTop: 18,
+    paddingTop: 0,
+    marginTop: -32,
   },
   formSurface: {
     backgroundColor: Colors.card,
@@ -1973,9 +2710,39 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   routeGrid: {
+    position: 'relative',
+    marginBottom: 14,
+  },
+  routeFieldStacked: {
+    marginTop: 14,
+  },
+  swapButtonFloating: {
+    position: 'absolute',
+    top: '50%',
+    right: 14,
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  dateRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    marginBottom: 14,
+  },
+  dateRowDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#F3D4C2',
+    marginHorizontal: 12,
+    marginBottom: 16,
   },
   airportSuggestBox: {
     backgroundColor: Colors.card,
@@ -2059,21 +2826,6 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-  swapButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 22,
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 10,
-    marginBottom: 7,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.24,
-    shadowRadius: 16,
-    elevation: 6,
-  },
   swapIcon: {
     fontSize: 20,
     color: Colors.secondary,
@@ -2085,20 +2837,24 @@ const styles = StyleSheet.create({
   },
   pill: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: 999,
-    backgroundColor: '#FFF4EC',
+    backgroundColor: Colors.card,
     marginRight: 10,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#E1E8F0',
   },
   pillActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
+  pillActiveBlue: {
+    backgroundColor: Colors.accentBlueDark,
+    borderColor: Colors.accentBlueDark,
+  },
   pillText: {
-    color: Colors.primaryDark,
+    color: Colors.accentBlueDark,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -2123,6 +2879,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textMuted,
     marginTop: 4,
+  },
+  layoutToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  layoutToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    backgroundColor: Colors.card,
+    paddingVertical: 8,
+    paddingHorizontal: 13,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  layoutToggleButtonActive: {
+    backgroundColor: Colors.accentBlueDark,
+  },
+  layoutToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.accentBlueDark,
+  },
+  layoutToggleTextActive: {
+    color: Colors.secondary,
   },
   clearFilterButton: {
     marginTop: 16,
@@ -2334,7 +3120,12 @@ const styles = StyleSheet.create({
     color: Colors.primaryDark,
   },
   legReviewButtonDisabled: {
-    opacity: 0.5,
+    backgroundColor: '#DCE3EB',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  legReviewButtonTextDisabled: {
+    color: Colors.textMuted,
   },
   stickyFooter: {
     position: 'absolute',
@@ -2361,7 +3152,7 @@ const styles = StyleSheet.create({
   stickyFooterTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: Colors.text,
+    color: Colors.accentBlueDark,
   },
   stickyFooterSubtitle: {
     marginTop: 2,
@@ -2370,9 +3161,14 @@ const styles = StyleSheet.create({
   },
   stickyFooterButton: {
     backgroundColor: Colors.primary,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
   stickyFooterButtonText: {
     color: Colors.secondary,
@@ -2383,48 +3179,53 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#F3D4C2',
-    padding: 12,
+    borderRadius: 22,
+    padding: 16,
     marginBottom: 14,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 6,
   },
   summaryBarIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   summaryBarText: {
     flex: 1,
   },
   summaryBarRoute: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '800',
-    color: Colors.text,
+    color: Colors.accentBlueDark,
   },
   summaryBarMeta: {
-    marginTop: 2,
-    fontSize: 11,
+    marginTop: 3,
+    fontSize: 12,
     color: Colors.textMuted,
   },
   summaryBarEdit: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.primarySoft,
+    backgroundColor: Colors.card,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     marginLeft: 8,
   },
   summaryBarEditText: {
     marginLeft: 4,
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.primaryDark,
+    color: Colors.primary,
   },
   reviewCard: {
     backgroundColor: '#FFF9F4',
@@ -2822,6 +3623,11 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     marginTop: 4,
   },
+  cityName: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
   durationContainer: {
     flex: 1,
     alignItems: 'center',
@@ -2893,6 +3699,79 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.primaryDark,
     fontWeight: '700',
+  },
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.background,
+  },
+  detailsToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+  },
+  segmentBreakdown: {
+    paddingHorizontal: 15,
+    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.background,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 12,
+  },
+  segmentTimeCol: {
+    flex: 1,
+  },
+  segmentTime: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  segmentCode: {
+    fontSize: 12,
+    color: Colors.textLight,
+    marginTop: 2,
+  },
+  segmentCityName: {
+    fontSize: 10,
+    color: Colors.textMuted,
+  },
+  segmentMidCol: {
+    flex: 1.2,
+    alignItems: 'center',
+  },
+  segmentFlightNo: {
+    fontSize: 11,
+    color: Colors.textLight,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  segmentDuration: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  layoverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF8E8',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 10,
+    alignSelf: 'stretch',
+  },
+  layoverText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8A6100',
   },
   fareOptionsRow: {
     flexDirection: 'row',

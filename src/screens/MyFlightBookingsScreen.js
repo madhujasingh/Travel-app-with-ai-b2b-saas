@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -15,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
+import { AIRLINE_LOGOS } from '../data/airlineLogos';
 
 // TripJack's authoritative status vocabulary (same set used in
 // HotelBookingScreen.js's STATUS_LABELS) - PENDING/PAYMENT_PENDING/
@@ -126,11 +128,19 @@ const MyFlightBookingsScreen = ({ navigation }) => {
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.85}
-        onPress={() => navigation.navigate('FlightBooking', { bookingId: item.tripjackBookingId })}
+        // push, not navigate - reusing an existing FlightBooking instance
+        // already in the stack would both skip re-fetching this specific
+        // booking's details (its fetch effect only runs once on mount) and
+        // pop this list screen out of the back stack.
+        onPress={() => navigation.push('FlightBooking', { bookingId: item.tripjackBookingId })}
       >
         <View style={styles.cardTop}>
           <View style={styles.routeIconWrap}>
-            <Ionicons name="airplane" size={18} color={Colors.primary} />
+            {AIRLINE_LOGOS[item.airlineCode] ? (
+              <Image source={AIRLINE_LOGOS[item.airlineCode]} style={styles.routeAirlineLogo} resizeMode="contain" />
+            ) : (
+              <Ionicons name="airplane" size={18} color={Colors.primary} />
+            )}
           </View>
           <View style={styles.cardTopText}>
             <Text style={styles.cardRoute} numberOfLines={1}>
@@ -155,14 +165,14 @@ const MyFlightBookingsScreen = ({ navigation }) => {
           <View style={styles.cardActions}>
             <TouchableOpacity
               style={styles.cardActionButton}
-              onPress={() => navigation.navigate('FlightReissue', { bookingId: item.tripjackBookingId })}
+              onPress={() => navigation.push('FlightReissue', { bookingId: item.tripjackBookingId })}
             >
               <Ionicons name="calendar-outline" size={14} color={Colors.primaryDark} />
               <Text style={styles.cardActionText}>Reschedule</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.cardActionButton}
-              onPress={() => navigation.navigate('FlightBooking', { bookingId: item.tripjackBookingId, openCancel: true })}
+              onPress={() => navigation.push('FlightBooking', { bookingId: item.tripjackBookingId, openCancel: true })}
             >
               <Ionicons name="close-circle-outline" size={14} color={Colors.error} />
               <Text style={[styles.cardActionText, styles.cardActionTextDanger]}>Cancel</Text>
@@ -331,6 +341,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+  },
+  routeAirlineLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 5,
   },
   cardTopText: {
     flex: 1,
