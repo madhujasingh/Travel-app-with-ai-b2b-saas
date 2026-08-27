@@ -11,4 +11,14 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     List<Conversation> findByCustomerIdOrderByUpdatedAtDesc(Long customerId);
     List<Conversation> findBySupplierIdOrderByUpdatedAtDesc(Long supplierId);
     List<Conversation> findByAdminIdOrderByUpdatedAtDesc(Long adminId);
+
+    // Customer support is a shared inbox - every admin should see every
+    // customer conversation, not just whichever one admin happened to be
+    // picked as the "default admin" when the conversation was started (see
+    // MessagingService.getDefaultAdmin/getMyConversations).
+    List<Conversation> findByTypeOrderByUpdatedAtDesc(Conversation.ConversationType type);
+
+    // Supplier relationships stay scoped to whichever specific admin is
+    // actually managing that supplier.
+    List<Conversation> findByAdminIdAndTypeOrderByUpdatedAtDesc(Long adminId, Conversation.ConversationType type);
 }

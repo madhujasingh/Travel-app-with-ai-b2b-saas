@@ -125,7 +125,22 @@ public class MessagingService {
         User user = getUserById(currentUserId);
 
         if (user.getRole() == User.UserRole.ADMIN) {
-            return conversationRepository.findByAdminIdOrderByUpdatedAtDesc(currentUserId);
+            // Customer support is a shared inbox across every admin account -
+            // a customer's message always gets assigned to whichever admin
+            // getDefaultAdmin() happens to pick, so scoping this list to just
+            // the logged-in admin's own adminId meant a message could land
+            // with one admin while a different admin logged in and saw
+            // nothing. Supplier conversations stay scoped to the specific
+            // admin actually managing that supplier relationship.
+            List<Conversation> customerConversations =
+                    conversationRepository.findByTypeOrderByUpdatedAtDesc(Conversation.ConversationType.CUSTOMER_ADMIN);
+            List<Conversation> supplierConversations =
+                    conversationRepository.findByAdminIdAndTypeOrderByUpdatedAtDesc(currentUserId, Conversation.ConversationType.SUPPLIER_ADMIN);
+
+            List<Conversation> combined = new ArrayList<>(customerConversations);
+            combined.addAll(supplierConversations);
+            combined.sort((a, b) -> b.getUpdatedAt().compareTo(a.getUpdatedAt()));
+            return combined;
         }
         if (user.getRole() == User.UserRole.CUSTOMER) {
             return conversationRepository.findByCustomerIdOrderByUpdatedAtDesc(currentUserId);
@@ -323,6 +338,14 @@ public class MessagingService {
         boolean isParticipant = userId.equals(conversation.getAdminId())
                 || userId.equals(conversation.getCustomerId())
                 || userId.equals(conversation.getSupplierId());
+
+        // Customer support is a shared inbox (see getMyConversations) - any
+        // admin can open/reply to any customer conversation, not just
+        // whichever one was arbitrarily assigned it via getDefaultAdmin().
+        if (!isParticipant && conversation.getType() == Conversation.ConversationType.CUSTOMER_ADMIN) {
+            User user = getUserById(userId);
+            isParticipant = user.getRole() == User.UserRole.ADMIN;
+        }
 
         if (!isParticipant) {
             throw new AccessDeniedException("You are not a participant in this conversation");

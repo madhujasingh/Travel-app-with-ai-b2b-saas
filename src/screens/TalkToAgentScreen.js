@@ -90,7 +90,13 @@ const TalkToAgentScreen = ({ route, navigation }) => {
       Alert.alert('Chat Started', 'Your request reached our travel agent. Continue in chat.', [
         {
           text: 'Open Chat',
-          onPress: () => navigation.replace('ChatScreen', { conversation: data }),
+          // navigate, not replace - 'ChatScreen' isn't a route inside this
+          // tab navigator, so replace() bubbles up to the root stack and
+          // swaps out the ENTIRE tab shell (Home, Flights, everything) for
+          // ChatScreen instead of just this tab's screen. That left nothing
+          // in the stack to go back to, so the chat's back button failed
+          // with "GO_BACK was not handled by any navigator".
+          onPress: () => navigation.navigate('ChatScreen', { conversation: data }),
         },
       ]);
     } catch (error) {
