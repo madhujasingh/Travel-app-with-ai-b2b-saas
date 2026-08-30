@@ -1,17 +1,36 @@
 package com.itinera.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.itinera.model.ActivityReferenceCache;
+import com.itinera.repository.ActivityReferenceCacheRepository;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.function.Supplier;
 
 // HotelBeds/HBX Group Activities API - separate provider from TripJack
 // (see ActivitiesClient/ActivitiesConfig).
 @Service
 public class ActivitiesService {
 
-    private final ActivitiesClient activitiesClient;
+    // Per HotelBeds' own "Cache build" doc: countries/destinations mapping
+    // "must" be cached and refreshed monthly - unlike Detail/Availability,
+    // which must never be cached and always hit them live.
+    private static final long REFERENCE_CACHE_TTL_DAYS = 30;
 
-    public ActivitiesService(ActivitiesClient activitiesClient) {
+    private final ActivitiesClient activitiesClient;
+    private final ActivityReferenceCacheRepository referenceCacheRepository;
+    private final ObjectMapper objectMapper;
+
+    public ActivitiesService(
+            ActivitiesClient activitiesClient,
+            ActivityReferenceCacheRepository referenceCacheRepository,
+            ObjectMapper objectMapper
+    ) {
         this.activitiesClient = activitiesClient;
+        this.referenceCacheRepository = referenceCacheRepository;
+        this.objectMapper = objectMapper;
     }
 
     // POST /activity-api/3.0/activities/availability - filters (destination/
@@ -80,12 +99,55 @@ public class ActivitiesService {
     // booking product above, but same host/credentials. Static reference
     // data (countries/destinations) that powers the search form's picker,
     // so customers pick a real destination instead of typing a raw code.
+    // Cached (see cachedOrLive) since this barely ever changes - avoids
+    // hitting HotelBeds live every time a customer opens the picker.
     public JsonNode countries(String language) {
-        return activitiesClient.get("/activity-content-api/3.0/countries/" + language);
+        return cachedOrLive(
+                "countries:" + language,
+                () -> activitiesClient.get("/activity-content-api/3.0/countries/" + language)
+        );
     }
 
     public JsonNode destinations(String language, String countryCode) {
-        return activitiesClient.get("/activity-content-api/3.0/destinations/" + language + "/" + countryCode);
+        return cachedOrLive(
+                "destinations:" + language + ":" + countryCode,
+                () -> activitiesClient.get("/activity-content-api/3.0/destinations/" + language + "/" + countryCode)
+        );
+    }
+
+    // Lazy cache-aside, refreshed on the next request past the TTL rather
+    // than on a cron schedule - Render's free tier can't run @Scheduled
+    // reliably (see project_render_backend_free_tier), and this data doesn't
+    // need to be fresher than "at most a month old" per HotelBeds' own
+    // recommendation, so there's nothing a cron would buy us here. Cache
+    // read/write failures are swallowed and fall back to a single live call -
+    // this is a best-effort optimization, never allowed to block the picker.
+    private JsonNode cachedOrLive(String cacheKey, Supplier<JsonNode> liveFetch) {
+        ActivityReferenceCache cached = null;
+        try {
+            var existing = referenceCacheRepository.findByCacheKey(cacheKey);
+            if (existing.isPresent()
+                    && existing.get().getRefreshedAt().isAfter(LocalDateTime.now().minusDays(REFERENCE_CACHE_TTL_DAYS))) {
+                return objectMapper.readTree(existing.get().getRawJson());
+            }
+            cached = existing.orElse(null);
+        } catch (Exception ignored) {
+            // Fall through to a live fetch below.
+        }
+
+        JsonNode live = liveFetch.get();
+
+        try {
+            ActivityReferenceCache entry = cached != null ? cached : new ActivityReferenceCache();
+            entry.setCacheKey(cacheKey);
+            entry.setRawJson(live.toString());
+            entry.setRefreshedAt(LocalDateTime.now());
+            referenceCacheRepository.save(entry);
+        } catch (Exception ignored) {
+            // Best-effort - the live response is already what we're returning.
+        }
+
+        return live;
     }
 
     // Category taxonomy (City Tours, Water Sports, ...) - powers the search
