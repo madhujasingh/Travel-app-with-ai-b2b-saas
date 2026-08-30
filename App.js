@@ -246,7 +246,7 @@ export default function App() {
             letterSpacing: 2,
           }}
         >
-          Itinera
+          MyItenary
         </Text>
         <ActivityIndicator color={Colors.secondary} style={{ marginTop: 18 }} />
       </View>
