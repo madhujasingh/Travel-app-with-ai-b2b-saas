@@ -181,6 +181,38 @@ const ActivityDetailScreen = ({ route, navigation }) => {
             </View>
           )}
 
+          {(activity?.content?.routes || []).length > 0 && (
+            <View style={styles.routesSection}>
+              <Text style={styles.sectionTitle}>Itinerary</Text>
+              {activity.content.routes.map((route, routeIndex) => (
+                <View key={routeIndex} style={styles.routeBlock}>
+                  {!!route.description && (
+                    <Text style={styles.routeDescription}>{route.description}</Text>
+                  )}
+                  {(route.points || [])
+                    .slice()
+                    .sort((a, b) => (a.order || 0) - (b.order || 0))
+                    .map((point, pointIndex) => (
+                      <View key={pointIndex} style={styles.routePoint}>
+                        <View style={styles.routePointBullet}>
+                          <Text style={styles.routePointOrderText}>{point.order}</Text>
+                        </View>
+                        <View style={styles.routePointContent}>
+                          <Text style={styles.routePointName}>
+                            {point.pointOfInterest?.description || `Stop ${point.order}`}
+                          </Text>
+                          {!!point.description && (
+                            <Text style={styles.routePointDescription}>{stripHtml(point.description)}</Text>
+                          )}
+                          {point.stop && <Text style={styles.routeOvernightTag}>Overnight stop</Text>}
+                        </View>
+                      </View>
+                    ))}
+                </View>
+              ))}
+            </View>
+          )}
+
           <Text style={styles.sectionTitle}>Available options</Text>
           {(activity?.modalities || []).map((modality) => (
             <View key={modality.code} style={styles.modalityCard}>
@@ -401,6 +433,57 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.text,
     lineHeight: 18,
+  },
+  routesSection: {
+    marginBottom: 4,
+  },
+  routeBlock: {
+    marginBottom: 16,
+  },
+  routeDescription: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 10,
+  },
+  routePoint: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  routePointBullet: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    marginTop: 1,
+  },
+  routePointOrderText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  routePointContent: {
+    flex: 1,
+  },
+  routePointName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  routePointDescription: {
+    fontSize: 12,
+    color: Colors.textLight,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  routeOvernightTag: {
+    fontSize: 11,
+    color: Colors.primary,
+    fontWeight: '700',
+    marginTop: 2,
   },
   sectionTitle: {
     fontSize: 15,
