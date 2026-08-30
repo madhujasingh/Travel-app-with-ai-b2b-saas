@@ -26,6 +26,19 @@ import { digitsOnly } from '../utils/inputSanitizers';
 const PLACEMENTS = ['HOME', 'HOTELS'];
 const LINK_TYPES = ['NONE', 'SCREEN', 'URL'];
 
+// Only customer-facing screens that work with no extra params - e.g.
+// HotelDetail/ActivityDetail require a specific hotel/activity id and can't
+// be a static banner target. Label is what the admin sees; value is the
+// exact screen name registered in App.js's navigator.
+const SCREEN_OPTIONS = [
+  { label: 'Hotels', value: 'Hotels' },
+  { label: 'Flights', value: 'Flights' },
+  { label: 'Activities', value: 'Activities' },
+  { label: 'Land Packages', value: 'LandPackage' },
+  { label: 'Group Trip Planner', value: 'GroupTripPlanner' },
+  { label: 'AI Picks', value: 'AIRecommendations' },
+];
+
 const EMPTY_FORM = {
   title: '',
   placement: 'HOME',
@@ -42,6 +55,7 @@ const PromoBannersScreen = ({ navigation }) => {
   const [error, setError] = useState(null);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [editingBanner, setEditingBanner] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedImage, setSelectedImage] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -93,23 +107,40 @@ const PromoBannersScreen = ({ navigation }) => {
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setSelectedImage(null);
+    setEditingBanner(null);
   };
 
-  const submitNewBanner = async () => {
+  const openAddModal = () => {
+    resetForm();
+    setAddModalVisible(true);
+  };
+
+  const openEditModal = (banner) => {
+    setEditingBanner(banner);
+    setForm({
+      title: banner.title,
+      placement: banner.placement,
+      linkType: banner.linkType,
+      linkTarget: banner.linkTarget || '',
+      displayOrder: String(banner.displayOrder ?? 0),
+    });
+    setSelectedImage(null);
+    setAddModalVisible(true);
+  };
+
+  const submitBanner = async () => {
     if (!form.title.trim()) {
       Alert.alert('Missing title', 'Please give this banner a title.');
       return;
     }
-    if (!selectedImage) {
+    if (!selectedImage && !editingBanner) {
       Alert.alert('Missing image', 'Please pick an image for this banner.');
       return;
     }
     if (form.linkType !== 'NONE' && !form.linkTarget.trim()) {
       Alert.alert(
         'Missing link target',
-        form.linkType === 'SCREEN'
-          ? 'Please enter the screen name to navigate to (e.g. Hotels, Flights, Activities).'
-          : 'Please enter the URL to open.'
+        form.linkType === 'SCREEN' ? 'Please pick which screen to navigate to.' : 'Please enter the URL to open.'
       );
       return;
     }
@@ -117,31 +148,36 @@ const PromoBannersScreen = ({ navigation }) => {
     try {
       setSubmitting(true);
       const formData = new FormData();
-      formData.append('image', {
-        uri: selectedImage.uri,
-        name: 'banner.jpg',
-        type: 'image/jpeg',
-      });
+      if (selectedImage) {
+        formData.append('image', {
+          uri: selectedImage.uri,
+          name: 'banner.jpg',
+          type: 'image/jpeg',
+        });
+      }
       formData.append('title', form.title.trim());
       formData.append('placement', form.placement);
       formData.append('linkType', form.linkType);
-      if (form.linkTarget.trim()) formData.append('linkTarget', form.linkTarget.trim());
+      formData.append('linkTarget', form.linkTarget.trim());
       formData.append('displayOrder', form.displayOrder || '0');
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}/promo-banners`, {
-        method: 'POST',
-        headers: authHeader,
-        body: formData,
-      });
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}/promo-banners${editingBanner ? `/${editingBanner.id}` : ''}`,
+        {
+          method: editingBanner ? 'PUT' : 'POST',
+          headers: authHeader,
+          body: formData,
+        }
+      );
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || 'Failed to create banner');
+        throw new Error(data?.message || data?.error || 'Failed to save banner');
       }
       setAddModalVisible(false);
       resetForm();
       loadBanners();
     } catch (err) {
-      Alert.alert('Create Banner Failed', err.message || 'Unable to create this banner.');
+      Alert.alert('Save Failed', err.message || 'Unable to save this banner.');
     } finally {
       setSubmitting(false);
     }
@@ -217,9 +253,14 @@ const PromoBannersScreen = ({ navigation }) => {
               <Switch value={item.active} onValueChange={() => toggleActive(item)} />
             )}
           </View>
-          <TouchableOpacity onPress={() => deleteBanner(item)} disabled={busyBannerId === item.id}>
-            <Ionicons name="trash-outline" size={20} color={Colors.error} />
-          </TouchableOpacity>
+          <View style={styles.cardIconRow}>
+            <TouchableOpacity onPress={() => openEditModal(item)} disabled={busyBannerId === item.id}>
+              <Ionicons name="create-outline" size={20} color={Colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => deleteBanner(item)} disabled={busyBannerId === item.id}>
+              <Ionicons name="trash-outline" size={20} color={Colors.error} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </View>
@@ -233,7 +274,7 @@ const PromoBannersScreen = ({ navigation }) => {
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Promo Banners</Text>
-        <TouchableOpacity onPress={() => setAddModalVisible(true)}>
+        <TouchableOpacity onPress={openAddModal}>
           <Ionicons name="add-circle" size={26} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -267,7 +308,7 @@ const PromoBannersScreen = ({ navigation }) => {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>New Promo Banner</Text>
+                <Text style={styles.modalTitle}>{editingBanner ? 'Edit Promo Banner' : 'New Promo Banner'}</Text>
                 <TouchableOpacity onPress={() => setAddModalVisible(false)}>
                   <Ionicons name="close" size={22} color={Colors.text} />
                 </TouchableOpacity>
@@ -276,6 +317,11 @@ const PromoBannersScreen = ({ navigation }) => {
               <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
                 {selectedImage ? (
                   <Image source={{ uri: selectedImage.uri }} style={styles.imagePreview} />
+                ) : editingBanner ? (
+                  <Image
+                    source={{ uri: `${API_CONFIG.BASE_URL}/promo-banners/${editingBanner.id}/image` }}
+                    style={styles.imagePreview}
+                  />
                 ) : (
                   <View style={styles.imagePickerPlaceholder}>
                     <Ionicons name="image-outline" size={28} color={Colors.textMuted} />
@@ -314,7 +360,10 @@ const PromoBannersScreen = ({ navigation }) => {
                   <TouchableOpacity
                     key={linkType}
                     style={[styles.chip, form.linkType === linkType && styles.chipSelected]}
-                    onPress={() => updateField('linkType', linkType)}
+                    onPress={() => {
+                      updateField('linkType', linkType);
+                      updateField('linkTarget', '');
+                    }}
                   >
                     <Text style={[styles.chipText, form.linkType === linkType && styles.chipTextSelected]}>
                       {linkType}
@@ -323,14 +372,31 @@ const PromoBannersScreen = ({ navigation }) => {
                 ))}
               </View>
 
-              {form.linkType !== 'NONE' && (
+              {form.linkType === 'SCREEN' && (
                 <>
-                  <Text style={styles.fieldLabel}>
-                    {form.linkType === 'SCREEN' ? 'Screen name (e.g. Hotels, Flights, Activities)' : 'URL'}
-                  </Text>
+                  <Text style={styles.fieldLabel}>Which screen?</Text>
+                  <View style={styles.chipRow}>
+                    {SCREEN_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option.value}
+                        style={[styles.chip, form.linkTarget === option.value && styles.chipSelected]}
+                        onPress={() => updateField('linkTarget', option.value)}
+                      >
+                        <Text style={[styles.chipText, form.linkTarget === option.value && styles.chipTextSelected]}>
+                          {option.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {form.linkType === 'URL' && (
+                <>
+                  <Text style={styles.fieldLabel}>URL</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder={form.linkType === 'SCREEN' ? 'Hotels' : 'https://...'}
+                    placeholder="https://..."
                     placeholderTextColor={Colors.textMuted}
                     value={form.linkTarget}
                     onChangeText={(value) => updateField('linkTarget', value)}
@@ -351,13 +417,13 @@ const PromoBannersScreen = ({ navigation }) => {
 
               <TouchableOpacity
                 style={[styles.submitButton, submitting && styles.buttonDisabled]}
-                onPress={submitNewBanner}
+                onPress={submitBanner}
                 disabled={submitting}
               >
                 {submitting ? (
                   <ActivityIndicator color={Colors.secondary} />
                 ) : (
-                  <Text style={styles.submitButtonText}>Add Banner</Text>
+                  <Text style={styles.submitButtonText}>{editingBanner ? 'Save Changes' : 'Add Banner'}</Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
@@ -413,6 +479,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   activeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardIconRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   activeLabel: { fontSize: 12, color: Colors.textMuted },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalCard: {
