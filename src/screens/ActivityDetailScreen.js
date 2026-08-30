@@ -246,6 +246,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                 currency: activity?.currency,
                 questions: selectedRate.questions || [],
                 paxAmounts: selectedRate.paxAmounts || [],
+                sessionName: selectedRate.sessions?.[0]?.name || null,
               });
             }}
           >

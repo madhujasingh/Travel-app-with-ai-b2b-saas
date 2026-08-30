@@ -20,7 +20,7 @@ import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
-import { buildPaxBreakdown } from '../utils/activityPaxPricing';
+import { buildPaxBreakdown, describePaxDistribution, contractRemarks } from '../utils/activityPaxPricing';
 
 // Free-text agency reference HotelBeds stores alongside the booking (up to
 // 20 chars per the docs) - generated rather than asked from the customer,
@@ -47,6 +47,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
     questions,
     bookingReference,
     paxAmounts,
+    sessionName,
   } = route.params;
 
   const breakdown = buildPaxBreakdown({ paxAmounts, adults, childAges });
@@ -346,10 +347,17 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   }
 
   if (booking) {
+    const confirmedActivity = booking.activities?.[0];
+    const paxDistribution = describePaxDistribution(confirmedActivity?.paxes);
+    const remarks = contractRemarks(confirmedActivity?.comments);
+    const cancellationPolicies = confirmedActivity?.cancellationPolicies || [];
+    const pricePaid = confirmedActivity?.amountDetail?.totalAmount?.amount ?? booking.total;
+    const paidCurrency = booking.currency || currency;
+
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
-        <View style={styles.confirmedState}>
+        <ScrollView contentContainerStyle={styles.confirmedState}>
           <Ionicons
             name={booking.status === 'CANCELLED' ? 'close-circle' : 'checkmark-circle'}
             size={64}
@@ -360,6 +368,69 @@ const ActivityBookingScreen = ({ route, navigation }) => {
           </Text>
           <Text style={styles.confirmedReference}>Reference: {booking.reference}</Text>
           <Text style={styles.confirmedStatus}>Status: {booking.status}</Text>
+
+          {confirmedActivity && (
+            <View style={styles.confirmationCard}>
+              <Text style={styles.confirmationActivityName}>{confirmedActivity.name}</Text>
+
+              <View style={styles.confirmationRow}>
+                <Text style={styles.confirmationLabel}>Date</Text>
+                <Text style={styles.confirmationValue}>
+                  {confirmedActivity.dateFrom === confirmedActivity.dateTo
+                    ? confirmedActivity.dateFrom
+                    : `${confirmedActivity.dateFrom} - ${confirmedActivity.dateTo}`}
+                </Text>
+              </View>
+
+              {!!confirmedActivity.modality?.name && (
+                <View style={styles.confirmationRow}>
+                  <Text style={styles.confirmationLabel}>Modality</Text>
+                  <Text style={styles.confirmationValue}>{confirmedActivity.modality.name}</Text>
+                </View>
+              )}
+
+              {!!sessionName && (
+                <View style={styles.confirmationRow}>
+                  <Text style={styles.confirmationLabel}>Session</Text>
+                  <Text style={styles.confirmationValue}>{sessionName}</Text>
+                </View>
+              )}
+
+              {!!paxDistribution && (
+                <View style={styles.confirmationRow}>
+                  <Text style={styles.confirmationLabel}>Pax Distribution</Text>
+                  <Text style={styles.confirmationValue}>{paxDistribution}</Text>
+                </View>
+              )}
+
+              {pricePaid != null && (
+                <View style={styles.confirmationRow}>
+                  <Text style={styles.confirmationLabel}>Price Paid</Text>
+                  <Text style={styles.confirmationValue}>
+                    {paidCurrency} {Number(pricePaid).toLocaleString()}
+                  </Text>
+                </View>
+              )}
+
+              {!!remarks && (
+                <View style={styles.confirmationSection}>
+                  <Text style={styles.confirmationSectionTitle}>Redeem Instructions</Text>
+                  <Text style={styles.confirmationSectionText}>{remarks}</Text>
+                </View>
+              )}
+
+              {cancellationPolicies.length > 0 && (
+                <View style={styles.confirmationSection}>
+                  <Text style={styles.confirmationSectionTitle}>Cancellation Policy</Text>
+                  {cancellationPolicies.map((policy, index) => (
+                    <Text key={index} style={styles.confirmationSectionText}>
+                      From {policy.dateFrom}: {paidCurrency} {policy.amount} penalty
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
 
           <TouchableOpacity style={styles.secondaryButton} onPress={checkStatus} disabled={checkingStatus}>
             {checkingStatus ? (
@@ -395,7 +466,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
           >
             <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -699,10 +770,57 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   confirmedState: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
+  },
+  confirmationCard: {
+    width: '100%',
+    backgroundColor: Colors.backgroundAlt,
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 24,
+  },
+  confirmationActivityName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: 10,
+  },
+  confirmationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  confirmationLabel: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  confirmationValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.text,
+    flexShrink: 1,
+    textAlign: 'right',
+    marginLeft: 12,
+  },
+  confirmationSection: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  confirmationSectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    marginBottom: 4,
+  },
+  confirmationSectionText: {
+    fontSize: 12,
+    color: Colors.text,
+    lineHeight: 18,
   },
   confirmedTitle: {
     fontSize: 20,

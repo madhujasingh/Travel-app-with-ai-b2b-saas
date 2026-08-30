@@ -42,3 +42,42 @@ export const buildPaxBreakdown = ({ paxAmounts, adults, childAges }) => {
   if (lines.length === 0) return null;
   return { lines, total };
 };
+
+// Mirrors the backend's ActivityVoucherService#paxSummary - HotelBeds'
+// confirm/booking-detail response uses "AD"/"CH" for paxType (see
+// booking confirm.txt), distinct from the confirm REQUEST's "ADULT"/"CHILD".
+export const describePaxDistribution = (paxes) => {
+  if (!Array.isArray(paxes) || paxes.length === 0) return '';
+
+  let adults = 0;
+  let children = 0;
+  const childAges = [];
+
+  paxes.forEach((pax) => {
+    if ((pax.paxType || '').toUpperCase() === 'CH') {
+      children += 1;
+      if (pax.age != null) childAges.push(pax.age);
+    } else {
+      adults += 1;
+    }
+  });
+
+  let summary = `${adults} Adult${adults === 1 ? '' : 's'}`;
+  if (children > 0) {
+    summary += `, ${children} Child${children === 1 ? '' : 'ren'}`;
+    if (childAges.length > 0) {
+      summary += ` (Age${childAges.length === 1 ? '' : 's'}: ${childAges.join(', ')})`;
+    }
+  }
+  return summary;
+};
+
+// Mirrors the backend's ActivityVoucherService#contractRemarks.
+export const contractRemarks = (comments) => {
+  if (!Array.isArray(comments)) return '';
+  return comments
+    .filter((c) => c.type === 'CONTRACT_REMARKS')
+    .map((c) => c.text)
+    .filter(Boolean)
+    .join('\n');
+};
