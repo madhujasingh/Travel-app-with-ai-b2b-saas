@@ -153,9 +153,14 @@ public class ActivitiesService {
     // Category taxonomy (City Tours, Water Sports, ...) - powers the search
     // form's optional category filter. Per the Availability docs, only ONE
     // segment code is allowed per search, and it must be combined with a
-    // destination/hotel/GPS filter, never used alone.
+    // destination/hotel/GPS filter, never used alone. Cached like
+    // countries/destinations - this taxonomy barely changes but gets hit on
+    // every search screen open.
     public JsonNode segments(String language) {
-        return activitiesClient.get("/activity-content-api/3.0/segments/" + language);
+        return cachedOrLive(
+                "segments:" + language,
+                () -> activitiesClient.get("/activity-content-api/3.0/segments/" + language)
+        );
     }
 
     // Cache API (activity-cache-api/1.0) - yet another separate base path,
