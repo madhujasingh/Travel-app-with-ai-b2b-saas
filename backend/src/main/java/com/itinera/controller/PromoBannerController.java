@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 // Admin-managed promo/deal banner carousel - see PromoBanner. GET endpoints
 // are public (SecurityConfig), everything else is admin-only, except
@@ -79,5 +80,21 @@ public class PromoBannerController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         promoBannerService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // AI-suggested title from an image the admin just picked, before the
+    // banner is saved (see SecurityConfig - admin-only, unlike the plain GETs
+    // above, since this costs a Gemini call).
+    @PostMapping(value = "/suggest-title", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> suggestTitle(@RequestParam("image") MultipartFile image) throws IOException {
+        String title = promoBannerService.suggestTitle(image.getBytes(), image.getContentType());
+        return ResponseEntity.ok(Map.of("title", title));
+    }
+
+    // Same, but for an already-saved banner's stored image (editing without
+    // re-picking a new one).
+    @GetMapping("/{id}/suggest-title")
+    public ResponseEntity<Map<String, String>> suggestTitleForBanner(@PathVariable Long id) {
+        return ResponseEntity.ok(Map.of("title", promoBannerService.suggestTitleForBanner(id)));
     }
 }

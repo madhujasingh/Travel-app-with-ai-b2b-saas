@@ -13,10 +13,27 @@ import java.util.List;
 @Service
 public class PromoBannerService {
 
-    private final PromoBannerRepository repository;
+    // Kept short and generic on purpose - admins can still edit whatever
+    // comes back before saving, this is a starting point, not the final copy.
+    private static final String SUGGEST_TITLE_PROMPT =
+            "Write a short, catchy marketing title (under 60 characters) for a travel deal/promo banner "
+                    + "based on this image. Return ONLY the title text - no quotes, no explanation, no trailing punctuation.";
 
-    public PromoBannerService(PromoBannerRepository repository) {
+    private final PromoBannerRepository repository;
+    private final GeminiClient geminiClient;
+
+    public PromoBannerService(PromoBannerRepository repository, GeminiClient geminiClient) {
         this.repository = repository;
+        this.geminiClient = geminiClient;
+    }
+
+    public String suggestTitle(byte[] imageBytes, String imageContentType) {
+        return geminiClient.generateTextWithImage(SUGGEST_TITLE_PROMPT, imageBytes, imageContentType);
+    }
+
+    public String suggestTitleForBanner(Long id) {
+        PromoBanner banner = get(id);
+        return suggestTitle(banner.getImageData(), banner.getImageContentType());
     }
 
     public List<PromoBanner> activeForPlacement(String placement) {

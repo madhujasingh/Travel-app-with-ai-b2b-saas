@@ -60,6 +60,7 @@ const PromoBannersScreen = ({ navigation }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyBannerId, setBusyBannerId] = useState(null);
+  const [suggestingTitle, setSuggestingTitle] = useState(false);
 
   const authHeader = { Authorization: `Bearer ${token}` };
 
@@ -101,6 +102,46 @@ const PromoBannersScreen = ({ navigation }) => {
     });
     if (!result.canceled && result.assets?.[0]) {
       setSelectedImage(result.assets[0]);
+    }
+  };
+
+  const suggestTitle = async () => {
+    if (!selectedImage && !editingBanner) {
+      Alert.alert('Pick an image first', 'AI needs an image to suggest a title from.');
+      return;
+    }
+
+    try {
+      setSuggestingTitle(true);
+      let response;
+      if (selectedImage) {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: selectedImage.uri,
+          name: 'banner.jpg',
+          type: 'image/jpeg',
+        });
+        response = await fetch(`${API_CONFIG.BASE_URL}/promo-banners/suggest-title`, {
+          method: 'POST',
+          headers: authHeader,
+          body: formData,
+        });
+      } else {
+        response = await fetch(`${API_CONFIG.BASE_URL}/promo-banners/${editingBanner.id}/suggest-title`, {
+          headers: authHeader,
+        });
+      }
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || data?.error || 'Failed to suggest a title');
+      }
+      if (data?.title) {
+        updateField('title', data.title);
+      }
+    } catch (err) {
+      Alert.alert('AI Suggestion Failed', err.message || 'Unable to suggest a title right now.');
+    } finally {
+      setSuggestingTitle(false);
     }
   };
 
@@ -330,7 +371,23 @@ const PromoBannersScreen = ({ navigation }) => {
                 )}
               </TouchableOpacity>
 
-              <Text style={styles.fieldLabel}>Title</Text>
+              <View style={styles.titleLabelRow}>
+                <Text style={styles.fieldLabel}>Title</Text>
+                <TouchableOpacity
+                  style={styles.aiSuggestButton}
+                  onPress={suggestTitle}
+                  disabled={suggestingTitle || (!selectedImage && !editingBanner)}
+                >
+                  {suggestingTitle ? (
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                  ) : (
+                    <>
+                      <Ionicons name="sparkles" size={14} color={Colors.primary} />
+                      <Text style={styles.aiSuggestButtonText}>Suggest with AI</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
               <TextInput
                 style={styles.input}
                 placeholder="e.g. Flat 30% off Goa Hotels"
@@ -518,6 +575,25 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginBottom: 6,
     marginTop: 10,
+  },
+  titleLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  aiSuggestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: Colors.primarySoft,
+  },
+  aiSuggestButtonText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.primary,
   },
   input: {
     borderWidth: 1,

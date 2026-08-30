@@ -15,6 +15,8 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Base64;
+
 // Thin wrapper around Gemini's generateContent REST endpoint (Google AI
 // Studio's free tier - see project memory on itinerary generation). Always
 // asks for responseMimeType "application/json" so the model's own JSON mode
@@ -44,10 +46,6 @@ public class GeminiClient {
     // Returns the raw text of the model's first candidate response - the
     // caller parses it as JSON per its own expected schema.
     public String generateJson(String prompt) {
-        if (!StringUtils.hasText(geminiConfig.getApiKey())) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Gemini API key is not configured");
-        }
-
         ObjectNode part = objectMapper.createObjectNode();
         part.put("text", prompt);
         ObjectNode content = objectMapper.createObjectNode();
@@ -57,6 +55,35 @@ public class GeminiClient {
         ObjectNode body = objectMapper.createObjectNode();
         body.set("contents", objectMapper.createArrayNode().add(content));
         body.set("generationConfig", generationConfig);
+        return callGemini(body);
+    }
+
+    // Multimodal variant - Gemini can "see" the image alongside the text
+    // prompt in the same request (inlineData part, base64-encoded). Used for
+    // admin promo-banner title suggestions (see PromoBannerService); returns
+    // plain text rather than forcing JSON mode since callers just want a
+    // short string back.
+    public String generateTextWithImage(String prompt, byte[] imageBytes, String imageMimeType) {
+        ObjectNode textPart = objectMapper.createObjectNode();
+        textPart.put("text", prompt);
+
+        ObjectNode inlineData = objectMapper.createObjectNode();
+        inlineData.put("mimeType", imageMimeType);
+        inlineData.put("data", Base64.getEncoder().encodeToString(imageBytes));
+        ObjectNode imagePart = objectMapper.createObjectNode();
+        imagePart.set("inlineData", inlineData);
+
+        ObjectNode content = objectMapper.createObjectNode();
+        content.set("parts", objectMapper.createArrayNode().add(textPart).add(imagePart));
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("contents", objectMapper.createArrayNode().add(content));
+        return callGemini(body).trim();
+    }
+
+    private String callGemini(ObjectNode body) {
+        if (!StringUtils.hasText(geminiConfig.getApiKey())) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Gemini API key is not configured");
+        }
 
         try {
             JsonNode response = restClient.post()
