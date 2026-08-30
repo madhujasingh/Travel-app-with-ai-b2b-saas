@@ -17,7 +17,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
-import { buildPaxBreakdown } from '../utils/activityPaxPricing';
+import { buildPaxBreakdown, contractRemarks } from '../utils/activityPaxPricing';
 
 // Content descriptions come back as HTML (<br />, <strong>, etc.) - RN has
 // no HTML renderer wired up here, so this strips tags down to plain text
@@ -110,6 +110,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
   const breakdown = selectedRate
     ? buildPaxBreakdown({ paxAmounts: selectedRate.paxAmounts, adults, childAges })
     : null;
+  const cancellationPolicies = selectedRate?.operationDates?.[0]?.cancellationPolicies || [];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -158,6 +159,9 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                   Child pricing applies ages {modality.minChildrenAge}-{modality.maxChildrenAge}; older children are priced as adults
                 </Text>
               )}
+              {!!contractRemarks(modality.comments) && (
+                <Text style={styles.modalityRemarks}>{contractRemarks(modality.comments)}</Text>
+              )}
               {(modality.rates || []).map((rate) =>
                 (rate.rateDetails || []).map((detail) => {
                   const isSelected = selectedRate?.rateKey === detail.rateKey;
@@ -165,7 +169,13 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                     <TouchableOpacity
                       key={detail.rateKey}
                       style={[styles.rateRow, isSelected && styles.rateRowSelected]}
-                      onPress={() => setSelectedRate({ ...detail, questions: modality.questions })}
+                      onPress={() =>
+                        setSelectedRate({
+                          ...detail,
+                          questions: modality.questions,
+                          freeCancellation: rate.freeCancellation,
+                        })
+                      }
                     >
                       <View style={{ flex: 1 }}>
                         {detail.languages?.[0]?.description && (
@@ -223,6 +233,22 @@ const ActivityDetailScreen = ({ route, navigation }) => {
               </View>
             </View>
           )}
+
+          <View style={styles.cancellationBox}>
+            <Text style={styles.cancellationTitle}>Cancellation Policy</Text>
+            {cancellationPolicies.length > 0 ? (
+              cancellationPolicies.map((policy, index) => (
+                <Text key={index} style={styles.cancellationText}>
+                  Free cancellation until {policy.dateFrom} - {activity?.currency} {policy.amount} penalty after
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.cancellationText}>
+                {selectedRate.freeCancellation === false ? 'Non-refundable' : 'Free cancellation'}
+              </Text>
+            )}
+          </View>
+
           <TouchableOpacity
             style={styles.continueButton}
             onPress={() => {
@@ -342,6 +368,12 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: 8,
   },
+  modalityRemarks: {
+    fontSize: 11,
+    color: Colors.textLight,
+    marginBottom: 8,
+    lineHeight: 16,
+  },
   rateRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -422,6 +454,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: Colors.primary,
+  },
+  cancellationBox: {
+    marginBottom: 14,
+  },
+  cancellationTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    marginBottom: 4,
+  },
+  cancellationText: {
+    fontSize: 12,
+    color: Colors.text,
+    lineHeight: 17,
   },
   continueButton: {
     backgroundColor: Colors.primary,
