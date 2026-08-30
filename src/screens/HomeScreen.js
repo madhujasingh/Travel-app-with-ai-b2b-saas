@@ -135,14 +135,6 @@ const HomeScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
-      <TouchableOpacity
-        style={styles.talkFloatingButton}
-        onPress={() => navigation.navigate('TalkToAgent')}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="headset" size={20} color={Colors.primary} />
-      </TouchableOpacity>
-
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -376,6 +368,14 @@ const HomeScreen = ({ navigation }) => {
         </View>
 
       </ScrollView>
+
+      <TouchableOpacity
+        style={styles.talkFloatingButton}
+        onPress={() => navigation.navigate('TalkToAgent')}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="headset" size={20} color={Colors.primary} />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 };
