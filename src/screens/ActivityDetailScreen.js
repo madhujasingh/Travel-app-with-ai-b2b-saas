@@ -31,6 +31,17 @@ const stripHtml = (html) => {
     .trim();
 };
 
+// content.redeemInfo.comments[].description is always populated with a
+// human-readable line per HotelBeds' own examples - this is only a
+// defensive fallback for the rare case it's missing, keyed off the
+// documented redeemInfo.type enum (PRINTED/NONE/EVOUCHER/VOUCHERLESS).
+const REDEEM_TYPE_FALLBACK = {
+  PRINTED: 'A printed voucher is required.',
+  NONE: 'No voucher is needed for this activity.',
+  EVOUCHER: 'Show your e-voucher on your mobile device.',
+  VOUCHERLESS: 'A printed or electronic voucher is accepted.',
+};
+
 const getHeroImage = (content) => {
   const images = content?.media?.images;
   if (!Array.isArray(images) || images.length === 0) return null;
@@ -75,7 +86,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
               ...(childAges || []).map((age) => ({ age })),
             ],
           };
-          const response = await fetch(`${API_CONFIG.BASE_URL}/activities/details`, {
+          const response = await fetch(`${API_CONFIG.BASE_URL}/activities/details/full`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -148,6 +159,26 @@ const ActivityDetailScreen = ({ route, navigation }) => {
 
           {!!activity?.content?.description && (
             <Text style={styles.description}>{stripHtml(activity.content.description)}</Text>
+          )}
+
+          {!!activity?.content?.redeemInfo && (
+            <View style={styles.redeemInfoBox}>
+              <Ionicons name="ticket-outline" size={16} color={Colors.primary} />
+              <Text style={styles.redeemInfoText}>
+                {activity.content.redeemInfo.comments?.[0]?.description ||
+                  REDEEM_TYPE_FALLBACK[activity.content.redeemInfo.type] ||
+                  'Check voucher requirements after booking.'}
+              </Text>
+            </View>
+          )}
+
+          {(activity?.content?.importantInfo || []).length > 0 && (
+            <View style={styles.importantInfoBox}>
+              <Text style={styles.importantInfoTitle}>Important Information</Text>
+              {activity.content.importantInfo.map((info, index) => (
+                <Text key={index} style={styles.importantInfoText}>{stripHtml(info)}</Text>
+              ))}
+            </View>
           )}
 
           <Text style={styles.sectionTitle}>Available options</Text>
@@ -338,6 +369,38 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     lineHeight: 20,
     marginBottom: 20,
+  },
+  redeemInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  redeemInfoText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  importantInfoBox: {
+    backgroundColor: Colors.backgroundAlt,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 20,
+  },
+  importantInfoTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    marginBottom: 4,
+  },
+  importantInfoText: {
+    fontSize: 12,
+    color: Colors.text,
+    lineHeight: 18,
   },
   sectionTitle: {
     fontSize: 15,
