@@ -22,6 +22,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson, SEARCH_SESSION_MS } from '../utils/hotelApiErrors';
 import DatePickerModal from '../components/DatePickerModal';
+import { digitsOnly } from '../utils/inputSanitizers';
 
 // checkIn/checkOut are always set via DatePickerModal in YYYY-MM-DD, so this
 // only needs to go the other way, for display.
@@ -843,7 +844,7 @@ const HotelsScreen = ({ navigation }) => {
                       <TextInput
                         style={styles.childAgeInput}
                         value={String(age)}
-                        onChangeText={(value) => setChildAge(index, childIndex, value)}
+                        onChangeText={(value) => setChildAge(index, childIndex, digitsOnly(value))}
                         keyboardType="number-pad"
                         maxLength={2}
                       />
