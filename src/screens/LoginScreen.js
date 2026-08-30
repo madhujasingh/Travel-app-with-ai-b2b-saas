@@ -15,6 +15,7 @@ import {
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +41,7 @@ const LoginScreen = () => {
   const [signUpForm, setSignUpForm] = useState(INITIAL_SIGN_UP);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
   const googleWebClientId =
     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
     process.env.REACT_APP_GOOGLE_WEB_CLIENT_ID ||
@@ -131,13 +133,16 @@ const LoginScreen = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: signInForm.email.trim(),
-          password: signInForm.password,
+          password: signInForm.password.trim(),
         }),
       });
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error || data?.message || 'Login failed');
+        // message is the human-readable detail (e.g. the 15-minute lockout
+        // explanation); error is just the short label - prefer message when
+        // the backend sent both.
+        throw new Error(data?.message || data?.error || 'Login failed');
       }
 
       login({ token: data.token, user: data.user });
@@ -240,14 +245,27 @@ const LoginScreen = () => {
       />
 
       <Text style={styles.label}>Password</Text>
-      <TextInput
-        style={styles.input}
-        value={signInForm.password}
-        onChangeText={(value) => updateSignInField('password', value)}
-        secureTextEntry
-        placeholder="Enter password"
-        placeholderTextColor={Colors.textMuted}
-      />
+      <View style={styles.passwordInputWrapper}>
+        <TextInput
+          style={styles.passwordInput}
+          value={signInForm.password}
+          onChangeText={(value) => updateSignInField('password', value)}
+          secureTextEntry={!showSignInPassword}
+          autoCorrect={false}
+          placeholder="Enter password"
+          placeholderTextColor={Colors.textMuted}
+        />
+        <TouchableOpacity
+          style={styles.passwordToggle}
+          onPress={() => setShowSignInPassword((prev) => !prev)}
+        >
+          <Ionicons
+            name={showSignInPassword ? 'eye-off-outline' : 'eye-outline'}
+            size={20}
+            color={Colors.textMuted}
+          />
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity
         style={[styles.primaryButton, loading && styles.buttonDisabled]}
@@ -329,7 +347,7 @@ const LoginScreen = () => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.title}>Welcome to Itinera</Text>
+          <Text style={styles.title}>Welcome to MyItenary</Text>
           <Text style={styles.subtitle}>Sign in to your account, or create a new one to get started.</Text>
         </View>
 
@@ -477,6 +495,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: Colors.text,
     backgroundColor: '#FFFCFA',
+  },
+  passwordInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    backgroundColor: '#FFFCFA',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    color: Colors.text,
+  },
+  passwordToggle: {
+    paddingHorizontal: 13,
   },
   primaryButton: {
     marginTop: 20,
