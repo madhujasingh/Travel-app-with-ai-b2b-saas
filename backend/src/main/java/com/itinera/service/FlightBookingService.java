@@ -35,6 +35,7 @@ public class FlightBookingService {
 
         if (existing != null) {
             existing.setRouteSummary(incoming.getRouteSummary());
+            existing.setAirlineCode(incoming.getAirlineCode());
             existing.setTotalFare(incoming.getTotalFare());
             existing.setStatus(incoming.getStatus());
             return flightBookingRepository.save(existing);

@@ -44,6 +44,12 @@ public class FlightBooking {
     @Column(name = "route_summary")
     private String routeSummary;
 
+    // 2-letter IATA operating-carrier code (e.g. "AI", "6E"), or "MULTI" when the
+    // journey's legs use different carriers - powers the airline logo on My Trips.
+    // Nullable: older rows synced before this field existed won't have it.
+    @Column(name = "airline_code")
+    private String airlineCode;
+
     @Column(name = "total_fare")
     private BigDecimal totalFare;
 
