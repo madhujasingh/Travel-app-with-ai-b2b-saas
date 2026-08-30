@@ -43,7 +43,7 @@ public class FlightTicketPdfService {
 
     public byte[] generate(JsonNode request) {
         String bookingReference = request.path("bookingReference").asText("");
-        String agencyName = request.path("agencyName").asText("Itinera Travels");
+        String agencyName = request.path("agencyName").asText("MyItenary Travels");
 
         try {
             Document document = new Document(PageSize.A4, 36, 36, 36, 36);

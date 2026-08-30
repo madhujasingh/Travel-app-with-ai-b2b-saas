@@ -1,4 +1,4 @@
-# Itinera — AI-Powered Travel Platform
+# MyItenary — AI-Powered Travel Platform
 
 A full-stack travel application with React Native (Expo) frontend, Spring Boot backend, and a Python FastAPI AI recommendation service. Supports B2C customer journeys, B2B supplier/admin workflows, group trip planning, and ML-based itinerary recommendations.
 

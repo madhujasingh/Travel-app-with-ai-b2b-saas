@@ -61,7 +61,7 @@ const SplashScreen = ({ navigation, route }) => {
         <Animated.View style={{ transform: [{ translateX: planeFlyAnim }] }}>
           <Ionicons name="airplane" size={72} color={Colors.secondary} style={styles.logo} />
         </Animated.View>
-        <Animated.Text style={[styles.appName, { opacity: textExitAnim }]}>Itinera</Animated.Text>
+        <Animated.Text style={[styles.appName, { opacity: textExitAnim }]}>MyItenary</Animated.Text>
         <Animated.Text style={[styles.tagline, { opacity: textExitAnim }]}>Your Journey, Our Passion</Animated.Text>
       </Animated.View>
     </View>
