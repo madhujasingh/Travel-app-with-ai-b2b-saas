@@ -134,6 +134,15 @@ const HomeScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+
+      <TouchableOpacity
+        style={styles.talkFloatingButton}
+        onPress={() => navigation.navigate('TalkToAgent')}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="headset" size={20} color={Colors.primary} />
+      </TouchableOpacity>
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -427,6 +436,23 @@ const styles = StyleSheet.create({
     padding: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.35)',
+  },
+  talkFloatingButton: {
+    position: 'absolute',
+    top: 10,
+    left: 16,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
   },
   roleBadge: {
     marginTop: 12,

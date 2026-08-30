@@ -17,6 +17,7 @@ import CustomizationScreen from './src/screens/CustomizationScreen';
 import CartScreen from './src/screens/CartScreen';
 import CheckoutScreen from './src/screens/CheckoutScreen';
 import TalkToAgentScreen from './src/screens/TalkToAgentScreen';
+import PromotionsScreen from './src/screens/PromotionsScreen';
 import HotelsScreen from './src/screens/HotelsScreen';
 import HotelDetailScreen from './src/screens/HotelDetailScreen';
 import HotelBookingScreen from './src/screens/HotelBookingScreen';
@@ -114,11 +115,11 @@ function CustomerTabs() {
         }}
       />
       <Tab.Screen
-        name="TalkTab"
-        component={TalkToAgentScreen}
+        name="PromotionsTab"
+        component={PromotionsScreen}
         options={{
-          title: 'Talk',
-          tabBarIcon: ({ color, focused }) => tabIcon('headset', color, focused),
+          title: 'Deals',
+          tabBarIcon: ({ color, focused }) => tabIcon('pricetags', color, focused),
         }}
       />
       <Tab.Screen
