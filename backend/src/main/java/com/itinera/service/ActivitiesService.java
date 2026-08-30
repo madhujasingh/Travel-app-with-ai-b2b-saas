@@ -95,4 +95,17 @@ public class ActivitiesService {
     public JsonNode segments(String language) {
         return activitiesClient.get("/activity-content-api/3.0/segments/" + language);
     }
+
+    // Cache API (activity-cache-api/1.0) - yet another separate base path,
+    // same host/credentials. Bulk/paginated catalog pull per destination
+    // (code/name/type/modalities/paxRange/suppliers, no dates or pricing) -
+    // HotelBeds' own docs describe this as the intended way to sync/cache
+    // activity data, as opposed to Availability which is always live and
+    // date-scoped. See ActivityCatalogService for how this gets paginated
+    // and persisted.
+    public JsonNode portfolio(String destinationCode, int offset, int limit) {
+        return activitiesClient.get(
+                "/activity-cache-api/1.0/portfolio?destination=" + destinationCode + "&offset=" + offset + "&limit=" + limit
+        );
+    }
 }
