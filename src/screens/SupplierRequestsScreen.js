@@ -189,6 +189,7 @@ const SupplierRequestsScreen = ({ navigation }) => {
         data={filteredRequests}
         renderItem={renderRequest}
         keyExtractor={(item) => item.id.toString()}
+        style={styles.flatListFlex}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
       />
@@ -200,6 +201,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  // Without this, react-native-web sizes the FlatList to its content instead
+  // of the available screen height, so it never scrolls.
+  flatListFlex: {
+    flex: 1,
   },
   header: {
     backgroundColor: Colors.primary,

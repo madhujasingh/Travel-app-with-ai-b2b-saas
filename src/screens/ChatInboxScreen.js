@@ -138,6 +138,7 @@ const ChatInboxScreen = ({ navigation }) => {
           data={conversations}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderConversation}
+          style={styles.flatListFlex}
           contentContainerStyle={styles.list}
         />
       )}
@@ -147,6 +148,9 @@ const ChatInboxScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  // Without this, react-native-web sizes the FlatList to its content instead
+  // of the available screen height, so it never scrolls.
+  flatListFlex: { flex: 1 },
   header: {
     backgroundColor: Colors.primary,
     flexDirection: 'row',
