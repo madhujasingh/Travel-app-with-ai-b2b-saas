@@ -24,7 +24,7 @@ import { useAuth } from '../context/AuthContext';
 import { digitsOnly } from '../utils/inputSanitizers';
 
 const PLACEMENTS = ['HOME', 'HOTELS'];
-const LINK_TYPES = ['NONE', 'SCREEN', 'URL'];
+const LINK_TYPES = ['NONE', 'SCREEN', 'URL', 'IMAGE'];
 
 // Only customer-facing screens that work with no extra params - e.g.
 // HotelDetail/ActivityDetail require a specific hotel/activity id and can't
@@ -178,7 +178,7 @@ const PromoBannersScreen = ({ navigation }) => {
       Alert.alert('Missing image', 'Please pick an image for this banner.');
       return;
     }
-    if (form.linkType !== 'NONE' && !form.linkTarget.trim()) {
+    if ((form.linkType === 'SCREEN' || form.linkType === 'URL') && !form.linkTarget.trim()) {
       Alert.alert(
         'Missing link target',
         form.linkType === 'SCREEN' ? 'Please pick which screen to navigate to.' : 'Please enter the URL to open.'

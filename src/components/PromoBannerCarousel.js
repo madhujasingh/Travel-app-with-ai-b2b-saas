@@ -1,10 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, FlatList, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, TouchableOpacity, FlatList, StyleSheet, Dimensions, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
+
+const WINDOW_HEIGHT = Dimensions.get('window').height;
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_WIDTH = SCREEN_WIDTH - 32;
@@ -18,6 +21,7 @@ const PromoBannerCarousel = ({ placement }) => {
   const navigation = useNavigation();
   const [banners, setBanners] = useState([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [viewerBanner, setViewerBanner] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +46,8 @@ const PromoBannerCarousel = ({ placement }) => {
       navigation.navigate(banner.linkTarget);
     } else if (banner.linkType === 'URL' && banner.linkTarget) {
       WebBrowser.openBrowserAsync(banner.linkTarget);
+    } else if (banner.linkType === 'IMAGE') {
+      setViewerBanner(banner);
     }
   };
 
@@ -88,6 +94,24 @@ const PromoBannerCarousel = ({ placement }) => {
           ))}
         </View>
       )}
+
+      <Modal visible={!!viewerBanner} transparent animationType="fade" onRequestClose={() => setViewerBanner(null)}>
+        <View style={styles.viewerOverlay}>
+          <TouchableOpacity
+            style={styles.viewerCloseButton}
+            onPress={() => setViewerBanner(null)}
+          >
+            <Ionicons name="close" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+          {viewerBanner && (
+            <Image
+              source={{ uri: `${API_CONFIG.BASE_URL}/promo-banners/${viewerBanner.id}/image` }}
+              style={styles.viewerImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -142,6 +166,23 @@ const styles = StyleSheet.create({
   dotActive: {
     backgroundColor: Colors.primary,
     width: 16,
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    padding: 6,
+  },
+  viewerImage: {
+    width: '100%',
+    height: WINDOW_HEIGHT * 0.8,
   },
 });
 
