@@ -82,6 +82,26 @@ export const contractRemarks = (comments) => {
     .join('\n');
 };
 
+// HotelBeds' free-text fields carry raw HTML fragments - <br>/</br> (both
+// forms show up in their own docs), &nbsp; runs used as informal spacing,
+// and the usual entities. Decode them so a customer never sees literal
+// "&nbsp;" text.
+const decodeHtmlText = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/<\/?br\s*\/?>/gi, ' ')
+    .replace(/<\/?strong>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+};
+
 // HotelBeds concatenates distinct remark segments (meeting point, schedule,
 // voucher type, restrictions, etc.) into one CONTRACT_REMARKS string using
 // "//" as a delimiter - split it back out into readable bullet points
@@ -91,7 +111,7 @@ export const splitRemarks = (text) => {
   if (!text) return [];
   return text
     .split(/\n|\/\//)
-    .map((segment) => segment.trim())
+    .map((segment) => decodeHtmlText(segment))
     .filter(Boolean);
 };
 

@@ -25,9 +25,21 @@ import { buildPaxBreakdown, contractRemarks, splitRemarks, formatCancellationDat
 const stripHtml = (html) => {
   if (!html) return '';
   return html
-    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?br\s*\/?>/gi, '\n')
     .replace(/<\/?strong>/gi, '')
     .replace(/<[^>]+>/g, '')
+    // HotelBeds sometimes uses long runs of &nbsp; as an informal paragraph
+    // break before a new section (e.g. "...Dublin.&nbsp;&nbsp;...&nbsp;DAY 2
+    // AND 3 | ...") - collapse those into an actual paragraph break instead
+    // of leaving literal entity text or a wall of spaces.
+    .replace(/(&nbsp;\s*){2,}/gi, '\n\n')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 };
 
@@ -165,9 +177,11 @@ const ActivityDetailScreen = ({ route, navigation }) => {
             <View style={styles.redeemInfoBox}>
               <Ionicons name="ticket-outline" size={16} color={Colors.primary} />
               <Text style={styles.redeemInfoText}>
-                {activity.content.redeemInfo.comments?.[0]?.description ||
-                  REDEEM_TYPE_FALLBACK[activity.content.redeemInfo.type] ||
-                  'Check voucher requirements after booking.'}
+                {stripHtml(
+                  activity.content.redeemInfo.comments?.[0]?.description ||
+                    REDEEM_TYPE_FALLBACK[activity.content.redeemInfo.type] ||
+                    'Check voucher requirements after booking.'
+                )}
               </Text>
             </View>
           )}
@@ -187,7 +201,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
               {activity.content.routes.map((route, routeIndex) => (
                 <View key={routeIndex} style={styles.routeBlock}>
                   {!!route.description && (
-                    <Text style={styles.routeDescription}>{route.description}</Text>
+                    <Text style={styles.routeDescription}>{stripHtml(route.description)}</Text>
                   )}
                   {(route.points || [])
                     .slice()

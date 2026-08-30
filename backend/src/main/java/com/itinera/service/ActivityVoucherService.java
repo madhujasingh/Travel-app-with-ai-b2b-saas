@@ -136,7 +136,7 @@ public class ActivityVoucherService {
                 // voucher type, restrictions...) using "//" as a delimiter - split
                 // back out into bullet points instead of one dense paragraph.
                 for (String line : remarks.split("\\n|//")) {
-                    String trimmed = line.trim();
+                    String trimmed = decodeHtmlText(line.trim());
                     if (!trimmed.isEmpty()) {
                         document.add(new Paragraph("\u2022 " + trimmed, remarksFont));
                     }
@@ -200,6 +200,27 @@ public class ActivityVoucherService {
     // Only present "in case the activity has a language to select" (per
     // booking confirm.txt) - nested three levels deep under the same
     // modality/rates/rateDetails shape the Detail call uses.
+    // HotelBeds' free-text fields carry raw HTML fragments - <br>/</br> (both
+    // forms show up in their own docs) and &nbsp; runs used as informal
+    // spacing - strip them so the PDF never shows literal "&nbsp;" text.
+    private String decodeHtmlText(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        return text
+                .replaceAll("(?i)</?br\\s*/?>", " ")
+                .replaceAll("(?i)</?strong>", "")
+                .replaceAll("<[^>]+>", "")
+                .replaceAll("(?i)&nbsp;", " ")
+                .replaceAll("(?i)&amp;", "&")
+                .replaceAll("(?i)&quot;", "\"")
+                .replaceAll("(?i)&#39;|&apos;", "'")
+                .replaceAll("(?i)&lt;", "<")
+                .replaceAll("(?i)&gt;", ">")
+                .replaceAll("\\s{2,}", " ")
+                .trim();
+    }
+
     private String firstLanguage(JsonNode activity) {
         Iterator<JsonNode> rates = activity.path("modality").path("rates").elements();
         while (rates.hasNext()) {
