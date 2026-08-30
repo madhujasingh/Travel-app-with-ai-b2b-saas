@@ -108,6 +108,13 @@ public class SecurityConfig {
                 // AuthController) - creating/verifying/deleting them (or reading
                 // supplier business data like commission rates) must be admin-only.
                 .requestMatchers("/suppliers/**").hasRole("ADMIN")
+                // Promo banners: the admin listing (all placements, active +
+                // inactive) is admin-only; everything else GET (per-placement
+                // listing, image bytes) is public display content. Mutations
+                // (create/update/delete) are admin-only via the fallback below.
+                .requestMatchers(HttpMethod.GET, "/promo-banners/admin").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/promo-banners/**").permitAll()
+                .requestMatchers("/promo-banners/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
