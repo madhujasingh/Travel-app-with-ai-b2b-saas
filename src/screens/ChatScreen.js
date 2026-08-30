@@ -17,6 +17,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import usePolling from '../hooks/usePolling';
+import { decimalOnly } from '../utils/inputSanitizers';
 
 const MESSAGES_POLL_INTERVAL_MS = 10000;
 
@@ -414,7 +415,7 @@ const ChatScreen = ({ route, navigation }) => {
             <TextInput
               style={[styles.templateInput, styles.templateHalf]}
               value={templateForm.price}
-              onChangeText={(value) => updateTemplateField('price', value)}
+              onChangeText={(value) => updateTemplateField('price', decimalOnly(value))}
               placeholder="Price (INR)"
               keyboardType="numeric"
               placeholderTextColor={Colors.textMuted}
@@ -496,6 +497,7 @@ const ChatScreen = ({ route, navigation }) => {
         data={messages}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
+        style={styles.flatListFlex}
         contentContainerStyle={styles.list}
       />
 
@@ -523,6 +525,9 @@ const ChatScreen = ({ route, navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  // Without this, react-native-web sizes the FlatList to its content instead
+  // of the available screen height, so it never scrolls.
+  flatListFlex: { flex: 1 },
   header: {
     backgroundColor: Colors.primary,
     flexDirection: 'row',

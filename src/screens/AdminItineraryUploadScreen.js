@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
+import { parseFlyerText } from '../utils/flyerTextParser';
+import { decimalOnly } from '../utils/inputSanitizers';
 
 const itineraryTypes = ['BUDGET', 'PREMIUM', 'ADVENTURE', 'FAMILY', 'ROMANTIC'];
 const itineraryCategories = ['INDIA', 'INTERNATIONAL'];
@@ -96,6 +98,7 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
     exclusions: '',
   });
   const [dayPlans, setDayPlans] = useState([createEmptyDay(1)]);
+  const [pasteText, setPasteText] = useState('');
 
   const isAdmin = user?.role === 'ADMIN';
   const canSubmit = useMemo(
@@ -130,6 +133,39 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
         .filter((_, currentIndex) => currentIndex !== index)
         .map((day, currentIndex) => ({ ...day, dayNumber: currentIndex + 1 }))
     );
+  };
+
+  const handleParsePaste = () => {
+    if (!pasteText.trim()) {
+      Alert.alert('Nothing to parse', 'Paste the package details first.');
+      return;
+    }
+
+    const parsed = parseFlyerText(pasteText);
+    const matchedAny = Object.values(parsed).some((value) => value !== undefined);
+    if (!matchedAny) {
+      Alert.alert(
+        'Could not parse',
+        'Didn’t recognize any fields. Try formatting with labels like "Destination:", "Price: ₹...", "Highlights:", and "Day 1: ..." on their own lines.'
+      );
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      ...(parsed.title !== undefined && { title: parsed.title }),
+      ...(parsed.destination !== undefined && { destination: parsed.destination }),
+      ...(parsed.duration !== undefined && { duration: parsed.duration }),
+      ...(parsed.price !== undefined && { price: parsed.price }),
+      ...(parsed.highlights !== undefined && { highlights: parsed.highlights }),
+      ...(parsed.inclusions !== undefined && { inclusions: parsed.inclusions }),
+      ...(parsed.exclusions !== undefined && { exclusions: parsed.exclusions }),
+    }));
+    if (parsed.dayPlans) {
+      setDayPlans(parsed.dayPlans);
+    }
+
+    Alert.alert('Parsed', 'Fields below have been filled in — review and edit before publishing.');
   };
 
   const submitItinerary = async () => {
@@ -240,6 +276,25 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
         ) : null}
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Paste Package Details</Text>
+          <Text style={styles.helperText}>
+            Paste the supplier's raw text (WhatsApp/email) here - lines like "Destination:", "Price: ₹...",
+            "Highlights:", and "Day 1: ..." get split into the fields below automatically.
+          </Text>
+          <TextInput
+            style={[styles.input, styles.textAreaLarge]}
+            placeholder={'e.g.\nBali Bliss Getaway\nDestination: Bali, Indonesia\nDuration: 5 Days / 4 Nights\nPrice: ₹45,000\n\nHighlights:\n- Private villa stay\n- Sunset dinner cruise\n\nDay 1: Arrival\n14:00 - Airport pickup'}
+            multiline
+            value={pasteText}
+            onChangeText={setPasteText}
+          />
+          <TouchableOpacity style={styles.parseButton} onPress={handleParsePaste}>
+            <Ionicons name="sparkles-outline" size={18} color={Colors.secondary} />
+            <Text style={styles.parseButtonText}>Parse & Fill Fields</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Package Basics</Text>
           <TextInput style={styles.input} placeholder="Title" value={form.title} onChangeText={(value) => updateForm('title', value)} />
           <TextInput style={styles.input} placeholder="Destination" value={form.destination} onChangeText={(value) => updateForm('destination', value)} />
@@ -255,7 +310,7 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
               placeholder="Price"
               keyboardType="numeric"
               value={form.price}
-              onChangeText={(value) => updateForm('price', value)}
+              onChangeText={(value) => updateForm('price', decimalOnly(value))}
             />
           </View>
           <TextInput
@@ -447,6 +502,25 @@ const styles = StyleSheet.create({
   },
   sectionTitleCompact: {
     marginTop: 6,
+  },
+  helperText: {
+    fontSize: 13,
+    color: Colors.textMuted || '#777',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  parseButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  parseButtonText: {
+    color: Colors.secondary,
+    fontWeight: '700',
+    marginLeft: 8,
   },
   input: {
     backgroundColor: Colors.background,
