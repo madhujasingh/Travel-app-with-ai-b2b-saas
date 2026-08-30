@@ -26,6 +26,11 @@ public class PromoBanner {
     @Column(nullable = false)
     private String title;
 
+    // Short subtitle shown under the title on the banner card - optional,
+    // typically AI-suggested alongside the title (see PromoBannerService).
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
     // Which customer-facing screen this banner shows on - "HOME", "HOTELS", etc.
     @Column(nullable = false)
     private String placement;

@@ -52,12 +52,15 @@ public class PromoBannerController {
     public ResponseEntity<PromoBanner> create(
             @RequestParam("image") MultipartFile image,
             @RequestParam String title,
+            @RequestParam(required = false) String description,
             @RequestParam String placement,
             @RequestParam String linkType,
             @RequestParam(required = false) String linkTarget,
             @RequestParam(required = false) Integer displayOrder
     ) throws IOException {
-        return ResponseEntity.ok(promoBannerService.create(image, title, placement, linkType, linkTarget, displayOrder));
+        return ResponseEntity.ok(
+                promoBannerService.create(image, title, description, placement, linkType, linkTarget, displayOrder)
+        );
     }
 
     @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -65,6 +68,7 @@ public class PromoBannerController {
             @PathVariable Long id,
             @RequestParam(required = false) MultipartFile image,
             @RequestParam(required = false) String title,
+            @RequestParam(required = false) String description,
             @RequestParam(required = false) String placement,
             @RequestParam(required = false) String linkType,
             @RequestParam(required = false) String linkTarget,
@@ -72,7 +76,7 @@ public class PromoBannerController {
             @RequestParam(required = false) Boolean active
     ) throws IOException {
         return ResponseEntity.ok(
-                promoBannerService.update(id, image, title, placement, linkType, linkTarget, displayOrder, active)
+                promoBannerService.update(id, image, title, description, placement, linkType, linkTarget, displayOrder, active)
         );
     }
 
@@ -82,19 +86,18 @@ public class PromoBannerController {
         return ResponseEntity.noContent().build();
     }
 
-    // AI-suggested title from an image the admin just picked, before the
-    // banner is saved (see SecurityConfig - admin-only, unlike the plain GETs
-    // above, since this costs a Gemini call).
+    // AI-suggested title + short description from an image the admin just
+    // picked, before the banner is saved (see SecurityConfig - admin-only,
+    // unlike the plain GETs above, since this costs a Gemini call).
     @PostMapping(value = "/suggest-title", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, String>> suggestTitle(@RequestParam("image") MultipartFile image) throws IOException {
-        String title = promoBannerService.suggestTitle(image.getBytes(), image.getContentType());
-        return ResponseEntity.ok(Map.of("title", title));
+        return ResponseEntity.ok(promoBannerService.suggestForImage(image.getBytes(), image.getContentType()));
     }
 
     // Same, but for an already-saved banner's stored image (editing without
     // re-picking a new one).
     @GetMapping("/{id}/suggest-title")
     public ResponseEntity<Map<String, String>> suggestTitleForBanner(@PathVariable Long id) {
-        return ResponseEntity.ok(Map.of("title", promoBannerService.suggestTitleForBanner(id)));
+        return ResponseEntity.ok(promoBannerService.suggestForBanner(id));
     }
 }

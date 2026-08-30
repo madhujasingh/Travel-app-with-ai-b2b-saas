@@ -8,16 +8,23 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class PromoBannerService {
 
     // Kept short and generic on purpose - admins can still edit whatever
     // comes back before saving, this is a starting point, not the final copy.
-    private static final String SUGGEST_TITLE_PROMPT =
-            "Write a short, catchy marketing title (under 60 characters) for a travel deal/promo banner "
-                    + "based on this image. Return ONLY the title text - no quotes, no explanation, no trailing punctuation.";
+    // The exact "TITLE:"/"DESCRIPTION:" line format is parsed back out in
+    // parseSuggestion() below - Gemini follows plain-text format instructions
+    // reliably enough here that a second JSON-mode round trip isn't needed.
+    private static final String SUGGEST_PROMPT =
+            "Look at this travel deal/promo banner image. Respond in exactly this format, with no extra "
+                    + "commentary before or after:\n"
+                    + "TITLE: <a short, catchy marketing title, under 60 characters>\n"
+                    + "DESCRIPTION: <a short, elegant, enticing one-line description, under 100 characters>";
 
     private final PromoBannerRepository repository;
     private final GeminiClient geminiClient;
@@ -27,13 +34,33 @@ public class PromoBannerService {
         this.geminiClient = geminiClient;
     }
 
-    public String suggestTitle(byte[] imageBytes, String imageContentType) {
-        return geminiClient.generateTextWithImage(SUGGEST_TITLE_PROMPT, imageBytes, imageContentType);
+    public Map<String, String> suggestForImage(byte[] imageBytes, String imageContentType) {
+        String raw = geminiClient.generateTextWithImage(SUGGEST_PROMPT, imageBytes, imageContentType);
+        return parseSuggestion(raw);
     }
 
-    public String suggestTitleForBanner(Long id) {
+    public Map<String, String> suggestForBanner(Long id) {
         PromoBanner banner = get(id);
-        return suggestTitle(banner.getImageData(), banner.getImageContentType());
+        return suggestForImage(banner.getImageData(), banner.getImageContentType());
+    }
+
+    private Map<String, String> parseSuggestion(String raw) {
+        String title = null;
+        String description = null;
+        for (String line : raw.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.regionMatches(true, 0, "TITLE:", 0, 6)) {
+                title = trimmed.substring(6).trim();
+            } else if (trimmed.regionMatches(true, 0, "DESCRIPTION:", 0, 12)) {
+                description = trimmed.substring(12).trim();
+            }
+        }
+        Map<String, String> result = new HashMap<>();
+        // Fall back to the raw text as the title if the model didn't follow
+        // the requested format - still better than surfacing nothing.
+        result.put("title", title != null ? title : raw.trim());
+        result.put("description", description != null ? description : "");
+        return result;
     }
 
     public List<PromoBanner> activeForPlacement(String placement) {
@@ -52,6 +79,7 @@ public class PromoBannerService {
     public PromoBanner create(
             MultipartFile image,
             String title,
+            String description,
             String placement,
             String linkType,
             String linkTarget,
@@ -61,6 +89,7 @@ public class PromoBannerService {
         banner.setImageData(image.getBytes());
         banner.setImageContentType(image.getContentType() != null ? image.getContentType() : "image/jpeg");
         banner.setTitle(title);
+        banner.setDescription(description);
         banner.setPlacement(placement.toUpperCase());
         banner.setLinkType(linkType.toUpperCase());
         banner.setLinkTarget(linkTarget);
@@ -74,6 +103,7 @@ public class PromoBannerService {
             Long id,
             MultipartFile image,
             String title,
+            String description,
             String placement,
             String linkType,
             String linkTarget,
@@ -86,6 +116,7 @@ public class PromoBannerService {
             banner.setImageContentType(image.getContentType() != null ? image.getContentType() : "image/jpeg");
         }
         if (title != null) banner.setTitle(title);
+        if (description != null) banner.setDescription(description);
         if (placement != null) banner.setPlacement(placement.toUpperCase());
         if (linkType != null) banner.setLinkType(linkType.toUpperCase());
         if (linkTarget != null) banner.setLinkTarget(linkTarget);

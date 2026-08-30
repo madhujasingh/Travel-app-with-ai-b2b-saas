@@ -41,6 +41,7 @@ const SCREEN_OPTIONS = [
 
 const EMPTY_FORM = {
   title: '',
+  description: '',
   placement: 'HOME',
   linkType: 'NONE',
   linkTarget: '',
@@ -138,6 +139,9 @@ const PromoBannersScreen = ({ navigation }) => {
       if (data?.title) {
         updateField('title', data.title);
       }
+      if (data?.description) {
+        updateField('description', data.description);
+      }
     } catch (err) {
       Alert.alert('AI Suggestion Failed', err.message || 'Unable to suggest a title right now.');
     } finally {
@@ -160,6 +164,7 @@ const PromoBannersScreen = ({ navigation }) => {
     setEditingBanner(banner);
     setForm({
       title: banner.title,
+      description: banner.description || '',
       placement: banner.placement,
       linkType: banner.linkType,
       linkTarget: banner.linkTarget || '',
@@ -197,6 +202,7 @@ const PromoBannersScreen = ({ navigation }) => {
         });
       }
       formData.append('title', form.title.trim());
+      formData.append('description', form.description.trim());
       formData.append('placement', form.placement);
       formData.append('linkType', form.linkType);
       formData.append('linkTarget', form.linkTarget.trim());
@@ -281,6 +287,9 @@ const PromoBannersScreen = ({ navigation }) => {
       />
       <View style={styles.bannerInfo}>
         <Text style={styles.bannerTitle} numberOfLines={1}>{item.title}</Text>
+        {!!item.description && (
+          <Text style={styles.bannerDescription} numberOfLines={1}>{item.description}</Text>
+        )}
         <Text style={styles.bannerMeta}>
           {item.placement} · {item.linkType}
           {item.linkTarget ? ` → ${item.linkTarget}` : ''} · order {item.displayOrder}
@@ -394,6 +403,15 @@ const PromoBannersScreen = ({ navigation }) => {
                 placeholderTextColor={Colors.textMuted}
                 value={form.title}
                 onChangeText={(value) => updateField('title', value)}
+              />
+
+              <Text style={styles.fieldLabel}>Description (optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Sun, sand, and unbeatable prices await"
+                placeholderTextColor={Colors.textMuted}
+                value={form.description}
+                onChangeText={(value) => updateField('description', value)}
               />
 
               <Text style={styles.fieldLabel}>Placement</Text>
@@ -528,6 +546,7 @@ const styles = StyleSheet.create({
   bannerThumb: { width: 100, height: 100 },
   bannerInfo: { flex: 1, padding: 12, justifyContent: 'space-between' },
   bannerTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  bannerDescription: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   bannerMeta: { fontSize: 11, color: Colors.textMuted, marginTop: 4 },
   bannerActions: {
     flexDirection: 'row',

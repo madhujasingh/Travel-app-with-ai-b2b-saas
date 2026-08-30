@@ -12,7 +12,7 @@ const WINDOW_HEIGHT = Dimensions.get('window').height;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_WIDTH = SCREEN_WIDTH - 32;
 const CARD_SPACING = 12;
-const CARD_HEIGHT = 150;
+const CARD_HEIGHT = 172;
 
 // Admin-managed deal/discount banners (see backend PromoBannerController) -
 // renders nothing if the placement has no active banners, so screens can
@@ -79,10 +79,16 @@ const PromoBannerCarousel = ({ placement }) => {
               style={styles.image}
             />
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.7)']}
+              colors={['transparent', 'rgba(0,0,0,0.75)']}
               style={styles.gradient}
             >
-              <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+              <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+              {!!item.description && (
+                <View style={styles.descriptionRow}>
+                  <View style={styles.descriptionAccent} />
+                  <Text style={styles.description} numberOfLines={1}>{item.description}</Text>
+                </View>
+              )}
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -142,14 +148,38 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: '55%',
+    height: '62%',
     justifyContent: 'flex-end',
     padding: 14,
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
+    letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  descriptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 5,
+    gap: 6,
+  },
+  descriptionAccent: {
+    width: 14,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: Colors.primaryLight,
+  },
+  description: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12.5,
+    fontWeight: '500',
+    fontStyle: 'italic',
+    letterSpacing: 0.2,
   },
   dots: {
     flexDirection: 'row',
