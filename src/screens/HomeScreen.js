@@ -15,6 +15,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import { digitsOnly } from '../utils/inputSanitizers';
+import PromoBannerCarousel from '../components/PromoBannerCarousel';
 
 const HomeScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -154,6 +155,8 @@ const HomeScreen = ({ navigation }) => {
           </View>
           <Text style={styles.roleBadge}>Signed in as: {user?.role || 'CUSTOMER'}</Text>
         </View>
+
+        <PromoBannerCarousel placement="HOME" />
 
         {/* Services Section */}
         <View style={styles.servicesSection}>

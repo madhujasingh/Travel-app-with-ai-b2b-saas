@@ -23,6 +23,7 @@ import API_CONFIG from '../config/api';
 import { fetchHotelJson, SEARCH_SESSION_MS } from '../utils/hotelApiErrors';
 import DatePickerModal from '../components/DatePickerModal';
 import { digitsOnly } from '../utils/inputSanitizers';
+import PromoBannerCarousel from '../components/PromoBannerCarousel';
 
 // checkIn/checkOut are always set via DatePickerModal in YYYY-MM-DD, so this
 // only needs to go the other way, for display.
@@ -710,6 +711,8 @@ const HotelsScreen = ({ navigation }) => {
         }}
         scrollEventThrottle={200}
       >
+        <PromoBannerCarousel placement="HOTELS" />
+
         <View style={styles.formCard}>
           <Text style={styles.fieldLabel}>Destination</Text>
           <TouchableOpacity style={styles.browseButton} onPress={openCityModal} disabled={selectingCity}>

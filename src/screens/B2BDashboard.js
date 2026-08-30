@@ -164,10 +164,10 @@ const B2BDashboard = ({ navigation }) => {
     },
     {
       id: 6,
-      title: 'Marketing Tools',
-      description: 'Promote your business',
+      title: 'Promo Banners',
+      description: 'Manage homepage & hotel deal banners',
       icon: 'megaphone-outline',
-      screen: 'MarketingTools',
+      screen: 'PromoBanners',
     },
     {
       id: 7,
