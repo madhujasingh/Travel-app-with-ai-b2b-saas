@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { decimalOnly } from '../utils/inputSanitizers';
 
 const CreatePackageScreen = ({ route, navigation }) => {
   const { request } = route.params || {};
@@ -155,7 +156,7 @@ const CreatePackageScreen = ({ route, navigation }) => {
                 style={styles.input}
                 placeholder="₹0"
                 value={pricePerPerson}
-                onChangeText={setPricePerPerson}
+                onChangeText={(value) => setPricePerPerson(decimalOnly(value))}
                 keyboardType="numeric"
               />
             </View>
@@ -165,7 +166,7 @@ const CreatePackageScreen = ({ route, navigation }) => {
                 style={styles.input}
                 placeholder="₹0"
                 value={totalPrice}
-                onChangeText={setTotalPrice}
+                onChangeText={(value) => setTotalPrice(decimalOnly(value))}
                 keyboardType="numeric"
               />
             </View>
@@ -206,13 +207,14 @@ const CreatePackageScreen = ({ route, navigation }) => {
                   style={[styles.input, { flex: 1, marginRight: 10 }]}
                   placeholder="Rating (e.g., 4.5)"
                   value={hotel.rating}
-                  onChangeText={(value) => updateHotel(hotel.id, 'rating', value)}
+                  onChangeText={(value) => updateHotel(hotel.id, 'rating', decimalOnly(value))}
+                  keyboardType="numeric"
                 />
                 <TextInput
                   style={[styles.input, { flex: 1, marginLeft: 10 }]}
                   placeholder="Price per night"
                   value={hotel.price}
-                  onChangeText={(value) => updateHotel(hotel.id, 'price', value)}
+                  onChangeText={(value) => updateHotel(hotel.id, 'price', decimalOnly(value))}
                   keyboardType="numeric"
                 />
               </View>
@@ -254,7 +256,7 @@ const CreatePackageScreen = ({ route, navigation }) => {
                   style={[styles.input, { flex: 1, marginLeft: 10 }]}
                   placeholder="Price"
                   value={activity.price}
-                  onChangeText={(value) => updateActivity(activity.id, 'price', value)}
+                  onChangeText={(value) => updateActivity(activity.id, 'price', decimalOnly(value))}
                   keyboardType="numeric"
                 />
               </View>

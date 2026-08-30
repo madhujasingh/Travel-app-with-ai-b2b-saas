@@ -18,6 +18,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
+import { phoneDigits } from '../utils/inputSanitizers';
 
 const BOOKING_TABS = new Set(['bookings', 'transactions']);
 
@@ -592,7 +593,8 @@ const CustomerProfileScreen = ({ navigation }) => {
               placeholderTextColor={Colors.textMuted}
               keyboardType="phone-pad"
               value={editPhone}
-              onChangeText={setEditPhone}
+              onChangeText={(value) => setEditPhone(phoneDigits(value))}
+              maxLength={15}
             />
 
             <TouchableOpacity style={styles.modalSaveButton} onPress={saveProfile} disabled={savingProfile}>

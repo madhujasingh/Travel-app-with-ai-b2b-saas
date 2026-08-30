@@ -16,6 +16,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson } from '../utils/hotelApiErrors';
 import { useAuth } from '../context/AuthContext';
+import { phoneDigits } from '../utils/inputSanitizers';
 
 const TITLES = ['Mr', 'Mrs', 'Ms', 'Miss', 'Master'];
 
@@ -400,8 +401,10 @@ const HotelBookingScreen = ({ route, navigation }) => {
                   style={[styles.input, styles.codeInput]}
                   placeholder="+91"
                   placeholderTextColor={Colors.textMuted}
+                  keyboardType="phone-pad"
                   value={countryCode}
-                  onChangeText={setCountryCode}
+                  onChangeText={(value) => setCountryCode(phoneDigits(value))}
+                  maxLength={4}
                 />
                 <TextInput
                   style={[styles.input, styles.nameInput]}
@@ -409,7 +412,8 @@ const HotelBookingScreen = ({ route, navigation }) => {
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="phone-pad"
                   value={contact}
-                  onChangeText={setContact}
+                  onChangeText={(value) => setContact(phoneDigits(value))}
+                  maxLength={15}
                 />
               </View>
 

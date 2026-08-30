@@ -12,6 +12,15 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { digitsOnly } from '../utils/inputSanitizers';
+
+// Digits only, auto-inserts the "/" after MM so typing/pasting letters
+// can't corrupt the MM/YY format.
+const formatExpiry = (value) => {
+  const digits = digitsOnly(value).slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+};
 
 const CheckoutScreen = ({ route, navigation }) => {
   const cartItems = route.params?.cartItems || [];
@@ -156,7 +165,7 @@ const CheckoutScreen = ({ route, navigation }) => {
                   placeholder="1234 5678 9012 3456"
                   placeholderTextColor={Colors.textMuted}
                   value={cardNumber}
-                  onChangeText={setCardNumber}
+                  onChangeText={(value) => setCardNumber(digitsOnly(value))}
                   keyboardType="numeric"
                   maxLength={19}
                 />
@@ -170,7 +179,8 @@ const CheckoutScreen = ({ route, navigation }) => {
                     placeholder="MM/YY"
                     placeholderTextColor={Colors.textMuted}
                     value={expiryDate}
-                    onChangeText={setExpiryDate}
+                    onChangeText={(value) => setExpiryDate(formatExpiry(value))}
+                    keyboardType="numeric"
                     maxLength={5}
                   />
                 </View>
@@ -181,7 +191,7 @@ const CheckoutScreen = ({ route, navigation }) => {
                     placeholder="123"
                     placeholderTextColor={Colors.textMuted}
                     value={cvv}
-                    onChangeText={setCvv}
+                    onChangeText={(value) => setCvv(digitsOnly(value))}
                     keyboardType="numeric"
                     maxLength={3}
                     secureTextEntry

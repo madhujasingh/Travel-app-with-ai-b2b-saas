@@ -20,6 +20,7 @@ import API_CONFIG from '../config/api';
 import DatePickerModal from '../components/DatePickerModal';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
+import { digitsOnly } from '../utils/inputSanitizers';
 
 const formatDisplayDate = (isoDate) => {
   if (!isoDate) return '';
@@ -285,8 +286,9 @@ const ActivitiesScreen = ({ navigation }) => {
             placeholder="1"
             placeholderTextColor={Colors.textMuted}
             value={adults}
-            onChangeText={setAdults}
+            onChangeText={(value) => setAdults(digitsOnly(value))}
             keyboardType="number-pad"
+            maxLength={2}
           />
         </View>
 
@@ -298,8 +300,9 @@ const ActivitiesScreen = ({ navigation }) => {
             placeholder="0"
             placeholderTextColor={Colors.textMuted}
             value={children}
-            onChangeText={setChildren}
+            onChangeText={(value) => setChildren(digitsOnly(value))}
             keyboardType="number-pad"
+            maxLength={2}
           />
         </View>
 
@@ -311,7 +314,7 @@ const ActivitiesScreen = ({ navigation }) => {
               placeholder={`Child ${index + 1} age`}
               placeholderTextColor={Colors.textMuted}
               value={age}
-              onChangeText={(value) => updateChildAge(index, value)}
+              onChangeText={(value) => updateChildAge(index, digitsOnly(value))}
               keyboardType="number-pad"
               maxLength={2}
             />

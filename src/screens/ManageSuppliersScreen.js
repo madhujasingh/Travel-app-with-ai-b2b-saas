@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
+import { phoneDigits } from '../utils/inputSanitizers';
 
 const SUPPLIER_TYPES = ['HOTEL', 'TOUR_OPERATOR', 'TRANSPORT', 'ACTIVITY', 'OTHER'];
 
@@ -307,10 +308,11 @@ const ManageSuppliersScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 value={form.phone}
-                onChangeText={(v) => updateField('phone', v)}
+                onChangeText={(v) => updateField('phone', phoneDigits(v))}
                 placeholder="Phone number"
                 placeholderTextColor={Colors.textMuted}
                 keyboardType="phone-pad"
+                maxLength={15}
               />
 
               <Text style={styles.fieldLabel}>Company</Text>

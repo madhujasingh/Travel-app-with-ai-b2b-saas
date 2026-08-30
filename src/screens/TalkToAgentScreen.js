@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
+import { phoneDigits } from '../utils/inputSanitizers';
 
 const TalkToAgentScreen = ({ route, navigation }) => {
   const canGoBack = navigation.canGoBack();
@@ -199,8 +200,9 @@ const TalkToAgentScreen = ({ route, navigation }) => {
               placeholder="+91 98765 43210"
               placeholderTextColor={Colors.textMuted}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(value) => setPhone(phoneDigits(value))}
               keyboardType="phone-pad"
+              maxLength={15}
             />
           </View>
 

@@ -27,6 +27,7 @@ import {
   splitRemarks,
   formatCancellationDate,
 } from '../utils/activityPaxPricing';
+import { phoneDigits } from '../utils/inputSanitizers';
 
 // Free-text agency reference HotelBeds stores alongside the booking (up to
 // 20 chars per the docs) - generated rather than asked from the customer,
@@ -556,8 +557,9 @@ const ActivityBookingScreen = ({ route, navigation }) => {
           placeholder="Phone number"
           placeholderTextColor={Colors.textMuted}
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(value) => setPhone(phoneDigits(value))}
           keyboardType="phone-pad"
+          maxLength={15}
         />
         <View style={styles.row}>
           <TextInput

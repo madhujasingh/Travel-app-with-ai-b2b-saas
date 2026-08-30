@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { destinationMediaFor } from '../utils/destinationMedia';
+import { digitsOnly } from '../utils/inputSanitizers';
 
 const MOOD_OPTIONS = [
   { label: 'Relaxed', value: 'relaxed', icon: 'leaf-outline' },
@@ -471,10 +472,11 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
                   <TextInput
                     style={styles.stepperInput}
                     value={budgetInput}
-                    onChangeText={setBudgetInput}
+                    onChangeText={(value) => setBudgetInput(digitsOnly(value))}
                     keyboardType="numeric"
                     placeholder="25000"
                     placeholderTextColor={Colors.textMuted}
+                    maxLength={9}
                   />
                   <Text style={styles.stepperMeta}>INR</Text>
                 </View>
@@ -494,10 +496,11 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
                   <TextInput
                     style={styles.stepperInput}
                     value={peopleInput}
-                    onChangeText={setPeopleInput}
+                    onChangeText={(value) => setPeopleInput(digitsOnly(value))}
                     keyboardType="numeric"
                     placeholder="2"
                     placeholderTextColor={Colors.textMuted}
+                    maxLength={2}
                   />
                   <Text style={styles.stepperMeta}>people</Text>
                 </View>

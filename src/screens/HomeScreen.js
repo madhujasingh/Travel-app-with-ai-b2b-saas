@@ -14,6 +14,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
+import { digitsOnly } from '../utils/inputSanitizers';
 
 const HomeScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -139,7 +140,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.greeting}>Welcome to</Text>
-              <Text style={styles.appName}>Itinera</Text>
+              <Text style={styles.appName}>MyItenary</Text>
               <Text style={styles.subtitle}>Plan your perfect trip</Text>
             </View>
             <View style={styles.headerActions}>
@@ -223,8 +224,9 @@ const HomeScreen = ({ navigation }) => {
                   placeholder="Example: 25000"
                   placeholderTextColor={Colors.textMuted}
                   value={budget}
-                  onChangeText={setBudget}
+                  onChangeText={(value) => setBudget(digitsOnly(value))}
                   keyboardType="numeric"
+                  maxLength={9}
                 />
               </View>
               </Animated.View>
@@ -264,8 +266,9 @@ const HomeScreen = ({ navigation }) => {
                   placeholder="At least 1"
                   placeholderTextColor={Colors.textMuted}
                   value={adults}
-                  onChangeText={setAdults}
+                  onChangeText={(value) => setAdults(digitsOnly(value))}
                   keyboardType="numeric"
+                  maxLength={2}
                 />
               </View>
               </Animated.View>
@@ -285,8 +288,9 @@ const HomeScreen = ({ navigation }) => {
                   placeholder="0"
                   placeholderTextColor={Colors.textMuted}
                   value={children}
-                  onChangeText={setChildren}
+                  onChangeText={(value) => setChildren(digitsOnly(value))}
                   keyboardType="numeric"
+                  maxLength={2}
                 />
               </View>
               </Animated.View>
