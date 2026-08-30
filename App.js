@@ -20,6 +20,7 @@ import CheckoutScreen from './src/screens/CheckoutScreen';
 import TalkToAgentScreen from './src/screens/TalkToAgentScreen';
 import PromotionsScreen from './src/screens/PromotionsScreen';
 import HotelsScreen from './src/screens/HotelsScreen';
+import HotelSearchResultsScreen from './src/screens/HotelSearchResultsScreen';
 import HotelDetailScreen from './src/screens/HotelDetailScreen';
 import HotelBookingScreen from './src/screens/HotelBookingScreen';
 import FlightsScreen from './src/screens/FlightsScreen';
@@ -299,6 +300,7 @@ export default function App() {
               <Stack.Screen name="Checkout" component={CheckoutScreen} />
               <Stack.Screen name="TalkToAgent" component={TalkToAgentScreen} />
               <Stack.Screen name="Hotels" component={HotelsScreen} />
+              <Stack.Screen name="HotelSearchResults" component={HotelSearchResultsScreen} />
               <Stack.Screen name="HotelDetail" component={HotelDetailScreen} />
               <Stack.Screen name="HotelBooking" component={HotelBookingScreen} />
               <Stack.Screen name="Flights" component={FlightsScreen} />

@@ -1,9 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   ImageBackground,
   Modal,
   Pressable,
@@ -18,7 +17,6 @@ import {
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Callout, Marker } from '../components/MapViewCompat';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson, SEARCH_SESSION_MS } from '../utils/hotelApiErrors';
@@ -63,7 +61,6 @@ const createEmptyRoom = () => ({ adults: 2, children: 0, childAge: [] });
 // TripJack's /hotels/listing caps at 100 hids per call, so a city with more
 // synced hotels than that needs multiple calls merged together.
 const LISTING_CHUNK_SIZE = 100;
-const RESULTS_PAGE_SIZE = 20;
 
 const chunkArray = (arr, size) => {
   const chunks = [];
@@ -83,19 +80,6 @@ const HotelsScreen = ({ navigation }) => {
   const [currency, setCurrency] = useState('INR');
 
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [hotels, setHotels] = useState([]);
-  const [searchSession, setSearchSession] = useState(null);
-  const [filtersModalVisible, setFiltersModalVisible] = useState(false);
-  const [selectedStars, setSelectedStars] = useState(() => new Set());
-  const [selectedMealBasis, setSelectedMealBasis] = useState(() => new Set());
-  const [selectedPriceBucketKeys, setSelectedPriceBucketKeys] = useState(() => new Set());
-  const [gstApplicableOnly, setGstApplicableOnly] = useState(false);
-  const [selectedPropertyTypes, setSelectedPropertyTypes] = useState(() => new Set());
-  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
-  const [visibleCount, setVisibleCount] = useState(RESULTS_PAGE_SIZE);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-  const scrollViewRef = useRef(null);
 
   const [nationalities, setNationalities] = useState(null);
   const [nationalityModal, setNationalityModal] = useState(false);
@@ -113,23 +97,6 @@ const HotelsScreen = ({ navigation }) => {
 
   const openDatePicker = (field) => setDatePickerField(field);
   const closeDatePicker = () => setDatePickerField(null);
-
-  const clearAllFilters = () => {
-    setSelectedStars(new Set());
-    setSelectedMealBasis(new Set());
-    setSelectedPriceBucketKeys(new Set());
-    setGstApplicableOnly(false);
-    setSelectedPropertyTypes(new Set());
-  };
-
-  const toggleSetValue = (setter, value) => {
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      return next;
-    });
-  };
 
   // Tapping Check-in opens the picker in range mode (see DatePickerModal) so
   // both dates are chosen in one continuous session; this only handles the
@@ -254,12 +221,6 @@ const HotelsScreen = ({ navigation }) => {
       };
 
       setLoading(true);
-      setSearched(true);
-      setHotels([]);
-      clearAllFilters();
-      setViewMode('list');
-      setVisibleCount(RESULTS_PAGE_SIZE);
-      setSearchSession(null);
 
       const chunks = chunkArray(hids, LISTING_CHUNK_SIZE);
       const responses = await Promise.all(
@@ -280,41 +241,29 @@ const HotelsScreen = ({ navigation }) => {
       if (__DEV__) console.log('[hotel listing] RESPONSES', JSON.stringify(responses));
 
       const mergedHotels = responses.flatMap((data) => data.hotels || []);
-      setHotels(mergedHotels);
       // Same correlationId (the docs call it "searchId" in prose) must be reused
       // for Detail and Review - the session is valid ~15 minutes from Listing.
-      setSearchSession({
-        correlationId,
-        checkIn,
-        checkOut,
-        rooms: roomsPayload,
-        currency: currency.trim().toUpperCase(),
-        nationality: nationality.trim(),
-        expiresAt: Date.now() + SEARCH_SESSION_MS,
+      // Results render on their own screen (see HotelSearchResultsScreen)
+      // instead of inline below the form, so results are visible immediately
+      // without scrolling past the search form.
+      navigation.navigate('HotelSearchResults', {
+        hotels: mergedHotels,
+        searchSession: {
+          correlationId,
+          checkIn,
+          checkOut,
+          rooms: roomsPayload,
+          currency: currency.trim().toUpperCase(),
+          nationality: nationality.trim(),
+          expiresAt: Date.now() + SEARCH_SESSION_MS,
+        },
+        destinationLabel,
       });
     } catch (error) {
-      setHotels([]);
       Alert.alert('Hotel Search', error.message || 'Unable to fetch hotels right now.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const openHotelDetail = (hotel) => {
-    if (!searchSession || Date.now() >= searchSession.expiresAt) {
-      Alert.alert('Search expired', 'Your search session has expired. Please search again.');
-      return;
-    }
-
-    navigation.navigate('HotelDetail', {
-      // Listing/Detail responses use "hotelId", not the "tjHotelId" the docs
-      // describe - confirmed against real captured responses. Only the
-      // static-content endpoints (hotel-mapping/hotel-content, used by
-      // selectCity below) actually use tjHotelId.
-      tjHotelId: hotel.hotelId,
-      hotelName: hotel.name,
-      searchContext: searchSession,
-    });
   };
 
   // ---- Nationality picker (GET /hotels/nationalities) ----
@@ -403,280 +352,6 @@ const HotelsScreen = ({ navigation }) => {
     `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
   );
 
-  // Best practice from the docs: filter out options where inventory.available
-  // is explicitly false before picking what to display. Listing only ever
-  // returns ONE option per hotel (its cheapest) - unlike Detail, which
-  // returns every rate - so every hotel-level filter below (meal basis,
-  // price, GST) reflects that one cheapest option, not the hotel's full
-  // range of rates.
-  const getTopOption = (item) => (item.options || []).find((option) => option.inventory?.available !== false);
-
-  // Filter option lists + counts, computed from the full unfiltered result
-  // set (not filteredHotels) so a count always reflects "how many hotels
-  // this option would show if picked on its own" - matches TripJack's own
-  // per-option counts (see the reference screenshots) rather than counts
-  // that shrink as other filters are layered on.
-  const starRatingOptions = useMemo(() => {
-    const counts = {};
-    hotels.forEach((item) => {
-      const stars = Math.round(parseFloat(item.starRating));
-      if (Number.isFinite(stars) && stars >= 1 && stars <= 5) {
-        counts[stars] = (counts[stars] || 0) + 1;
-      }
-    });
-    return [5, 4, 3, 2, 1].filter((value) => counts[value] > 0).map((value) => ({ value, count: counts[value] }));
-  }, [hotels]);
-
-  const mealBasisOptions = useMemo(() => {
-    const counts = {};
-    hotels.forEach((item) => {
-      const meal = getTopOption(item)?.mealBasis;
-      if (meal) counts[meal] = (counts[meal] || 0) + 1;
-    });
-    return Object.entries(counts)
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [hotels]);
-
-  const propertyTypeOptions = useMemo(() => {
-    const counts = {};
-    hotels.forEach((item) => {
-      if (item.propertyType) counts[item.propertyType] = (counts[item.propertyType] || 0) + 1;
-    });
-    return Object.entries(counts)
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [hotels]);
-
-  const gstApplicableCount = useMemo(
-    () =>
-      hotels.filter((item) => {
-        const gst = getTopOption(item)?.compliance?.gstType;
-        return gst && gst !== 'NA';
-      }).length,
-    [hotels]
-  );
-
-  // Roughly-equal-count buckets over the cheapest-option price, same shape
-  // as TripJack's own Price Range filter (see reference screenshots) rather
-  // than fixed-width bands that could leave most buckets empty depending on
-  // the city's price spread.
-  const priceBuckets = useMemo(() => {
-    const prices = hotels
-      .map((item) => getTopOption(item)?.pricing?.totalPrice)
-      .filter((p) => Number.isFinite(p))
-      .sort((a, b) => a - b);
-    if (prices.length === 0) return [];
-    const bucketCount = Math.min(6, prices.length);
-    const buckets = [];
-    for (let i = 0; i < bucketCount; i++) {
-      const startIdx = Math.floor((i / bucketCount) * prices.length);
-      const endIdx = i === bucketCount - 1 ? prices.length - 1 : Math.floor(((i + 1) / bucketCount) * prices.length) - 1;
-      const min = prices[startIdx];
-      const max = prices[Math.max(startIdx, endIdx)];
-      buckets.push({
-        key: `${min}-${max}`,
-        min,
-        max,
-        count: endIdx - startIdx + 1,
-        label:
-          i === 0
-            ? `Up to ₹${Math.round(max).toLocaleString()}`
-            : `₹${Math.round(min).toLocaleString()} – ₹${Math.round(max).toLocaleString()}`,
-      });
-    }
-    return buckets;
-  }, [hotels]);
-
-  const activeFilterCount =
-    selectedStars.size +
-    selectedMealBasis.size +
-    selectedPriceBucketKeys.size +
-    selectedPropertyTypes.size +
-    (gstApplicableOnly ? 1 : 0);
-
-  const filteredHotels = useMemo(() => {
-    return hotels.filter((item) => {
-      if (selectedStars.size > 0) {
-        const stars = Math.round(parseFloat(item.starRating));
-        if (!selectedStars.has(stars)) return false;
-      }
-
-      const topOption = getTopOption(item);
-
-      if (selectedMealBasis.size > 0) {
-        if (!topOption || !selectedMealBasis.has(topOption.mealBasis)) return false;
-      }
-
-      if (selectedPriceBucketKeys.size > 0) {
-        const price = topOption?.pricing?.totalPrice;
-        if (!Number.isFinite(price)) return false;
-        const inSelectedBucket = priceBuckets.some(
-          (bucket) => selectedPriceBucketKeys.has(bucket.key) && price >= bucket.min && price <= bucket.max
-        );
-        if (!inSelectedBucket) return false;
-      }
-
-      if (gstApplicableOnly) {
-        const gst = topOption?.compliance?.gstType;
-        if (!gst || gst === 'NA') return false;
-      }
-
-      if (selectedPropertyTypes.size > 0) {
-        if (!item.propertyType || !selectedPropertyTypes.has(item.propertyType)) return false;
-      }
-
-      return true;
-    });
-  }, [hotels, selectedStars, selectedMealBasis, selectedPriceBucketKeys, gstApplicableOnly, selectedPropertyTypes, priceBuckets]);
-
-  const mappableHotels = useMemo(
-    () =>
-      filteredHotels.filter(
-        (item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude)
-      ),
-    [filteredHotels]
-  );
-
-  const mapRegion = useMemo(() => {
-    if (mappableHotels.length === 0) return null;
-    const lats = mappableHotels.map((item) => item.latitude);
-    const lngs = mappableHotels.map((item) => item.longitude);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLng + maxLng) / 2,
-      latitudeDelta: Math.max(maxLat - minLat, 0.05) * 1.4,
-      longitudeDelta: Math.max(maxLng - minLng, 0.05) * 1.4,
-    };
-  }, [mappableHotels]);
-
-  const renderHotel = ({ item, index }) => {
-    const topOption = getTopOption(item);
-    const pricing = topOption?.pricing;
-
-    return (
-      <TouchableOpacity style={styles.hotelCard} activeOpacity={0.85} onPress={() => openHotelDetail(item)}>
-        <View style={styles.hotelIndexBadge} pointerEvents="none">
-          <Text style={styles.hotelIndexBadgeText}>
-            {index + 1} of {filteredHotels.length}
-          </Text>
-        </View>
-        {item.heroImageUrl ? (
-          <Image source={{ uri: item.heroImageUrl }} style={styles.hotelImage} resizeMode="cover" />
-        ) : (
-          <View style={styles.hotelHeader}>
-            <Ionicons name="business" size={44} color={Colors.secondary} />
-          </View>
-        )}
-
-        <View style={styles.hotelContent}>
-          <Text style={styles.hotelName}>{item.name}</Text>
-
-          {(item.starRating || item.city) && (
-            <View style={styles.hotelMetaRow}>
-              {item.starRating ? (
-                <View style={styles.starRow}>
-                  {Array.from({ length: Math.round(parseFloat(item.starRating)) || 0 }).map((_, i) => (
-                    <Ionicons key={i} name="star" size={12} color={Colors.warning} />
-                  ))}
-                </View>
-              ) : null}
-              {item.city ? <Text style={styles.hotelCity}>{item.city}</Text> : null}
-            </View>
-          )}
-
-          {topOption && (
-            <>
-              <View style={styles.tagRow}>
-                <View style={styles.tag}>
-                  <Text style={styles.tagText}>{topOption.mealBasis}</Text>
-                </View>
-                {topOption.cancellation?.isRefundable && (
-                  <View style={[styles.tag, styles.tagSuccess]}>
-                    <Ionicons name="checkmark-circle-outline" size={12} color={Colors.success} />
-                    <Text style={[styles.tagText, styles.tagSuccessText]}>Refundable</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.hotelFooter}>
-                <View style={styles.priceContainer}>
-                  <Text style={styles.priceLabel}>Total for stay</Text>
-                  {pricing?.strikeThrough > pricing?.totalPrice && (
-                    <Text style={styles.strikeThroughPrice}>
-                      {pricing.currency} {Number(pricing.strikeThrough).toLocaleString()}
-                    </Text>
-                  )}
-                  <Text style={styles.price}>
-                    {pricing?.currency} {Number(pricing?.totalPrice || 0).toLocaleString()}
-                  </Text>
-                  {(() => {
-                    const nights = nightsBetween(checkIn, checkOut);
-                    if (!pricing?.totalPrice || nights <= 1) return null;
-                    return (
-                      <Text style={styles.perNightPrice}>
-                        {pricing.currency} {Math.round(pricing.totalPrice / nights).toLocaleString()} / night
-                      </Text>
-                    );
-                  })()}
-                </View>
-                <View style={styles.viewOptionsButton}>
-                  <Text style={styles.viewOptionsText}>View Options</Text>
-                  <Ionicons name="chevron-forward" size={16} color={Colors.secondary} />
-                </View>
-              </View>
-            </>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  if (viewMode === 'map' && mapRegion) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
-
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setViewMode('list')}>
-            <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Map view</Text>
-          <View style={{ width: 30 }} />
-        </View>
-
-        <MapView style={styles.map} initialRegion={mapRegion}>
-          {mappableHotels.map((item) => {
-            const pricing = getTopOption(item)?.pricing;
-            return (
-              <Marker
-                key={item.hotelId}
-                coordinate={{ latitude: item.latitude, longitude: item.longitude }}
-              >
-                <Callout onPress={() => openHotelDetail(item)}>
-                  <View style={styles.calloutCard}>
-                    <Text style={styles.calloutTitle} numberOfLines={1}>{item.name}</Text>
-                    {item.city ? <Text style={styles.calloutMeta}>{item.city}</Text> : null}
-                    {pricing && (
-                      <Text style={styles.calloutPrice}>
-                        {pricing.currency} {Number(pricing.totalPrice || 0).toLocaleString()}
-                      </Text>
-                    )}
-                    <Text style={styles.calloutLink}>View details</Text>
-                  </View>
-                </Callout>
-              </Marker>
-            );
-          })}
-        </MapView>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.accentBlueDark} barStyle="light-content" />
@@ -699,19 +374,7 @@ const HotelsScreen = ({ navigation }) => {
         </View>
       </ImageBackground>
 
-      <ScrollView
-        ref={scrollViewRef}
-        showsVerticalScrollIndicator={false}
-        onScroll={({ nativeEvent }) => {
-          const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
-          const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 300;
-          if (nearBottom) {
-            setVisibleCount((prev) => Math.min(prev + RESULTS_PAGE_SIZE, filteredHotels.length));
-          }
-          setShowScrollTop(contentOffset.y > 400);
-        }}
-        scrollEventThrottle={200}
-      >
+      <ScrollView showsVerticalScrollIndicator={false}>
         <PromoBannerCarousel placement="HOTELS" />
 
         <View style={styles.formCard}>
@@ -876,101 +539,32 @@ const HotelsScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {!searched && (
-          <>
-            <View style={styles.trustBadgeRow}>
-              <View style={styles.trustBadge}>
-                <View style={styles.trustBadgeIconWrap}>
-                  <Ionicons name="shield-checkmark-outline" size={18} color={Colors.accentBlue} />
-                </View>
-                <Text style={styles.trustBadgeText}>Best Price{'\n'}Guarantee</Text>
-              </View>
-              <View style={styles.trustBadge}>
-                <View style={styles.trustBadgeIconWrap}>
-                  <Ionicons name="headset-outline" size={18} color={Colors.accentBlue} />
-                </View>
-                <Text style={styles.trustBadgeText}>24/7{'\n'}Support</Text>
-              </View>
-              <View style={styles.trustBadge}>
-                <View style={styles.trustBadgeIconWrap}>
-                  <Ionicons name="lock-closed-outline" size={18} color={Colors.accentBlue} />
-                </View>
-                <Text style={styles.trustBadgeText}>Secure{'\n'}Booking</Text>
-              </View>
+        <View style={styles.trustBadgeRow}>
+          <View style={styles.trustBadge}>
+            <View style={styles.trustBadgeIconWrap}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={Colors.accentBlue} />
             </View>
-
-            <View style={styles.flightPathRow}>
-              <View style={styles.flightPathLine} />
-              <Ionicons name="airplane" size={16} color={Colors.accentBlue} style={styles.flightPathIcon} />
-            </View>
-          </>
-        )}
-
-        {searched && !loading && hotels.length > 0 && (
-          <View style={styles.resultsToolbar}>
-            <View style={styles.resultsToolbarRow}>
-              <TouchableOpacity style={styles.filtersButton} onPress={() => setFiltersModalVisible(true)}>
-                <Ionicons name="options-outline" size={16} color={Colors.primary} />
-                <Text style={styles.filtersButtonText}>Filters</Text>
-                {activeFilterCount > 0 && (
-                  <View style={styles.filtersBadge}>
-                    <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-            <View style={styles.resultsMetaRow}>
-              <Text style={styles.resultsCount}>
-                {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
-                {filteredHotels.length === 1 ? '' : 's'} loaded
-                {visibleCount < filteredHotels.length ? ' · scroll for more' : ''}
-              </Text>
-              {mappableHotels.length > 0 && (
-                <TouchableOpacity style={styles.mapViewButton} onPress={() => setViewMode('map')}>
-                  <Ionicons name="map-outline" size={14} color={Colors.primary} />
-                  <Text style={styles.mapViewButtonText}>Map view</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={styles.trustBadgeText}>Best Price{'\n'}Guarantee</Text>
           </View>
-        )}
-
-        {searched && !loading && hotels.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="bed-outline" size={40} color={Colors.textMuted} />
-            <Text style={styles.emptyStateText}>No hotels found for this search.</Text>
-            <Text style={styles.emptyStateSubtext}>Try different dates or another city.</Text>
+          <View style={styles.trustBadge}>
+            <View style={styles.trustBadgeIconWrap}>
+              <Ionicons name="headset-outline" size={18} color={Colors.accentBlue} />
+            </View>
+            <Text style={styles.trustBadgeText}>24/7{'\n'}Support</Text>
           </View>
-        )}
-
-        {searched && !loading && hotels.length > 0 && filteredHotels.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="filter-outline" size={40} color={Colors.textMuted} />
-            <Text style={styles.emptyStateText}>No hotels match these filters.</Text>
-            <TouchableOpacity style={styles.clearFilterButton} onPress={clearAllFilters}>
-              <Text style={styles.clearFilterButtonText}>Clear Filters</Text>
-            </TouchableOpacity>
+          <View style={styles.trustBadge}>
+            <View style={styles.trustBadgeIconWrap}>
+              <Ionicons name="lock-closed-outline" size={18} color={Colors.accentBlue} />
+            </View>
+            <Text style={styles.trustBadgeText}>Secure{'\n'}Booking</Text>
           </View>
-        )}
+        </View>
 
-        <FlatList
-          data={filteredHotels.slice(0, visibleCount)}
-          renderItem={renderHotel}
-          keyExtractor={(item) => item.hotelId}
-          contentContainerStyle={styles.listContainer}
-          scrollEnabled={false}
-        />
+        <View style={styles.flightPathRow}>
+          <View style={styles.flightPathLine} />
+          <Ionicons name="airplane" size={16} color={Colors.accentBlue} style={styles.flightPathIcon} />
+        </View>
       </ScrollView>
-
-      {showScrollTop && (
-        <TouchableOpacity
-          style={styles.scrollTopButton}
-          activeOpacity={0.85}
-          onPress={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
-        >
-          <Ionicons name="arrow-up" size={22} color={Colors.secondary} />
-        </TouchableOpacity>
-      )}
 
       <Modal visible={nationalityModal} transparent animationType="fade" onRequestClose={() => setNationalityModal(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setNationalityModal(false)}>
@@ -1043,153 +637,6 @@ const HotelsScreen = ({ navigation }) => {
                 )}
               />
             )}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={filtersModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFiltersModalVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setFiltersModalVisible(false)}>
-          <Pressable style={styles.filtersModalCard} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filters</Text>
-              <TouchableOpacity onPress={clearAllFilters}>
-                <Text style={styles.resetFiltersText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.filtersScroll} showsVerticalScrollIndicator={false}>
-              {starRatingOptions.length > 0 && (
-                <>
-                  <Text style={styles.filterSectionTitle}>Star Rating</Text>
-                  <View style={styles.filterOptionsList}>
-                    {starRatingOptions.map(({ value, count }) => {
-                      const active = selectedStars.has(value);
-                      return (
-                        <TouchableOpacity
-                          key={value}
-                          style={styles.filterOptionRow}
-                          onPress={() => toggleSetValue(setSelectedStars, value)}
-                        >
-                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
-                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
-                          </View>
-                          <View style={styles.starRow}>
-                            {Array.from({ length: value }).map((_, i) => (
-                              <Ionicons key={i} name="star" size={13} color={Colors.warning} />
-                            ))}
-                          </View>
-                          <Text style={styles.filterOptionCount}>({count})</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {mealBasisOptions.length > 0 && (
-                <>
-                  <Text style={styles.filterSectionTitle}>Meal Basis</Text>
-                  <View style={styles.filterOptionsList}>
-                    {mealBasisOptions.map(({ value, count }) => {
-                      const active = selectedMealBasis.has(value);
-                      return (
-                        <TouchableOpacity
-                          key={value}
-                          style={styles.filterOptionRow}
-                          onPress={() => toggleSetValue(setSelectedMealBasis, value)}
-                        >
-                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
-                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
-                          </View>
-                          <Text style={styles.filterOptionLabel}>{value}</Text>
-                          <Text style={styles.filterOptionCount}>({count})</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {priceBuckets.length > 0 && (
-                <>
-                  <Text style={styles.filterSectionTitle}>Price Range</Text>
-                  <View style={styles.filterOptionsList}>
-                    {priceBuckets.map((bucket) => {
-                      const active = selectedPriceBucketKeys.has(bucket.key);
-                      return (
-                        <TouchableOpacity
-                          key={bucket.key}
-                          style={styles.filterOptionRow}
-                          onPress={() => toggleSetValue(setSelectedPriceBucketKeys, bucket.key)}
-                        >
-                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
-                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
-                          </View>
-                          <Text style={styles.filterOptionLabel}>{bucket.label}</Text>
-                          <Text style={styles.filterOptionCount}>({bucket.count})</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {gstApplicableCount > 0 && (
-                <>
-                  <Text style={styles.filterSectionTitle}>GST Applicable</Text>
-                  <View style={styles.filterOptionsList}>
-                    <TouchableOpacity
-                      style={styles.filterOptionRow}
-                      onPress={() => setGstApplicableOnly((v) => !v)}
-                    >
-                      <View style={[styles.checkbox, gstApplicableOnly && styles.checkboxActive]}>
-                        {gstApplicableOnly && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
-                      </View>
-                      <Text style={styles.filterOptionLabel}>GST Applicable</Text>
-                      <Text style={styles.filterOptionCount}>({gstApplicableCount})</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-
-              {propertyTypeOptions.length > 0 && (
-                <>
-                  <Text style={styles.filterSectionTitle}>Property Type</Text>
-                  <View style={styles.filterOptionsList}>
-                    {propertyTypeOptions.map(({ value, count }) => {
-                      const active = selectedPropertyTypes.has(value);
-                      return (
-                        <TouchableOpacity
-                          key={value}
-                          style={styles.filterOptionRow}
-                          onPress={() => toggleSetValue(setSelectedPropertyTypes, value)}
-                        >
-                          <View style={[styles.checkbox, active && styles.checkboxActive]}>
-                            {active && <Ionicons name="checkmark" size={13} color={Colors.secondary} />}
-                          </View>
-                          <Text style={styles.filterOptionLabel}>{value}</Text>
-                          <Text style={styles.filterOptionCount}>({count})</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-            </ScrollView>
-
-            <View style={styles.filtersFooter}>
-              <TouchableOpacity style={styles.filtersCloseButton} onPress={() => setFiltersModalVisible(false)}>
-                <Text style={styles.filtersCloseButtonText}>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.filtersApplyButton} onPress={() => setFiltersModalVisible(false)}>
-                <Text style={styles.filtersApplyButtonText}>Apply Filter</Text>
-              </TouchableOpacity>
-            </View>
           </Pressable>
         </Pressable>
       </Modal>
