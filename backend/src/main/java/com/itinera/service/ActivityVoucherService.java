@@ -96,7 +96,8 @@ public class ActivityVoucherService {
             table.setSpacingAfter(14);
 
             addRow(table, labelFont, valueFont, "Modality", activity.path("modality").path("name").asText(""));
-            addRow(table, labelFont, valueFont, "Date", formatDateRange(activity));
+            addRow(table, labelFont, valueFont, "From", activity.path("dateFrom").asText(""));
+            addRow(table, labelFont, valueFont, "To", activity.path("dateTo").asText(""));
             addRow(table, labelFont, valueFont, "Passenger", holderName(booking));
             addRow(table, labelFont, valueFont, "Booking Confirmed", booking.path("creationDate").asText(""));
             addRow(table, labelFont, valueFont, "Pax Distribution", paxSummary(activity));
@@ -139,15 +140,6 @@ public class ActivityVoucherService {
         valueCell.setPaddingBottom(2);
         table.addCell(labelCell);
         table.addCell(valueCell);
-    }
-
-    private String formatDateRange(JsonNode activity) {
-        String from = activity.path("dateFrom").asText("");
-        String to = activity.path("dateTo").asText("");
-        if (from.equals(to)) {
-            return from;
-        }
-        return from + " to " + to;
     }
 
     private String holderName(JsonNode booking) {
