@@ -20,7 +20,13 @@ import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
-import { buildPaxBreakdown, describePaxDistribution, contractRemarks } from '../utils/activityPaxPricing';
+import {
+  buildPaxBreakdown,
+  describePaxDistribution,
+  contractRemarks,
+  splitRemarks,
+  formatCancellationDate,
+} from '../utils/activityPaxPricing';
 
 // Free-text agency reference HotelBeds stores alongside the booking (up to
 // 20 chars per the docs) - generated rather than asked from the customer,
@@ -415,7 +421,9 @@ const ActivityBookingScreen = ({ route, navigation }) => {
               {!!remarks && (
                 <View style={styles.confirmationSection}>
                   <Text style={styles.confirmationSectionTitle}>Redeem Instructions</Text>
-                  <Text style={styles.confirmationSectionText}>{remarks}</Text>
+                  {splitRemarks(remarks).map((line, index) => (
+                    <Text key={index} style={styles.confirmationSectionText}>{'•'} {line}</Text>
+                  ))}
                 </View>
               )}
 
@@ -424,7 +432,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
                   <Text style={styles.confirmationSectionTitle}>Cancellation Policy</Text>
                   {cancellationPolicies.map((policy, index) => (
                     <Text key={index} style={styles.confirmationSectionText}>
-                      From {policy.dateFrom}: {paidCurrency} {policy.amount} penalty
+                      From {formatCancellationDate(policy.dateFrom)}: {paidCurrency} {policy.amount} penalty
                     </Text>
                   ))}
                 </View>

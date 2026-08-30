@@ -132,7 +132,15 @@ public class ActivityVoucherService {
                 Paragraph remarksLabel = new Paragraph("Redeem Instructions / Remarks", labelFont);
                 remarksLabel.setSpacingBefore(6);
                 document.add(remarksLabel);
-                document.add(new Paragraph(remarks, remarksFont));
+                // Suppliers concatenate distinct segments (meeting point, schedule,
+                // voucher type, restrictions...) using "//" as a delimiter - split
+                // back out into bullet points instead of one dense paragraph.
+                for (String line : remarks.split("\\n|//")) {
+                    String trimmed = line.trim();
+                    if (!trimmed.isEmpty()) {
+                        document.add(new Paragraph("\u2022 " + trimmed, remarksFont));
+                    }
+                }
             }
 
             document.close();

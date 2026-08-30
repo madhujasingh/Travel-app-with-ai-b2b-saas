@@ -81,3 +81,29 @@ export const contractRemarks = (comments) => {
     .filter(Boolean)
     .join('\n');
 };
+
+// HotelBeds concatenates distinct remark segments (meeting point, schedule,
+// voucher type, restrictions, etc.) into one CONTRACT_REMARKS string using
+// "//" as a delimiter - split it back out into readable bullet points
+// instead of one dense paragraph. Doesn't drop or reorder any text, just
+// re-splits it on the supplier's own delimiter.
+export const splitRemarks = (text) => {
+  if (!text) return [];
+  return text
+    .split(/\n|\/\//)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+};
+
+export const formatCancellationDate = (isoString) => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};

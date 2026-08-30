@@ -17,7 +17,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
-import { buildPaxBreakdown, contractRemarks } from '../utils/activityPaxPricing';
+import { buildPaxBreakdown, contractRemarks, splitRemarks, formatCancellationDate } from '../utils/activityPaxPricing';
 
 // Content descriptions come back as HTML (<br />, <strong>, etc.) - RN has
 // no HTML renderer wired up here, so this strips tags down to plain text
@@ -159,9 +159,9 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                   Child pricing applies ages {modality.minChildrenAge}-{modality.maxChildrenAge}; older children are priced as adults
                 </Text>
               )}
-              {!!contractRemarks(modality.comments) && (
-                <Text style={styles.modalityRemarks}>{contractRemarks(modality.comments)}</Text>
-              )}
+              {splitRemarks(contractRemarks(modality.comments)).map((line, index) => (
+                <Text key={index} style={styles.modalityRemarks}>{'•'} {line}</Text>
+              ))}
               {(modality.rates || []).map((rate) =>
                 (rate.rateDetails || []).map((detail) => {
                   const isSelected = selectedRate?.rateKey === detail.rateKey;
@@ -239,7 +239,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
             {cancellationPolicies.length > 0 ? (
               cancellationPolicies.map((policy, index) => (
                 <Text key={index} style={styles.cancellationText}>
-                  Free cancellation until {policy.dateFrom} - {activity?.currency} {policy.amount} penalty after
+                  Free cancellation until {formatCancellationDate(policy.dateFrom)} - {activity?.currency} {policy.amount} penalty after
                 </Text>
               ))
             ) : (
