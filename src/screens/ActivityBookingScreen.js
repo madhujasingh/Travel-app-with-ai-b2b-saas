@@ -8,9 +8,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
+
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';

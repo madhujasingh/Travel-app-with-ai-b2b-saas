@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 
@@ -256,6 +257,7 @@ export default function App() {
   }
 
   return (
+    <SafeAreaProvider>
     <AuthContext.Provider value={authContextValue}>
       <CartProvider>
         {/* Without an explicit flex here, react-native-web lets the whole tree
@@ -326,5 +328,6 @@ export default function App() {
         </NavigationContainer>
       </CartProvider>
     </AuthContext.Provider>
+    </SafeAreaProvider>
   );
 }
