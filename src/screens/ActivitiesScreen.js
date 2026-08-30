@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -59,6 +59,8 @@ const ActivitiesScreen = ({ navigation }) => {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [adults, setAdults] = useState('1');
+  const [children, setChildren] = useState('0');
+  const [childAges, setChildAges] = useState([]);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState(null);
@@ -88,6 +90,18 @@ const ActivitiesScreen = ({ navigation }) => {
     setFromDate(start);
     setToDate(end);
     setDatePickerVisible(false);
+  };
+
+  const childrenCount = Math.max(0, parseInt(children, 10) || 0);
+
+  // Keeps one age input per child as the count changes, preserving whatever
+  // was already typed for the ones that still exist.
+  useEffect(() => {
+    setChildAges((current) => Array.from({ length: childrenCount }, (_, i) => current[i] || ''));
+  }, [childrenCount]);
+
+  const updateChildAge = (index, value) => {
+    setChildAges((current) => current.map((age, i) => (i === index ? value : age)));
   };
 
   const openCountryPicker = async () => {
@@ -186,6 +200,12 @@ const ActivitiesScreen = ({ navigation }) => {
     }
     const adultsCount = Math.max(1, parseInt(adults, 10) || 1);
 
+    const parsedChildAges = childAges.map((age) => parseInt(age, 10));
+    if (childrenCount > 0 && parsedChildAges.some((age) => Number.isNaN(age) || age < 0 || age > 17)) {
+      Alert.alert('Children\'s ages required', 'Please enter a valid age (0-17) for every child.');
+      return;
+    }
+
     // Segment can't be used alone - always paired with destination in the
     // same searchFilterItems array, per the Availability docs.
     const searchFilterItems = [{ type: 'destination', value: destinationCode }];
@@ -197,7 +217,10 @@ const ActivitiesScreen = ({ navigation }) => {
       filters: [{ searchFilterItems }],
       from: fromDate,
       to: toDate,
-      paxes: Array.from({ length: adultsCount }, () => ({ age: 30 })),
+      paxes: [
+        ...Array.from({ length: adultsCount }, () => ({ age: 30 })),
+        ...parsedChildAges.map((age) => ({ age })),
+      ],
       language: 'en',
       pagination: { itemsPerPage: 20, page: 1 },
       order: 'DEFAULT',
@@ -267,6 +290,34 @@ const ActivitiesScreen = ({ navigation }) => {
           />
         </View>
 
+        <Text style={styles.fieldLabel}>Children (ages 0-17)</Text>
+        <View style={styles.inputWithIcon}>
+          <Ionicons name="happy-outline" size={17} color={Colors.primary} />
+          <TextInput
+            style={styles.inputIconTextField}
+            placeholder="0"
+            placeholderTextColor={Colors.textMuted}
+            value={children}
+            onChangeText={setChildren}
+            keyboardType="number-pad"
+          />
+        </View>
+
+        {childAges.map((age, index) => (
+          <View key={index} style={styles.inputWithIcon}>
+            <Ionicons name="person-outline" size={17} color={Colors.primary} />
+            <TextInput
+              style={styles.inputIconTextField}
+              placeholder={`Child ${index + 1} age`}
+              placeholderTextColor={Colors.textMuted}
+              value={age}
+              onChangeText={(value) => updateChildAge(index, value)}
+              keyboardType="number-pad"
+              maxLength={2}
+            />
+          </View>
+        ))}
+
         <Text style={styles.fieldLabel}>Category (optional)</Text>
         <TouchableOpacity style={styles.inputWithIcon} onPress={openSegmentPicker}>
           <Ionicons name="pricetags-outline" size={17} color={Colors.primary} />
@@ -323,6 +374,7 @@ const ActivitiesScreen = ({ navigation }) => {
                     from: fromDate,
                     to: toDate,
                     adults: Math.max(1, parseInt(adults, 10) || 1),
+                    childAges: childAges.map((age) => parseInt(age, 10)),
                   })
                 }
               >

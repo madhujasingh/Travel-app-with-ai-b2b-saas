@@ -96,6 +96,10 @@ public class ActivityVoucherService {
             table.setSpacingAfter(14);
 
             addRow(table, labelFont, valueFont, "Modality", activity.path("modality").path("name").asText(""));
+            String activityLanguage = firstLanguage(activity);
+            if (!activityLanguage.isEmpty()) {
+                addRow(table, labelFont, valueFont, "Language", activityLanguage);
+            }
             addRow(table, labelFont, valueFont, "From", activity.path("dateFrom").asText(""));
             addRow(table, labelFont, valueFont, "To", activity.path("dateTo").asText(""));
             addRow(table, labelFont, valueFont, "Passenger", holderName(booking));
@@ -105,6 +109,13 @@ public class ActivityVoucherService {
             String destination = destinationName(activity);
             if (!destination.isEmpty()) {
                 addRow(table, labelFont, valueFont, "Destination", destination);
+            }
+
+            String providerName = activity.path("providerInformation").path("name").asText("");
+            String providerBookingRef = activity.path("providerInformation").path("bookingReference").asText("");
+            if (!providerName.isEmpty()) {
+                addRow(table, labelFont, valueFont, "Provider",
+                        providerName + (providerBookingRef.isEmpty() ? "" : " (Confirmation: " + providerBookingRef + ")"));
             }
 
             String supplierName = activity.path("supplier").path("name").asText("");
@@ -176,6 +187,27 @@ public class ActivityVoucherService {
             summary.append(" (Age").append(children == 1 ? "" : "s").append(": ").append(childAges).append(")");
         }
         return summary.toString();
+    }
+
+    // Only present "in case the activity has a language to select" (per
+    // booking confirm.txt) - nested three levels deep under the same
+    // modality/rates/rateDetails shape the Detail call uses.
+    private String firstLanguage(JsonNode activity) {
+        Iterator<JsonNode> rates = activity.path("modality").path("rates").elements();
+        while (rates.hasNext()) {
+            Iterator<JsonNode> rateDetails = rates.next().path("rateDetails").elements();
+            while (rateDetails.hasNext()) {
+                JsonNode languages = rateDetails.next().path("languages");
+                if (languages.isArray() && !languages.isEmpty()) {
+                    JsonNode lang = languages.get(0);
+                    String name = lang.path("name").asText("");
+                    if (!name.isEmpty()) return name;
+                    String code = lang.path("code").asText("");
+                    if (!code.isEmpty()) return code.toUpperCase();
+                }
+            }
+        }
+        return "";
     }
 
     private String destinationName(JsonNode activity) {

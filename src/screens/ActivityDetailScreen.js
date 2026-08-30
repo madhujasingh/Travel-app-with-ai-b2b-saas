@@ -17,6 +17,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
+import { buildPaxBreakdown } from '../utils/activityPaxPricing';
 
 // Content descriptions come back as HTML (<br />, <strong>, etc.) - RN has
 // no HTML renderer wired up here, so this strips tags down to plain text
@@ -40,7 +41,7 @@ const getHeroImage = (content) => {
 };
 
 const ActivityDetailScreen = ({ route, navigation }) => {
-  const { activityCode, name, from, to, adults } = route.params;
+  const { activityCode, name, from, to, adults, childAges } = route.params;
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState(null);
   const [selectedRate, setSelectedRate] = useState(null);
@@ -69,7 +70,10 @@ const ActivityDetailScreen = ({ route, navigation }) => {
             from,
             to,
             language: 'en',
-            paxes: Array.from({ length: adults || 1 }, () => ({ age: 30 })),
+            paxes: [
+              ...Array.from({ length: adults || 1 }, () => ({ age: 30 })),
+              ...(childAges || []).map((age) => ({ age })),
+            ],
           };
           const response = await fetch(`${API_CONFIG.BASE_URL}/activities/details`, {
             method: 'POST',
@@ -99,10 +103,13 @@ const ActivityDetailScreen = ({ route, navigation }) => {
       return () => {
         cancelled = true;
       };
-    }, [activityCode, from, to, adults])
+    }, [activityCode, from, to, adults, childAges])
   );
 
   const heroImage = getHeroImage(activity?.content);
+  const breakdown = selectedRate
+    ? buildPaxBreakdown({ paxAmounts: selectedRate.paxAmounts, adults, childAges })
+    : null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -146,6 +153,11 @@ const ActivityDetailScreen = ({ route, navigation }) => {
           {(activity?.modalities || []).map((modality) => (
             <View key={modality.code} style={styles.modalityCard}>
               <Text style={styles.modalityName}>{modality.name}</Text>
+              {modality.minChildrenAge != null && modality.maxChildrenAge != null && (
+                <Text style={styles.childAgeNote}>
+                  Child pricing applies ages {modality.minChildrenAge}-{modality.maxChildrenAge}; older children are priced as adults
+                </Text>
+              )}
               {(modality.rates || []).map((rate) =>
                 (rate.rateDetails || []).map((detail) => {
                   const isSelected = selectedRate?.rateKey === detail.rateKey;
@@ -193,6 +205,24 @@ const ActivityDetailScreen = ({ route, navigation }) => {
 
       {selectedRate && (
         <View style={styles.footer}>
+          {breakdown && (
+            <View style={styles.breakdownBox}>
+              {breakdown.lines.map((line, index) => (
+                <View key={index} style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>{line.label}</Text>
+                  <Text style={styles.breakdownAmount}>
+                    {activity?.currency} {Number(line.lineTotal).toLocaleString()}
+                  </Text>
+                </View>
+              ))}
+              <View style={[styles.breakdownRow, styles.breakdownTotalRow]}>
+                <Text style={styles.breakdownTotalLabel}>Total</Text>
+                <Text style={styles.breakdownTotalAmount}>
+                  {activity?.currency} {Number(breakdown.total).toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          )}
           <TouchableOpacity
             style={styles.continueButton}
             onPress={() => {
@@ -211,9 +241,11 @@ const ActivityDetailScreen = ({ route, navigation }) => {
                 from: bookingDates?.from || from,
                 to: bookingDates?.to || to,
                 adults,
+                childAges,
                 price: selectedRate.totalAmount?.amount,
                 currency: activity?.currency,
                 questions: selectedRate.questions || [],
+                paxAmounts: selectedRate.paxAmounts || [],
               });
             }}
           >
@@ -303,6 +335,12 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 8,
   },
+  childAgeNote: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: -4,
+    marginBottom: 8,
+  },
   rateRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -350,6 +388,39 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
+  },
+  breakdownBox: {
+    marginBottom: 14,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  breakdownLabel: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  breakdownAmount: {
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  breakdownTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    marginTop: 6,
+    paddingTop: 8,
+  },
+  breakdownTotalLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  breakdownTotalAmount: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.primary,
   },
   continueButton: {
     backgroundColor: Colors.primary,

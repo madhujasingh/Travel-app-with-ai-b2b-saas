@@ -20,14 +20,17 @@ import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
+import { buildPaxBreakdown } from '../utils/activityPaxPricing';
 
 // Free-text agency reference HotelBeds stores alongside the booking (up to
 // 20 chars per the docs) - generated rather than asked from the customer,
 // same "no technical fields in customer UI" reasoning as elsewhere in the app.
 const generateClientReference = () => `ITINERA${Date.now().toString().slice(-10)}`;
 
-const buildInitialTravelers = (adults) =>
-  Array.from({ length: adults || 1 }, () => ({ name: '', surname: '' }));
+const buildInitialTravelers = (adults, childAges) => [
+  ...Array.from({ length: adults || 1 }, () => ({ name: '', surname: '', isChild: false, age: 30 })),
+  ...(childAges || []).map((age) => ({ name: '', surname: '', isChild: true, age })),
+];
 
 const ActivityBookingScreen = ({ route, navigation }) => {
   const { token } = useAuth();
@@ -38,11 +41,15 @@ const ActivityBookingScreen = ({ route, navigation }) => {
     from,
     to,
     adults,
+    childAges,
     price,
     currency,
     questions,
     bookingReference,
+    paxAmounts,
   } = route.params;
+
+  const breakdown = buildPaxBreakdown({ paxAmounts, adults, childAges });
 
   const [holderName, setHolderName] = useState('');
   const [holderSurname, setHolderSurname] = useState('');
@@ -51,7 +58,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   const [address, setAddress] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [country, setCountry] = useState('IN');
-  const [travelers, setTravelers] = useState(() => buildInitialTravelers(adults));
+  const [travelers, setTravelers] = useState(() => buildInitialTravelers(adults, childAges));
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState(null);
@@ -135,9 +142,9 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       return;
     }
 
-    // Ages must match what the rateKey was generated for (see
-    // ActivityDetailScreen - always age 30, ADULT) or HotelBeds rejects the
-    // confirmation as inconsistent with the detail call.
+    // Ages/types must match what the rateKey was generated for (see
+    // ActivityDetailScreen - adults age 30, children their real ages) or
+    // HotelBeds rejects the confirmation as inconsistent with the detail call.
     const payload = {
       language: 'en',
       clientReference: generateClientReference(),
@@ -158,10 +165,10 @@ const ActivityBookingScreen = ({ route, navigation }) => {
           from,
           to,
           paxes: travelers.map((t) => ({
-            age: 30,
+            age: t.age,
             name: t.name.trim(),
             surname: t.surname.trim(),
-            type: 'ADULT',
+            type: t.isChild ? 'CHILD' : 'ADULT',
           })),
           // Some activities (per Detail's modality.questions) require extra
           // info before they can be confirmed - e.g. "what hotel are you
@@ -410,13 +417,32 @@ const ActivityBookingScreen = ({ route, navigation }) => {
           <Text style={styles.summaryDate}>
             {from === to ? `Visit date: ${from}` : `${from} - ${to}`}
           </Text>
-          {price != null && (
-            <>
-              <Text style={styles.summaryPrice}>{currency} {Number(price).toLocaleString()}</Text>
-              {!!formatInrEquivalent(price, currency) && (
-                <Text style={styles.summaryPriceInr}>{formatInrEquivalent(price, currency)}</Text>
-              )}
-            </>
+          {breakdown ? (
+            <View style={styles.breakdownBox}>
+              {breakdown.lines.map((line, index) => (
+                <View key={index} style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>{line.label}</Text>
+                  <Text style={styles.breakdownAmount}>
+                    {currency} {Number(line.lineTotal).toLocaleString()}
+                  </Text>
+                </View>
+              ))}
+              <View style={[styles.breakdownRow, styles.breakdownTotalRow]}>
+                <Text style={styles.breakdownTotalLabel}>Total</Text>
+                <Text style={styles.breakdownTotalAmount}>
+                  {currency} {Number(breakdown.total).toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            price != null && (
+              <>
+                <Text style={styles.summaryPrice}>{currency} {Number(price).toLocaleString()}</Text>
+                {!!formatInrEquivalent(price, currency) && (
+                  <Text style={styles.summaryPriceInr}>{formatInrEquivalent(price, currency)}</Text>
+                )}
+              </>
+            )
           )}
         </View>
 
@@ -497,24 +523,36 @@ const ActivityBookingScreen = ({ route, navigation }) => {
         )}
 
         <Text style={styles.sectionTitle}>Traveler names</Text>
-        {travelers.map((traveler, index) => (
-          <View key={index} style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.rowInput]}
-              placeholder={`Traveler ${index + 1} first name`}
-              placeholderTextColor={Colors.textMuted}
-              value={traveler.name}
-              onChangeText={(value) => updateTraveler(index, 'name', value)}
-            />
-            <TextInput
-              style={[styles.input, styles.rowInput]}
-              placeholder="Last name"
-              placeholderTextColor={Colors.textMuted}
-              value={traveler.surname}
-              onChangeText={(value) => updateTraveler(index, 'surname', value)}
-            />
-          </View>
-        ))}
+        {(() => {
+          let adultCount = 0;
+          let childCount = 0;
+          return travelers.map((traveler, index) => {
+            const label = traveler.isChild
+              ? `Child ${++childCount} (Age ${traveler.age})`
+              : `Adult ${++adultCount}`;
+            return (
+              <View key={index}>
+                <Text style={styles.travelerLabel}>{label}</Text>
+                <View style={styles.row}>
+                  <TextInput
+                    style={[styles.input, styles.rowInput]}
+                    placeholder="First name"
+                    placeholderTextColor={Colors.textMuted}
+                    value={traveler.name}
+                    onChangeText={(value) => updateTraveler(index, 'name', value)}
+                  />
+                  <TextInput
+                    style={[styles.input, styles.rowInput]}
+                    placeholder="Last name"
+                    placeholderTextColor={Colors.textMuted}
+                    value={traveler.surname}
+                    onChangeText={(value) => updateTraveler(index, 'surname', value)}
+                  />
+                </View>
+              </View>
+            );
+          });
+        })()}
 
         <TouchableOpacity style={styles.confirmButton} onPress={submitBooking} disabled={submitting}>
           {submitting ? (
@@ -576,12 +614,52 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     marginTop: 2,
   },
+  breakdownBox: {
+    marginTop: 8,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  breakdownLabel: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  breakdownAmount: {
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  breakdownTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    marginTop: 6,
+    paddingTop: 8,
+  },
+  breakdownTotalLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  breakdownTotalAmount: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: Colors.primary,
+  },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',
     color: Colors.text,
     marginBottom: 10,
     marginTop: 8,
+  },
+  travelerLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    marginBottom: 6,
+    marginTop: 6,
   },
   input: {
     borderWidth: 1,
