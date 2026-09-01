@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { digitsOnly } from '../utils/inputSanitizers';
+import API_CONFIG from '../config/api';
 
 // Digits only, auto-inserts the "/" after MM so typing/pasting letters
 // can't corrupt the MM/YY format.
@@ -22,6 +23,11 @@ const formatExpiry = (value) => {
   if (digits.length <= 2) return digits;
   return `${digits.slice(0, 2)}/${digits.slice(2)}`;
 };
+
+// Falls back to the platform default (see backend PlatformSettings) if the
+// live value can't be fetched, rather than showing ₹0 while loading or on a
+// network hiccup.
+const DEFAULT_CONVENIENCE_FEE = 300;
 
 const CheckoutScreen = ({ route, navigation }) => {
   const cartItems = route.params?.cartItems || [];
@@ -33,6 +39,26 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [expiryDate, setExpiryDate] = useState('');
   const [cvv, setCvv] = useState('');
   const [cardName, setCardName] = useState('');
+  const [convenienceFee, setConvenienceFee] = useState(DEFAULT_CONVENIENCE_FEE);
+
+  // Reached either from CartScreen or directly via FlightsScreen's
+  // "Continue" shortcut (which skips CartScreen entirely) - fetch
+  // independently rather than relying on a nav param from the other screen.
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/platform-settings`);
+        const data = await response.json();
+        if (response.ok && typeof data?.flightConvenienceFee === 'number') {
+          setConvenienceFee(data.flightConvenienceFee);
+        }
+      } catch (error) {
+        // ignored - keep the default fee
+      }
+    })();
+  }, []);
+
+  const grandTotal = total + convenienceFee;
 
   const paymentMethods = [
     { id: 'card', name: 'Credit/Debit Card', icon: 'card-outline' },
@@ -105,20 +131,16 @@ const CheckoutScreen = ({ route, navigation }) => {
               <Text style={styles.priceValue}>₹{total.toLocaleString()}</Text>
             </View>
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>GST (18%)</Text>
+              <Text style={styles.priceLabel}>Convenience Fee</Text>
               <Text style={styles.priceValue}>
-                ₹{Math.round(total * 0.18).toLocaleString()}
+                ₹{Math.round(convenienceFee).toLocaleString()}
               </Text>
-            </View>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Service Fee</Text>
-              <Text style={styles.priceValue}>₹500</Text>
             </View>
             <View style={styles.divider} />
             <View style={styles.priceRow}>
               <Text style={styles.totalLabel}>Total Amount</Text>
               <Text style={styles.totalValue}>
-                ₹{(total * 1.18 + 500).toLocaleString()}
+                ₹{Math.round(grandTotal).toLocaleString()}
               </Text>
             </View>
           </View>
@@ -244,7 +266,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         <View style={styles.totalContainer}>
           <Text style={styles.totalLabelSmall}>Total</Text>
           <Text style={styles.totalAmount}>
-            ₹{(total * 1.18 + 500).toLocaleString()}
+            ₹{Math.round(grandTotal).toLocaleString()}
           </Text>
         </View>
         <TouchableOpacity

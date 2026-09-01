@@ -13,10 +13,31 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useCart } from '../context/CartContext';
+import API_CONFIG from '../config/api';
+
+// Falls back to the platform default (see backend PlatformSettings) if the
+// live value can't be fetched, rather than showing ₹0 while loading or on a
+// network hiccup.
+const DEFAULT_CONVENIENCE_FEE = 300;
 
 const CartScreen = ({ route, navigation }) => {
   const canGoBack = navigation.canGoBack();
   const { cartItems, addItemToCart, removeItemFromCart, getCartTotal, getCartItemCount } = useCart();
+  const [convenienceFee, setConvenienceFee] = React.useState(DEFAULT_CONVENIENCE_FEE);
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/platform-settings`);
+        const data = await response.json();
+        if (response.ok && typeof data?.flightConvenienceFee === 'number') {
+          setConvenienceFee(data.flightConvenienceFee);
+        }
+      } catch (error) {
+        // ignored - keep the default fee
+      }
+    })();
+  }, []);
 
   // Add item from route params if present (either addItem or customization)
   React.useEffect(() => {
@@ -181,16 +202,16 @@ const CartScreen = ({ route, navigation }) => {
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Taxes & Fees</Text>
+                  <Text style={styles.summaryLabel}>Convenience Fee</Text>
                   <Text style={styles.summaryValue}>
-                    ₹{Math.round(getCartTotal() * 0.18).toLocaleString()}
+                    ₹{Math.round(convenienceFee).toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.divider} />
                 <View style={styles.summaryRow}>
                   <Text style={styles.totalLabel}>Total Amount</Text>
                   <Text style={styles.totalValue}>
-                    ₹{Math.round(getCartTotal() * 1.18).toLocaleString()}
+                    ₹{Math.round(getCartTotal() + convenienceFee).toLocaleString()}
                   </Text>
                 </View>
               </View>

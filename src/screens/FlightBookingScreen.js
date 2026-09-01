@@ -223,6 +223,11 @@ const CANCEL_REASONS = [
 const MAX_AMENDMENT_POLL_ATTEMPTS = 5;
 const AMENDMENT_POLL_INTERVAL_MS = 10000;
 
+// Falls back to the platform default (see backend PlatformSettings) if the
+// live value can't be fetched, rather than showing ₹0 while loading or on a
+// network hiccup.
+const DEFAULT_CONVENIENCE_FEE = 300;
+
 const FlightBookingScreen = ({ route, navigation }) => {
   const { token, user } = useAuth();
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId, openCancel } = route.params || {};
@@ -272,6 +277,21 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const [ancillary, setAncillary] = useState({ visible: false, loading: false, segments: [] });
   const [ancillarySelections, setAncillarySelections] = useState({});
   const [ancillaryBusy, setAncillaryBusy] = useState(false);
+  const [convenienceFee, setConvenienceFee] = useState(DEFAULT_CONVENIENCE_FEE);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/platform-settings`);
+        const data = await response.json();
+        if (response.ok && typeof data?.flightConvenienceFee === 'number') {
+          setConvenienceFee(data.flightConvenienceFee);
+        }
+      } catch (error) {
+        // ignored - keep the default fee
+      }
+    })();
+  }, []);
 
   const gstRequired = !!conditions?.gst?.igm;
   const gstOptional = !gstRequired && !!conditions?.gst?.gstappl;
@@ -429,20 +449,36 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // doesn't match with total order Amount") if paymentInfos.amount is just
   // the base fare while ssrBaggageInfos/ssrMealInfos/ssrSeatInfos are
   // attached to the same request.
-  const computeSsrAmount = () => {
+  // Split out per-category so the fare-summary breakup below can show
+  // Baggage/Meal/Seat as separate lines - computeSsrAmount (unchanged
+  // total, still what TripJack's paymentInfos.amount must match together
+  // with totalFare) just sums the three.
+  const computeBaggageAmount = () => {
     let total = 0;
     ssrSegments.forEach((segment) => {
       const selection = ssrSelections[segment.id];
-      if (!selection) return;
-      if (selection.baggage) {
+      if (selection?.baggage) {
         const option = segment.baggageOptions.find((o) => o.code === selection.baggage);
         total += Number(option?.amount || 0);
       }
-      if (selection.meal) {
+    });
+    return total;
+  };
+
+  const computeMealAmount = () => {
+    let total = 0;
+    ssrSegments.forEach((segment) => {
+      const selection = ssrSelections[segment.id];
+      if (selection?.meal) {
         const option = segment.mealOptions.find((o) => o.code === selection.meal);
         total += Number(option?.amount || 0);
       }
     });
+    return total;
+  };
+
+  const computeSeatAmount = () => {
+    let total = 0;
     seatSegmentsList.forEach((segment) => {
       const byTraveller = seatSelections[segment.id] || {};
       Object.values(byTraveller).forEach((seatCode) => {
@@ -454,7 +490,15 @@ const FlightBookingScreen = ({ route, navigation }) => {
     return total;
   };
 
+  const computeSsrAmount = () => computeBaggageAmount() + computeMealAmount() + computeSeatAmount();
+
   const totalWithSsr = totalFare + computeSsrAmount();
+  // Convenience fee is OUR platform's own fee, charged separately - never
+  // added to totalWithSsr, which is exactly what gets sent to TripJack as
+  // paymentInfos.amount for Instant Book / Confirm & Pay (it must equal the
+  // reviewed fare + SSR exactly, or TripJack 400s with errCode 1015). It
+  // only affects what's DISPLAYED to the customer as their total.
+  const customerTotal = totalWithSsr + convenienceFee;
 
   const fetchBookingDetails = async (id) => {
     const requestBody = { bookingId: id };
@@ -1721,9 +1765,42 @@ const FlightBookingScreen = ({ route, navigation }) => {
               );
             })}
 
-            <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>Total{computeSsrAmount() > 0 ? ' (fare + extras)' : ''}</Text>
-              <Text style={styles.metaValueAccent}>₹{Math.round(totalWithSsr).toLocaleString()}</Text>
+            <View style={styles.card}>
+              <View style={styles.cardTitleRow}>
+                <Ionicons name="receipt-outline" size={15} color={Colors.primaryDark} />
+                <Text style={styles.cardTitle}>Fare Summary</Text>
+              </View>
+              <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Flight Fare</Text>
+                <Text style={styles.metaValue}>₹{Math.round(totalFare).toLocaleString()}</Text>
+              </View>
+              {computeBaggageAmount() > 0 ? (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Baggage</Text>
+                  <Text style={styles.metaValue}>₹{Math.round(computeBaggageAmount()).toLocaleString()}</Text>
+                </View>
+              ) : null}
+              {computeMealAmount() > 0 ? (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Meal</Text>
+                  <Text style={styles.metaValue}>₹{Math.round(computeMealAmount()).toLocaleString()}</Text>
+                </View>
+              ) : null}
+              {computeSeatAmount() > 0 ? (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Seat</Text>
+                  <Text style={styles.metaValue}>₹{Math.round(computeSeatAmount()).toLocaleString()}</Text>
+                </View>
+              ) : null}
+              <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Convenience Fee</Text>
+                <Text style={styles.metaValue}>₹{Math.round(convenienceFee).toLocaleString()}</Text>
+              </View>
+              <View style={styles.ticketDivider} />
+              <View style={styles.metaRow}>
+                <Text style={styles.metaLabel}>Total</Text>
+                <Text style={styles.metaValueAccent}>₹{Math.round(customerTotal).toLocaleString()}</Text>
+              </View>
             </View>
 
             <TouchableOpacity style={styles.primaryButton} onPress={handleInstantBook} disabled={busy}>

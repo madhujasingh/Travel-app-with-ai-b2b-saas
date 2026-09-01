@@ -177,6 +177,13 @@ const B2BDashboard = ({ navigation }) => {
       icon: 'business-outline',
       screen: 'HotelCatalogAdmin',
     },
+    {
+      id: 8,
+      title: 'Platform Settings',
+      description: 'Adjust the flight convenience fee',
+      icon: 'pricetag-outline',
+      screen: 'AdminPlatformSettings',
+    },
   ];
 
   const renderStatCard = (stat) => (

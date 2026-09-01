@@ -99,6 +99,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/hotel-catalog/storage-stats").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/hotel-catalog/cities").hasRole("ADMIN")
                 .requestMatchers("/hotel-catalog/**").permitAll()
+                // Read by every price-breakdown screen (flight cart, booking
+                // form) - public. Only an admin can change the fee itself.
+                .requestMatchers(HttpMethod.GET, "/platform-settings").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/platform-settings/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/itineraries/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/itineraries/**").hasRole("ADMIN")
