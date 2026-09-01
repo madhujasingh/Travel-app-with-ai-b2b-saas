@@ -10,9 +10,12 @@ import API_CONFIG from '../config/api';
 const WINDOW_HEIGHT = Dimensions.get('window').height;
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const CARD_WIDTH = SCREEN_WIDTH - 32;
+// 20px margins match the paddingHorizontal used everywhere else on the
+// screens this renders on (Home/Hotels/Promotions), so the card's edges
+// line up with the content below/above it instead of sitting 4px off.
+const CARD_WIDTH = SCREEN_WIDTH - 40;
 const CARD_SPACING = 12;
-const CARD_HEIGHT = 172;
+const CARD_HEIGHT = 180;
 
 // Admin-managed deal/discount banners (see backend PromoBannerController) -
 // renders nothing if the placement has no active banners, so screens can
@@ -69,27 +72,32 @@ const PromoBannerCarousel = ({ placement }) => {
         onScroll={handleScroll}
         scrollEventThrottle={16}
         renderItem={({ item }) => (
+          // Shadow lives on the outer touchable; the inner card owns the
+          // border/radius/overflow-hidden clip (a shadow and clipping don't
+          // combine well on the same element, especially on iOS).
           <TouchableOpacity
-            style={styles.card}
+            style={styles.cardShadowWrap}
             activeOpacity={0.9}
             onPress={() => handlePress(item)}
           >
-            <Image
-              source={{ uri: `${API_CONFIG.BASE_URL}/promo-banners/${item.id}/image` }}
-              style={styles.image}
-            />
-            <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.75)']}
-              style={styles.gradient}
-            >
-              <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-              {!!item.description && (
-                <View style={styles.descriptionRow}>
-                  <View style={styles.descriptionAccent} />
-                  <Text style={styles.description} numberOfLines={1}>{item.description}</Text>
-                </View>
-              )}
-            </LinearGradient>
+            <View style={styles.card}>
+              <Image
+                source={{ uri: `${API_CONFIG.BASE_URL}/promo-banners/${item.id}/image` }}
+                style={styles.image}
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.78)']}
+                style={styles.gradient}
+              >
+                <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+                {!!item.description && (
+                  <View style={styles.descriptionRow}>
+                    <View style={styles.descriptionAccent} />
+                    <Text style={styles.description} numberOfLines={1}>{item.description}</Text>
+                  </View>
+                )}
+              </LinearGradient>
+            </View>
           </TouchableOpacity>
         )}
       />
@@ -124,19 +132,29 @@ const PromoBannerCarousel = ({ placement }) => {
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 12,
-    marginBottom: 8,
+    marginTop: 8,
+    marginBottom: 4,
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+  },
+  cardShadowWrap: {
+    width: CARD_WIDTH,
+    marginRight: CARD_SPACING,
+    borderRadius: 20,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    elevation: 6,
   },
   card: {
-    width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginRight: CARD_SPACING,
     backgroundColor: Colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   image: {
     ...StyleSheet.absoluteFillObject,
@@ -184,18 +202,18 @@ const styles = StyleSheet.create({
   dots: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 8,
+    marginTop: 12,
     gap: 6,
   },
   dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.primarySurface,
   },
   dotActive: {
     backgroundColor: Colors.primary,
-    width: 16,
+    width: 20,
   },
   viewerOverlay: {
     flex: 1,

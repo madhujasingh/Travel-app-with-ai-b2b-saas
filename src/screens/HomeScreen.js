@@ -9,14 +9,24 @@ import {
   StatusBar,
   Alert,
   Animated,
+  Image,
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import { digitsOnly } from '../utils/inputSanitizers';
 import PromoBannerCarousel from '../components/PromoBannerCarousel';
+
+const SERVICE_IMAGES = {
+  landPackage: require('../../assets/services/land-package.png'),
+  flights: require('../../assets/services/flights.png'),
+  hotels: require('../../assets/services/hotels.png'),
+  groupPlanner: require('../../assets/services/group-planner.png'),
+  activities: require('../../assets/services/activities.png'),
+};
 
 const HomeScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -28,11 +38,18 @@ const HomeScreen = ({ navigation }) => {
   const progressPercent = `${(tripStep / 5) * 100}%`;
   const stepSlide = useRef(new Animated.Value(0)).current;
   const stepMeta = [
-    { step: 1, title: 'Budget', subtitle: 'Set your trip budget in INR' },
-    { step: 2, title: 'Destination', subtitle: 'Choose where you want to travel' },
-    { step: 3, title: 'Adults', subtitle: 'How many adults are traveling?' },
-    { step: 4, title: 'Children', subtitle: 'Optional: add children travelers' },
-    { step: 5, title: 'Review', subtitle: 'Confirm details and search' },
+    { step: 1, title: 'Budget', subtitle: 'Set your trip budget in INR', icon: 'wallet-outline' },
+    { step: 2, title: 'Destination', subtitle: 'Choose where you want to travel', icon: 'location-outline' },
+    { step: 3, title: 'Adults', subtitle: 'How many adults are traveling?', icon: 'people-outline' },
+    { step: 4, title: 'Children', subtitle: 'Optional: add children travelers', icon: 'happy-outline' },
+    { step: 5, title: 'Review', subtitle: 'Confirm details and search', icon: 'checkmark-circle-outline' },
+  ];
+  const stepHints = [
+    "We'll help you find the best options within your budget.",
+    "Not sure where to go? Try 'Goa', 'Bali' or 'Jaipur' for inspiration.",
+    'Include yourself and anyone 12 or older.',
+    'Traveling with kids under 12? Add them here.',
+    "Double-check everything - we'll search the moment you tap Search.",
   ];
 
   useEffect(() => {
@@ -48,38 +65,37 @@ const HomeScreen = ({ navigation }) => {
     {
       id: 1,
       title: 'Land Package',
-      icon: 'island',
+      subtitle: 'Hassle-free holidays',
+      image: SERVICE_IMAGES.landPackage,
       screen: 'LandPackage',
-      color: '#FF8C5A',
     },
     {
       id: 2,
       title: 'Hotels',
-      icon: 'bed',
+      subtitle: 'Comfortable stays',
+      image: SERVICE_IMAGES.hotels,
       screen: 'Hotels',
-      color: '#F66A2A',
     },
     {
       id: 3,
       title: 'Flights',
-      icon: 'airplane',
+      subtitle: 'Domestic & International',
+      image: SERVICE_IMAGES.flights,
       screen: 'Flights',
-      color: '#D64E13',
     },
     {
       id: 4,
       title: 'Group Planner',
-      icon: 'account-group',
+      subtitle: 'Plan together, travel better',
+      image: SERVICE_IMAGES.groupPlanner,
       screen: 'GroupTripPlanner',
-      color: '#C95A24',
     },
     {
       id: 5,
       title: 'Activities',
-      icon: 'ticket-confirmation',
+      subtitle: 'Book unique experiences & tours',
+      image: SERVICE_IMAGES.activities,
       screen: 'Activities',
-      color: '#E8622C',
-      wide: true,
     },
   ];
 
@@ -132,205 +148,306 @@ const HomeScreen = ({ navigation }) => {
     setTripStep((prev) => Math.max(prev - 1, 1));
   };
 
+  const currentStep = stepMeta[tripStep - 1];
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor={Colors.primaryDark} barStyle="light-content" />
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
         {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.heroGlow} />
+        <LinearGradient
+          colors={[Colors.primaryLight, Colors.primary, Colors.primaryDark]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <View style={styles.heroGlowLarge} />
+          <View style={styles.heroGlowSmall} />
+          <MaterialCommunityIcons
+            name="palm-tree"
+            size={140}
+            color="rgba(255,255,255,0.12)"
+            style={styles.heroPalm}
+          />
+          <Ionicons name="airplane" size={64} color="rgba(255,255,255,0.16)" style={styles.heroPlane} />
+
           <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.greeting}>Welcome to</Text>
-              <Text style={styles.appName}>MyItineri</Text>
-              <Text style={styles.subtitle}>Plan your perfect trip</Text>
-            </View>
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.messageButton}
-                onPress={() => navigation.navigate('ChatInbox')}
-              >
-                <Ionicons name="chatbubble-ellipses-outline" size={22} color={Colors.secondary} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('ChatInbox')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color={Colors.secondary} />
+            </TouchableOpacity>
           </View>
+
+          <Text style={styles.greeting}>Welcome to</Text>
+          <Text style={styles.appName}>MyItineri</Text>
+          <Text style={styles.subtitle}>Plan your perfect trip</Text>
           <Text style={styles.roleBadge}>Signed in as: {user?.role || 'CUSTOMER'}</Text>
-        </View>
+        </LinearGradient>
 
-        <PromoBannerCarousel placement="HOME" />
+        {/* Content sheet - overlaps the header's rounded bottom edge */}
+        <View style={styles.contentSheet}>
+          <PromoBannerCarousel placement="HOME" />
 
-        {/* Services Section */}
-        <View style={styles.servicesSection}>
-          <Text style={styles.sectionTitle}>Our Services</Text>
-          <View style={styles.servicesContainer}>
-            {services.map((service) => (
-              <TouchableOpacity
-                key={service.id}
-                style={[
-                  service.wide ? styles.serviceCardWide : styles.serviceCard,
-                  { backgroundColor: service.color },
-                ]}
-                onPress={() => navigation.navigate(service.screen)}
-                activeOpacity={0.8}
-              >
-                <MaterialCommunityIcons
-                  name={service.icon}
-                  size={service.wide ? 28 : 32}
-                  color={Colors.secondary}
-                  style={service.wide ? styles.serviceIconWide : styles.serviceIcon}
-                />
-                <Text style={[styles.serviceTitle, service.wide && styles.serviceTitleWide]}>
-                  {service.title}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Search Form */}
-        <View style={styles.searchSection}>
-          <Text style={styles.searchSectionTitle}>Find Your Trip</Text>
-          <View style={styles.formContainer}>
-            <View style={styles.stepHeaderRow}>
-              <View>
-                <Text style={styles.stepTitle}>{stepMeta[tripStep - 1].title}</Text>
-                <Text style={styles.stepSubtitle}>{stepMeta[tripStep - 1].subtitle}</Text>
-              </View>
-            </View>
-
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: progressPercent }]} />
-            </View>
-
-            <View style={styles.stepDots}>
-              {stepMeta.map((item) => (
-                <View
-                  key={item.step}
-                  style={[
-                    styles.stepDot,
-                    tripStep >= item.step && styles.stepDotActive,
-                  ]}
-                />
+          {/* Services Section - Activities is deliberately just a 5th item
+              in this same grid/style (not a separate banner), so it reads
+              as part of the group rather than a bolted-on extra. */}
+          <View style={styles.servicesSection}>
+            <Text style={styles.sectionTitle}>Our Services</Text>
+            <View style={styles.servicesContainer}>
+              {services.map((service) => (
+                <TouchableOpacity
+                  key={service.id}
+                  style={styles.serviceCard}
+                  onPress={() => navigation.navigate(service.screen)}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={[Colors.primarySoft, Colors.accentBlueSoft]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.serviceCardGradient}
+                  >
+                    <View style={styles.serviceImageWrap}>
+                      <Image source={service.image} style={styles.serviceImage} resizeMode="cover" />
+                    </View>
+                    <View style={styles.serviceTextWrap}>
+                      <Text style={styles.serviceTitle}>{service.title}</Text>
+                      <Text style={styles.serviceSubtitle} numberOfLines={2}>
+                        {service.subtitle}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
               ))}
             </View>
+          </View>
 
-            {tripStep === 1 && (
-              <Animated.View
-                style={[
-                  styles.questionPanel,
-                  { transform: [{ translateX: stepSlide }] },
-                ]}
-              >
-                <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Trip Budget (INR)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Example: 25000"
-                  placeholderTextColor={Colors.textMuted}
-                  value={budget}
-                  onChangeText={(value) => setBudget(digitsOnly(value))}
-                  keyboardType="numeric"
-                  maxLength={9}
+          {/* Deals banner */}
+          <TouchableOpacity
+            style={styles.dealsBanner}
+            onPress={() => navigation.navigate('PromotionsTab')}
+            activeOpacity={0.88}
+          >
+            <View style={styles.dealsTextWrap}>
+              <Text style={styles.dealsTitle}>Plan more, save more!</Text>
+              <Text style={styles.dealsSubtitle}>Exclusive deals & offers just for you</Text>
+              <View style={styles.dealsButton}>
+                <Text style={styles.dealsButtonText}>Explore Deals</Text>
+                <Ionicons name="chevron-forward" size={14} color={Colors.secondary} />
+              </View>
+            </View>
+            <View style={styles.dealsIconWrap}>
+              <Ionicons name="gift" size={40} color={Colors.primary} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Search Form */}
+          <View style={styles.searchSection}>
+            <View style={styles.searchHeaderRow}>
+              <Text style={styles.searchSectionTitle}>Find Your Trip</Text>
+              <Ionicons name="airplane-outline" size={26} color={Colors.primary} style={styles.searchHeaderIcon} />
+            </View>
+            <Text style={styles.searchSectionSubtitle}>Plan smart. Travel better.</Text>
+
+            <View style={styles.formContainer}>
+              <View style={styles.stepHeaderRow}>
+                <View style={styles.stepIconWrap}>
+                  <Ionicons name={currentStep.icon} size={20} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.stepTitle}>{currentStep.title}</Text>
+                  <Text style={styles.stepSubtitle}>{currentStep.subtitle}</Text>
+                </View>
+              </View>
+
+              <View style={styles.progressTrack}>
+                <LinearGradient
+                  colors={[Colors.primaryLight, Colors.primaryDark]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.progressFill, { width: progressPercent }]}
                 />
               </View>
-              </Animated.View>
-            )}
 
-            {tripStep === 2 && (
-              <Animated.View
-                style={[
-                  styles.questionPanel,
-                  { transform: [{ translateX: stepSlide }] },
-                ]}
-              >
-                <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Destination</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Example: Goa, Bali, Jaipur"
-                  placeholderTextColor={Colors.textMuted}
-                  value={destination}
-                  onChangeText={setDestination}
-                />
+              <View style={styles.stepDots}>
+                {stepMeta.map((item) => (
+                  <View
+                    key={item.step}
+                    style={[
+                      styles.stepDot,
+                      tripStep >= item.step && styles.stepDotActive,
+                    ]}
+                  />
+                ))}
               </View>
-              </Animated.View>
-            )}
 
-            {tripStep === 3 && (
-              <Animated.View
-                style={[
-                  styles.questionPanel,
-                  { transform: [{ translateX: stepSlide }] },
-                ]}
-              >
-                <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Number of Adults</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="At least 1"
-                  placeholderTextColor={Colors.textMuted}
-                  value={adults}
-                  onChangeText={(value) => setAdults(digitsOnly(value))}
-                  keyboardType="numeric"
-                  maxLength={2}
-                />
+              {tripStep === 1 && (
+                <Animated.View
+                  style={[
+                    styles.questionPanel,
+                    { transform: [{ translateX: stepSlide }] },
+                  ]}
+                >
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Trip Budget (INR)</Text>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputPrefixBox}>
+                        <Text style={styles.inputPrefixText}>₹</Text>
+                      </View>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Example: 25000"
+                        placeholderTextColor={Colors.textMuted}
+                        value={budget}
+                        onChangeText={(value) => setBudget(digitsOnly(value))}
+                        keyboardType="numeric"
+                        maxLength={9}
+                      />
+                    </View>
+                  </View>
+                </Animated.View>
+              )}
+
+              {tripStep === 2 && (
+                <Animated.View
+                  style={[
+                    styles.questionPanel,
+                    { transform: [{ translateX: stepSlide }] },
+                  ]}
+                >
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Destination</Text>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputPrefixBox}>
+                        <Ionicons name="location-outline" size={16} color={Colors.primaryDark} />
+                      </View>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Example: Goa, Bali, Jaipur"
+                        placeholderTextColor={Colors.textMuted}
+                        value={destination}
+                        onChangeText={setDestination}
+                      />
+                    </View>
+                  </View>
+                </Animated.View>
+              )}
+
+              {tripStep === 3 && (
+                <Animated.View
+                  style={[
+                    styles.questionPanel,
+                    { transform: [{ translateX: stepSlide }] },
+                  ]}
+                >
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Number of Adults</Text>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputPrefixBox}>
+                        <Ionicons name="person-outline" size={16} color={Colors.primaryDark} />
+                      </View>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="At least 1"
+                        placeholderTextColor={Colors.textMuted}
+                        value={adults}
+                        onChangeText={(value) => setAdults(digitsOnly(value))}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                    </View>
+                  </View>
+                </Animated.View>
+              )}
+
+              {tripStep === 4 && (
+                <Animated.View
+                  style={[
+                    styles.questionPanel,
+                    { transform: [{ translateX: stepSlide }] },
+                  ]}
+                >
+                  <View style={styles.inputContainer}>
+                    <Text style={styles.inputLabel}>Number of Children (Optional)</Text>
+                    <View style={styles.inputRow}>
+                      <View style={styles.inputPrefixBox}>
+                        <Ionicons name="happy-outline" size={16} color={Colors.primaryDark} />
+                      </View>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="0"
+                        placeholderTextColor={Colors.textMuted}
+                        value={children}
+                        onChangeText={(value) => setChildren(digitsOnly(value))}
+                        keyboardType="numeric"
+                        maxLength={2}
+                      />
+                    </View>
+                  </View>
+                </Animated.View>
+              )}
+
+              {tripStep === 5 && (
+                <Animated.View
+                  style={[
+                    styles.questionPanel,
+                    styles.reviewCard,
+                    { transform: [{ translateX: stepSlide }] },
+                  ]}
+                >
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Budget</Text>
+                    <Text style={styles.reviewValue}>{budget || '-'}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Destination</Text>
+                    <Text style={styles.reviewValue}>{destination || '-'}</Text>
+                  </View>
+                  <View style={styles.reviewRow}>
+                    <Text style={styles.reviewLabel}>Adults</Text>
+                    <Text style={styles.reviewValue}>{adults || '0'}</Text>
+                  </View>
+                  <View style={[styles.reviewRow, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.reviewLabel}>Children</Text>
+                    <Text style={styles.reviewValue}>{children || '0'}</Text>
+                  </View>
+                </Animated.View>
+              )}
+
+              <View style={styles.hintBox}>
+                <Ionicons name="shield-checkmark-outline" size={16} color={Colors.accentBlue} />
+                <Text style={styles.hintText}>{stepHints[tripStep - 1]}</Text>
               </View>
-              </Animated.View>
-            )}
 
-            {tripStep === 4 && (
-              <Animated.View
-                style={[
-                  styles.questionPanel,
-                  { transform: [{ translateX: stepSlide }] },
-                ]}
-              >
-                <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Number of Children (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0"
-                  placeholderTextColor={Colors.textMuted}
-                  value={children}
-                  onChangeText={(value) => setChildren(digitsOnly(value))}
-                  keyboardType="numeric"
-                  maxLength={2}
-                />
-              </View>
-              </Animated.View>
-            )}
-
-            {tripStep === 5 && (
-              <Animated.View
-                style={[
-                  styles.questionPanel,
-                  styles.reviewCard,
-                  { transform: [{ translateX: stepSlide }] },
-                ]}
-              >
-                <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Budget</Text>
-                  <Text style={styles.reviewValue}>{budget || '-'}</Text>
+              {tripStep < 5 ? (
+                <View style={styles.stepActions}>
+                  {tripStep > 1 && (
+                    <TouchableOpacity
+                      style={styles.backStepButton}
+                      onPress={goBackStep}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.backStepText}>Back</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={goNextStep} activeOpacity={0.85} style={{ flex: 1 }}>
+                    <LinearGradient
+                      colors={[Colors.primary, Colors.primaryDark]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.nextStepButton}
+                    >
+                      <Text style={styles.nextStepText}>Next</Text>
+                      <Ionicons name="chevron-forward" size={16} color={Colors.secondary} />
+                    </LinearGradient>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Destination</Text>
-                  <Text style={styles.reviewValue}>{destination || '-'}</Text>
-                </View>
-                <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Adults</Text>
-                  <Text style={styles.reviewValue}>{adults || '0'}</Text>
-                </View>
-                <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>Children</Text>
-                  <Text style={styles.reviewValue}>{children || '0'}</Text>
-                </View>
-              </Animated.View>
-            )}
-
-            {tripStep < 5 ? (
-              <View style={styles.stepActions}>
-                {tripStep > 1 && (
+              ) : (
+                <View style={styles.stepActions}>
                   <TouchableOpacity
                     style={styles.backStepButton}
                     onPress={goBackStep}
@@ -338,38 +455,27 @@ const HomeScreen = ({ navigation }) => {
                   >
                     <Text style={styles.backStepText}>Back</Text>
                   </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={styles.nextStepButton}
-                  onPress={goNextStep}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.nextStepText}>Next</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.stepActions}>
-                <TouchableOpacity
-                  style={styles.backStepButton}
-                  onPress={goBackStep}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.backStepText}>Back</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.searchButton}
-                  onPress={handleSearch}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.searchButtonText}>Search Itineraries</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                  <TouchableOpacity onPress={handleSearch} activeOpacity={0.85} style={{ flex: 1 }}>
+                    <LinearGradient
+                      colors={[Colors.primary, Colors.primaryDark]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.nextStepButton}
+                    >
+                      <Text style={styles.nextStepText}>Search Itineraries</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
 
+          <View style={{ height: 90 }} />
+        </View>
       </ScrollView>
 
+      {/* Rendered after the ScrollView (not before it) so it stays tappable
+          while floating over scrollable content - see commit e0d64b8. */}
       <TouchableOpacity
         style={styles.talkFloatingButton}
         onPress={() => navigation.navigate('TalkToAgent')}
@@ -384,68 +490,60 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.primary,
   },
   header: {
-    backgroundColor: Colors.primary,
     paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    paddingTop: 16,
+    paddingBottom: 60,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     overflow: 'hidden',
   },
-  heroGlow: {
+  heroGlowLarge: {
     position: 'absolute',
     width: 220,
     height: 220,
     borderRadius: 120,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    top: -120,
-    right: -60,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    top: -110,
+    right: -50,
+  },
+  heroGlowSmall: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    bottom: -30,
+    left: -30,
+  },
+  heroPalm: {
+    position: 'absolute',
+    right: -10,
+    bottom: 10,
+  },
+  heroPlane: {
+    position: 'absolute',
+    left: -8,
+    top: 70,
+    transform: [{ rotate: '35deg' }],
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  greeting: {
-    fontSize: 15,
-    color: Colors.secondary,
-    opacity: 0.85,
-  },
-  appName: {
-    fontSize: 38,
-    fontWeight: '800',
-    color: Colors.secondary,
-    marginTop: 5,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: Colors.secondary,
-    opacity: 0.9,
-    marginTop: 6,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 10,
   },
-  messageButton: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 999,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
   talkFloatingButton: {
+    // Stacked directly below the message icon (same corner, same width) -
+    // top = message icon's top (16) + its height (38) + a 10px gap.
     position: 'absolute',
-    top: 10,
-    left: 16,
+    top: 64,
+    right: 22,
     zIndex: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -455,21 +553,57 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  greeting: {
+    marginTop: 18,
+    fontSize: 15,
+    color: Colors.secondary,
+    opacity: 0.9,
+  },
+  appName: {
+    fontSize: 38,
+    fontWeight: '800',
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: Colors.secondary,
+    opacity: 0.92,
+    marginTop: 6,
+  },
   roleBadge: {
-    marginTop: 12,
+    marginTop: 14,
     color: Colors.secondary,
     opacity: 0.95,
     fontSize: 11,
-    fontWeight: '600',
-    backgroundColor: 'rgba(0,0,0,0.14)',
+    fontWeight: '700',
+    backgroundColor: 'rgba(0,0,0,0.18)',
     alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  contentSheet: {
+    backgroundColor: Colors.background,
+    marginTop: -36,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 8,
   },
   servicesSection: {
     paddingHorizontal: 20,
-    paddingTop: 18,
+    paddingTop: 22,
+    paddingBottom: 6,
   },
   sectionTitle: {
     fontSize: 20,
@@ -482,72 +616,130 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     flexWrap: 'wrap',
   },
+  // White bg matches the source illustrations' own backdrop exactly, so the
+  // image blends into the card with no visible seam at its edges.
+  // Shadow lives on the outer (non-clipping) touchable; the gradient below
+  // owns the border/radius/overflow-hidden clip, since a shadow and
+  // overflow:hidden don't play well on the same element.
   serviceCard: {
     width: '48%',
-    aspectRatio: 1,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 7,
     marginBottom: 12,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  serviceIcon: {
-    fontSize: 36,
-    marginBottom: 8,
+  serviceCardGradient: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    overflow: 'hidden',
   },
-  serviceTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: Colors.secondary,
-    textAlign: 'center',
+  // A small icon-sized crop of the illustration, not a hero image - fixed
+  // 44x44 pixels (not aspectRatio/percentage) so it stays tiny regardless
+  // of card width. White bg matches the source PNGs' own backdrop, so the
+  // icon still reads cleanly against the new gradient card behind it.
+  serviceImageWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: Colors.card,
+    marginBottom: 10,
   },
-  // Spans both grid columns (full row width) instead of the standard 48%
-  // square tile - laid out as a row (icon beside title) rather than the
-  // centered icon-over-text column, since a full-width square would be far
-  // taller than the content needs.
-  serviceCardWide: {
+  serviceImage: {
     width: '100%',
-    aspectRatio: undefined,
-    height: 72,
-    borderRadius: 18,
+    height: '100%',
+  },
+  serviceTextWrap: {},
+  serviceTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  serviceSubtitle: {
+    fontSize: 11.5,
+    color: Colors.textLight,
+    lineHeight: 15,
+  },
+  dealsBanner: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 7,
+    marginHorizontal: 20,
+    marginTop: 18,
+    backgroundColor: Colors.primarySurface,
+    borderRadius: 18,
+    padding: 18,
+  },
+  dealsTextWrap: {
+    flex: 1,
+  },
+  dealsTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  dealsSubtitle: {
+    fontSize: 12.5,
+    color: Colors.textLight,
+    marginTop: 4,
     marginBottom: 12,
   },
-  serviceIconWide: {
-    marginBottom: 0,
+  dealsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.primary,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    gap: 4,
   },
-  serviceTitleWide: {
-    fontSize: 14,
+  dealsButtonText: {
+    color: Colors.secondary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dealsIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
   },
   searchSection: {
     paddingHorizontal: 20,
-    marginTop: 16,
-    paddingBottom: 100,
+    marginTop: 26,
+  },
+  searchHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   searchSectionTitle: {
-    fontSize: 42,
+    fontSize: 30,
     fontWeight: '900',
     color: Colors.text,
-    marginBottom: 14,
-    letterSpacing: -0.6,
-    lineHeight: 44,
-    textAlign: 'left',
+    letterSpacing: -0.5,
+  },
+  searchHeaderIcon: {
+    transform: [{ rotate: '30deg' }],
+  },
+  searchSectionSubtitle: {
+    fontSize: 13,
+    color: Colors.textLight,
+    marginTop: 2,
+    marginBottom: 16,
   },
   formContainer: {
     backgroundColor: Colors.card,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 18,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -559,17 +751,25 @@ const styles = StyleSheet.create({
   },
   stepHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  stepIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: Colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stepTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: Colors.text,
   },
   stepSubtitle: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 12,
     color: Colors.textLight,
   },
@@ -583,7 +783,6 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: Colors.primary,
   },
   stepDots: {
     flexDirection: 'row',
@@ -600,17 +799,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   inputContainer: {
-    marginBottom: 14,
+    marginBottom: 4,
   },
   questionPanel: {
-    minHeight: 180,
+    minHeight: 130,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: '#FFFDFC',
     padding: 14,
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   inputLabel: {
     fontSize: 13,
@@ -618,15 +817,49 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: 8,
   },
-  input: {
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFCFA',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 15,
-    color: Colors.text,
     borderWidth: 1,
     borderColor: Colors.border,
+    paddingRight: 10,
+  },
+  inputPrefixBox: {
+    width: 40,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: Colors.border,
+  },
+  inputPrefixText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.primaryDark,
+  },
+  input: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: Colors.text,
+  },
+  hintBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: Colors.accentBlueSoft,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  hintText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.accentBlueDark,
+    lineHeight: 16,
   },
   reviewCard: {
     backgroundColor: Colors.backgroundAlt,
@@ -634,7 +867,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     borderRadius: 12,
     padding: 14,
-    marginBottom: 6,
   },
   reviewRow: {
     flexDirection: 'row',
@@ -656,22 +888,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
   },
-  searchButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-    flex: 1,
-  },
-  searchButtonText: {
-    color: Colors.secondary,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   stepActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
   },
   backStepButton: {
     backgroundColor: Colors.primarySoft,
@@ -687,11 +906,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   nextStepButton: {
-    backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
-    flex: 1,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   nextStepText: {
     color: Colors.secondary,
