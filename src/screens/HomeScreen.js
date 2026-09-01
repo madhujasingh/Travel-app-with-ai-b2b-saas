@@ -143,7 +143,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.greeting}>Welcome to</Text>
-              <Text style={styles.appName}>MyItenary</Text>
+              <Text style={styles.appName}>MyItineri</Text>
               <Text style={styles.subtitle}>Plan your perfect trip</Text>
             </View>
             <View style={styles.headerActions}>

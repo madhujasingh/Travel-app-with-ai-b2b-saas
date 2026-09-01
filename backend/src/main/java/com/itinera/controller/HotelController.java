@@ -2,6 +2,9 @@ package com.itinera.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.itinera.service.HotelService;
+import com.itinera.service.HotelVoucherService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,9 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class HotelController {
 
     private final HotelService hotelService;
+    private final HotelVoucherService hotelVoucherService;
 
-    public HotelController(HotelService hotelService) {
+    public HotelController(HotelService hotelService, HotelVoucherService hotelVoucherService) {
         this.hotelService = hotelService;
+        this.hotelVoucherService = hotelVoucherService;
     }
 
     @PostMapping("/listing")
@@ -59,6 +64,19 @@ public class HotelController {
     @PostMapping("/cancel-booking/{bookingId}")
     public ResponseEntity<JsonNode> cancelBooking(@PathVariable String bookingId) {
         return ResponseEntity.ok(hotelService.cancelBooking(bookingId));
+    }
+
+    // Generates our own voucher PDF from TripJack's booking-details response
+    // - see HotelVoucherService for why hotels always get a generated
+    // voucher rather than resolving a supplier one first (contrast
+    // ActivitiesController's /voucher + /voucher/pdf pair).
+    @PostMapping(value = "/booking-voucher-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> bookingVoucherPdf(@RequestBody JsonNode payload) {
+        byte[] pdf = hotelVoucherService.generatePdf(payload.path("bookingId").asText(""));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"hotel-voucher.pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 
     @GetMapping("/nationalities")

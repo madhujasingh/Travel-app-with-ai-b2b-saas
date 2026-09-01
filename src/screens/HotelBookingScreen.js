@@ -13,6 +13,8 @@ import {
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson } from '../utils/hotelApiErrors';
@@ -90,6 +92,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const [polling, setPolling] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [downloadingVoucher, setDownloadingVoucher] = useState(false);
 
   const updateTraveler = (roomIndex, travelerIndex, field, value) => {
     setTravelers((current) =>
@@ -260,6 +263,38 @@ const HotelBookingScreen = ({ route, navigation }) => {
       Alert.alert('Confirm & Pay', err.message || 'Unable to confirm and pay for this booking.');
     } finally {
       setConfirming(false);
+    }
+  };
+
+  // Unlike activities (which sometimes get a ready-made supplier voucher),
+  // TripJack's hotel API has no equivalent field - we always generate our
+  // own from the booking-details response (see HotelVoucherService).
+  const downloadVoucher = async () => {
+    const bookingId = bookingDetails?.order?.bookingId || bookResponse?.bookingId || reviewResult.bookingId;
+    setDownloadingVoucher(true);
+    try {
+      const pdfResponse = await fetch(`${API_CONFIG.BASE_URL}/hotels/booking-voucher-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ bookingId }),
+      });
+      if (!pdfResponse.ok) {
+        throw new Error('Could not generate your voucher. Please try again.');
+      }
+      const arrayBuffer = await pdfResponse.arrayBuffer();
+      const file = new FileSystem.File(FileSystem.Paths.cache, `hotel-voucher-${bookingId}.pdf`);
+      file.create({ overwrite: true });
+      file.write(new Uint8Array(arrayBuffer));
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Hotel Voucher' });
+      } else {
+        Alert.alert('Voucher Saved', `Saved to ${file.uri}`);
+      }
+    } catch (error) {
+      Alert.alert('Download Failed', error.message || 'Could not download your voucher.');
+    } finally {
+      setDownloadingVoucher(false);
     }
   };
 
@@ -524,6 +559,16 @@ const HotelBookingScreen = ({ route, navigation }) => {
             )}
 
             {canCancel && (
+              <TouchableOpacity style={styles.voucherButton} onPress={downloadVoucher} disabled={downloadingVoucher}>
+                {downloadingVoucher ? (
+                  <ActivityIndicator color={Colors.primary} />
+                ) : (
+                  <Text style={styles.voucherButtonText}>Download Voucher</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {canCancel && (
               <TouchableOpacity style={styles.cancelButton} onPress={cancelBooking} disabled={cancelling}>
                 {cancelling ? (
                   <ActivityIndicator color={Colors.error} />
@@ -760,6 +805,19 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: {
     color: Colors.secondary,
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  voucherButton: {
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  voucherButtonText: {
+    color: Colors.primary,
     fontWeight: 'bold',
     fontSize: 14,
   },

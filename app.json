@@ -45,7 +45,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow MyItenary to access your photos to upload promo banner images."
+          "photosPermission": "Allow MyItineri to access your photos to upload promo banner images."
         }
       ]
     ]

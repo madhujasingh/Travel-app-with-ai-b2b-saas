@@ -1096,7 +1096,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
 
     return {
       bookingReference: bookingId,
-      agencyName: 'MyItenary Travels',
+      agencyName: 'MyItineri Travels',
       passengers,
     };
   };

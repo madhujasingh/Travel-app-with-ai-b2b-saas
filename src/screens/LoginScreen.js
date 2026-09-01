@@ -348,7 +348,7 @@ const LoginScreen = () => {
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.title}>Welcome to MyItenary</Text>
+          <Text style={styles.title}>Welcome to MyItineri</Text>
           <Text style={styles.subtitle}>Sign in to your account, or create a new one to get started.</Text>
         </View>
 

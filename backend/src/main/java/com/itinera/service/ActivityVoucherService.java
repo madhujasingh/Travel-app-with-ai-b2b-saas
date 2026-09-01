@@ -78,7 +78,7 @@ public class ActivityVoucherService {
             Font valueFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, Color.BLACK);
             Font remarksFont = FontFactory.getFont(FontFactory.HELVETICA, 10, Color.BLACK);
 
-            document.add(new Paragraph("MyItenary Travels", agencyFont));
+            document.add(new Paragraph("MyItineri Travels", agencyFont));
             Paragraph title = new Paragraph("Activity Voucher", titleFont);
             title.setSpacingAfter(4);
             document.add(title);

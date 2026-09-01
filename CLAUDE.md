@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-MyItenary is a full-stack travel platform with three independently run services:
+MyItineri is a full-stack travel platform with three independently run services:
 
 - **Frontend** (repo root, `src/`, `App.js`) — React Native / Expo app for both B2C customers and B2B admin/supplier workflows.
 - **`backend/`** — Spring Boot 3.2 (Java 17) REST API on port 8080, context path `/api`, backed by PostgreSQL via JPA.
