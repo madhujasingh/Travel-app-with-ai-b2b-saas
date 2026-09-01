@@ -276,11 +276,30 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const gstRequired = !!conditions?.gst?.igm;
   const gstOptional = !gstRequired && !!conditions?.gst?.gstappl;
   const emergencyRequired = !!conditions?.iecr;
-  const passportRequired = !!conditions?.pcs?.pm;
+  // TripJack's "pm" (Passport Mandatory) is NOT the only condition that
+  // needs the passport block - a real live fare can have pm:false while
+  // pped (expiry date) and/or pid (issue date) are independently true, and
+  // TripJack still needs them at booking time. Show (and require, see
+  // validateBookingForm) the whole passport block whenever any of the three
+  // is set - every certified sample payload sends number+nationality+issue+
+  // expiry together regardless of which specific flag triggered it.
+  const passportRequired = !!(conditions?.pcs?.pm || conditions?.pcs?.pped || conditions?.pcs?.pid);
   const documentIdApplicable = !!conditions?.dc?.ida;
   const documentIdRequired = !!conditions?.dc?.idm;
   const holdAllowed = isResume || conditions?.isBA !== false;
   const ssrSegments = getSsrSegments(reviewResponse);
+
+  // dob.adobr/cdobr/idobr are per-paxType; pcs.dobe is a blanket "DOB for
+  // every passenger" override on top of those - both live on the same
+  // AirReviewResponse.conditions object (fare-validate-api.txt, "How to use
+  // conditions from AirReviewResponse").
+  const dobRequiredFor = (paxType) => {
+    if (conditions?.pcs?.dobe) return true;
+    if (paxType === 'ADULT') return !!conditions?.dob?.adobr;
+    if (paxType === 'CHILD') return !!conditions?.dob?.cdobr;
+    if (paxType === 'INFANT') return !!conditions?.dob?.idobr;
+    return false;
+  };
 
   const setSsrChoice = (segmentId, type, code) => {
     setSsrSelections((prev) => {
@@ -600,8 +619,67 @@ const FlightBookingScreen = ({ route, navigation }) => {
     return body;
   };
 
+  // Mirrors HotelBookingScreen/ActivityBookingScreen's validate() pattern -
+  // this screen previously had none at all, so a blank form (or one missing
+  // a field this specific fare's conditions require) went straight to
+  // TripJack's live API instead of being caught locally. Returns a message
+  // to show, or null if the form is complete enough to submit.
+  const validateBookingForm = () => {
+    for (let i = 0; i < travellers.length; i += 1) {
+      const t = travellers[i];
+      const label = `Traveller ${i + 1}`;
+      if (!t.fN.trim() || !t.lN.trim()) {
+        return `${label}: enter a first and last name.`;
+      }
+      if (dobRequiredFor(t.pt) && !t.dob) {
+        return `${label}: date of birth is required for this fare.`;
+      }
+      if (passportRequired) {
+        if (!t.pNum.trim() || !t.pNat.trim() || !t.pid || !t.eD) {
+          return `${label}: passport number, nationality, issue date, and expiry date are all required for this fare.`;
+        }
+      }
+      if (documentIdRequired && !t.di.trim()) {
+        return `${label}: document ID is required for this fare.`;
+      }
+    }
+
+    if (!deliveryEmail.trim() || !deliveryEmail.includes('@')) {
+      return 'Enter a valid email address for booking confirmation.';
+    }
+    // Doc: contacts "Followed with country code and valid mobile number -
+    // Example (+919500112233)" - a number without one either gets rejected
+    // by TripJack or silently fails to deliver the ticket to the customer.
+    if (!/^\+\d{7,15}$/.test(deliveryPhone.trim())) {
+      return 'Enter a valid contact phone number with country code (e.g. +919876543210).';
+    }
+
+    const gstFilled = [gstNumber, gstRegisteredName, gstMobile, gstEmail, gstAddress].some((v) => v.trim());
+    if (gstRequired || (gstOptional && gstFilled)) {
+      if (!gstNumber.trim() || !gstRegisteredName.trim() || !gstMobile.trim() || !gstEmail.trim() || !gstAddress.trim()) {
+        return 'GST details are required together - fill in all GST fields, or leave them all blank.';
+      }
+      if (gstNumber.trim().length !== 15) {
+        return 'GST number must be 15 characters.';
+      }
+    }
+
+    if (emergencyRequired) {
+      if (!emergencyName.trim() || !emergencyEmail.trim() || !emergencyPhone.trim()) {
+        return 'This fare requires an emergency contact name, email, and phone number.';
+      }
+    }
+
+    return null;
+  };
+
   const handleHold = async () => {
     if (!bookingId) return;
+    const validationError = validateBookingForm();
+    if (validationError) {
+      Alert.alert('Missing Information', validationError);
+      return;
+    }
     setBusy(true);
     try {
       const body = buildBookingBody();
@@ -646,6 +724,11 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // order status" on the confirm step even though Hold itself succeeds.
   const handleInstantBook = async () => {
     if (!bookingId) return;
+    const validationError = validateBookingForm();
+    if (validationError) {
+      Alert.alert('Missing Information', validationError);
+      return;
+    }
     setBusy(true);
     setPhase('confirming');
     try {
@@ -1269,10 +1352,16 @@ const FlightBookingScreen = ({ route, navigation }) => {
                     placeholderTextColor={Colors.textMuted}
                   />
                 </View>
+                {dobRequiredFor(t.pt) ? (
+                  <View style={styles.subsectionLabelRow}>
+                    <Ionicons name="calendar-outline" size={13} color={Colors.primaryDark} />
+                    <Text style={styles.cardSubtitle}>Date of birth required for this fare</Text>
+                  </View>
+                ) : null}
                 <Pressable style={[styles.input, styles.selectRow]} onPress={() => openDatePicker(index, 'dob')}>
                   <Ionicons name="calendar-outline" size={16} color={Colors.textMuted} />
                   <Text style={t.dob ? styles.selectValueText : styles.selectPlaceholderText}>
-                    {t.dob || 'Date of Birth'}
+                    {t.dob || (dobRequiredFor(t.pt) ? 'Date of Birth (required)' : 'Date of Birth')}
                   </Text>
                 </Pressable>
                 {passportRequired ? (
