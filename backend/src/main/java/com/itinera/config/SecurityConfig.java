@@ -70,6 +70,11 @@ public class SecurityConfig {
                 // passthrough endpoints above, these need a real logged-in user.
                 .requestMatchers("/flight-bookings/**").authenticated()
                 .requestMatchers("/activity-bookings/**").authenticated()
+                // Cabs is UAT/certification only (see CabsService/TripJackClient) -
+                // every endpoint, including quotes, requires auth, unlike flights/
+                // hotels' public discovery split, since even a "search" here runs
+                // against a real TripJack account's test key.
+                .requestMatchers("/cabs/**").authenticated()
                 // Same split as flights - Listing/Detail/Review/Static-Detail are
                 // pre-booking discovery, public; Book/Confirm-Book/Booking
                 // Details/Cancel move money or expose a specific booking's PII.
