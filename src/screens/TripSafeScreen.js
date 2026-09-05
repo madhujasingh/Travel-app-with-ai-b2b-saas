@@ -18,11 +18,20 @@ import { useAuth } from '../context/AuthContext';
 import DatePickerModal from '../components/DatePickerModal';
 import { digitsOnly } from '../utils/inputSanitizers';
 
-// Standalone journey type only (see tripsafe-api/09-amt-api-integration.txt
-// and 08-student-api-integration.txt for the AMT/Student variants - not
-// built here yet). Region list per tripsafe-api/11-uat-certification.txt's
-// "Popular Region Mapping" table - the only 5 rkey codes the doc actually
-// confirms for rt: POPULARREGION.
+// Embedded (flight-linked) journey type is NOT built here yet - it ties
+// into the live Flights booking flow (see tripsafe-api/07-embedded-api-
+// integration.txt) and is deliberately being held back until TripSafe is
+// certified on the production key. Standalone/Student/AMT all share the
+// same 6 backend endpoints - only the request fields differ per type.
+const JOURNEY_TYPES = [
+  { value: 'STANDALONE', label: 'Standalone' },
+  { value: 'STUDENT', label: 'Student' },
+  { value: 'AMT', label: 'Annual Multi-Trip' },
+];
+
+// Region list per tripsafe-api/11-uat-certification.txt's "Popular Region
+// Mapping" table - the only 5 rkey codes the doc actually confirms for
+// rt: POPULARREGION.
 const POPULAR_REGIONS = [
   { rkey: 'MDE', label: 'Middle East' },
   { rkey: 'EUR', label: 'Europe' },
@@ -31,16 +40,56 @@ const POPULAR_REGIONS = [
   { rkey: 'ASI', label: 'Asia' },
 ];
 
+// tripsafe-api/08-student-api-integration.txt "Important Note" - the 4
+// coverage durations documented specifically for ict: STUDENT (the doc's
+// own sample comment lists 3 more values - 30/60/90/360 - but flags those
+// as possibly belonging to a different channel type reusing the same "cd"
+// field; only these 4 are confirmed for Student).
+const STUDENT_DURATIONS = [
+  { cd: '180', label: '6 Months' },
+  { cd: '365', label: '1 Year' },
+  { cd: '730', label: '2 Years' },
+  { cd: '1095', label: '3 Years' },
+];
+
+// tripsafe-api/09-amt-api-integration.txt - AMT's region choice is
+// restricted to exactly these 2 named presets (not a free multi-select
+// like Standalone), each expanding to a fixed set of Popular Region codes.
+const AMT_REGION_CHOICES = [
+  { value: 'WW', label: 'Worldwide', rkeys: ['MDE', 'EUR', 'SCH', 'USC', 'ASI'] },
+  { value: 'XUSC', label: 'Worldwide excl. US & Canada', rkeys: ['MDE', 'EUR', 'SCH', 'ASI'] },
+];
+
+// Search Matrix (tripsafe-api/11-uat-certification.txt) + Book Scenarios
+// (same file) both confirm AMT durations as exactly 30/45/60 days - the
+// AMT integration page's own "Important Note" additionally lists 90, but
+// that's contradicted by 3 other places in the doc (see open question #12
+// in tripsafe-api/13-open-questions-to-verify.txt), so it's left out here.
+const AMT_DURATIONS = [30, 45, 60];
+
 const formatDisplayDate = (isoDate) => {
   if (!isoDate) return '';
   const date = new Date(`${isoDate}T00:00:00`);
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const addDays = (isoDate, days) => {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
 const TripSafeScreen = ({ navigation }) => {
   const { token } = useAuth();
 
+  const [journeyType, setJourneyType] = useState('STANDALONE');
+
   const [selectedRegions, setSelectedRegions] = useState(['ASI']);
+  const [countryCode, setCountryCode] = useState('');
+  const [studentDuration, setStudentDuration] = useState('180');
+  const [amtRegionChoice, setAmtRegionChoice] = useState('WW');
+  const [amtDuration, setAmtDuration] = useState(30);
+
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [ages, setAges] = useState(['30']);
@@ -78,60 +127,114 @@ const TripSafeScreen = ({ navigation }) => {
   };
 
   const runSearch = async () => {
-    if (selectedRegions.length === 0) {
-      Alert.alert('Destination required', 'Choose at least one region you\'re travelling to.');
-      return;
+    if (journeyType === 'STANDALONE') {
+      if (selectedRegions.length === 0) {
+        Alert.alert('Destination required', 'Choose at least one region you\'re travelling to.');
+        return;
+      }
+      if (!startDate || !endDate) {
+        Alert.alert('Dates required', 'Choose your coverage start and end date.');
+        return;
+      }
+      if (new Date(endDate) <= new Date(startDate)) {
+        Alert.alert('Invalid dates', 'End date must be after the start date.');
+        return;
+      }
+    } else if (journeyType === 'STUDENT') {
+      if (!countryCode.trim()) {
+        Alert.alert('Country required', 'Enter the country code you\'re studying in (e.g. US, FR, DE).');
+        return;
+      }
+      if (!startDate) {
+        Alert.alert('Start date required', 'Choose your coverage start date.');
+        return;
+      }
+    } else if (journeyType === 'AMT') {
+      if (!startDate) {
+        Alert.alert('Start date required', 'Choose your coverage start date.');
+        return;
+      }
     }
-    if (!startDate || !endDate) {
-      Alert.alert('Dates required', 'Choose your coverage start and end date.');
-      return;
-    }
-    if (new Date(endDate) <= new Date(startDate)) {
-      Alert.alert('Invalid dates', 'End date must be after the start date.');
-      return;
-    }
+
     const parsedAges = ages.map((age) => parseInt(age, 10)).filter((age) => Number.isFinite(age));
     if (parsedAges.length !== ages.length) {
       Alert.alert('Traveller ages required', 'Enter an age for every traveller.');
       return;
     }
-    // Doc FAQ (tripsafe-api/01-search-api.txt): valid age range 0-75.
-    if (parsedAges.some((age) => age < 0 || age > 75)) {
+    if (journeyType === 'STUDENT') {
+      // Doc "Important Note" (tripsafe-api/08-student-api-integration.txt):
+      // eligible age group is 18-45 ONLY for the Student channel.
+      if (parsedAges.some((age) => age < 18 || age > 45)) {
+        Alert.alert('Invalid age', 'Student plan travellers must be aged 18-45.');
+        return;
+      }
+    } else if (parsedAges.some((age) => age < 0 || age > 75)) {
+      // Doc FAQ (tripsafe-api/01-search-api.txt): valid age range 0-75.
       Alert.alert('Invalid age', 'Traveller ages must be between 0 and 75.');
       return;
     }
 
-    const payload = {
-      isq: {
+    let isq;
+    let regionLabel;
+    if (journeyType === 'STANDALONE') {
+      isq = {
         sd: startDate,
         ed: endDate,
         isc: { iri: selectedRegions.map((rkey) => ({ rkey, rt: 'POPULARREGION' })) },
         iti: parsedAges.map((age) => ({ age })),
-      },
-    };
+      };
+      regionLabel = POPULAR_REGIONS.filter((r) => selectedRegions.includes(r.rkey)).map((r) => r.label).join(', ');
+    } else if (journeyType === 'STUDENT') {
+      isq = {
+        sd: startDate,
+        // Doc: "No ed in the request - TripSafe computes the end date from
+        // sd+cd server-side" - confirmed by the doc's own sample response,
+        // which echoes back a computed "ed" the request never supplied.
+        cd: studentDuration,
+        isc: { iri: [{ rkey: countryCode.trim().toUpperCase(), rt: 'COUNTRY' }] },
+        iti: parsedAges.map((age) => ({ age })),
+        ict: 'STUDENT',
+      };
+      regionLabel = `Studying in ${countryCode.trim().toUpperCase()}`;
+    } else {
+      const choice = AMT_REGION_CHOICES.find((c) => c.value === amtRegionChoice);
+      isq = {
+        sd: startDate,
+        ed: addDays(startDate, amtDuration),
+        isc: { iri: choice.rkeys.map((rkey) => ({ rkey, rt: 'POPULARREGION' })) },
+        iti: parsedAges.map((age) => ({ age })),
+        ict: 'AMT',
+      };
+      regionLabel = `${choice.label} · ${amtDuration} days`;
+    }
 
     try {
       setSearching(true);
       const response = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ isq }),
       });
       const data = await response.json();
       if (!response.ok || data?.errors) {
         throw new Error(data?.errors?.[0]?.message || data?.message || 'Unable to fetch insurance plans right now.');
       }
-      const plans = data?.isr?.iinfo?.pli || [];
+      // Search really does nest under "isr" live (confirmed 2026-09-05) -
+      // unlike Review, which doesn't (see TripSafeResultsScreen) - but
+      // falling back to the un-wrapped shape too costs nothing if that
+      // ever turns out inconsistent across accounts/plans.
+      const plans = data?.isr?.iinfo?.pli ?? data?.iinfo?.pli ?? [];
       if (plans.length === 0) {
         Alert.alert('No Plans Found', 'No insurance plans were found for this search. Try different dates or destinations.');
         return;
       }
       navigation.navigate('TripSafeResults', {
         plans,
+        journeyType,
         startDate,
-        endDate,
+        endDate: data?.isq?.ed || endDate,
         travellerAges: parsedAges,
-        regionLabel: POPULAR_REGIONS.filter((r) => selectedRegions.includes(r.rkey)).map((r) => r.label).join(', '),
+        regionLabel,
       });
     } catch (error) {
       Alert.alert('Travel Insurance Search', error.message || 'Unable to fetch insurance plans right now.');
@@ -152,36 +255,131 @@ const TripSafeScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.formCard}>
-        <Text style={styles.fieldLabel}>Where are you travelling to?</Text>
         <View style={styles.chipRow}>
-          {POPULAR_REGIONS.map((region) => (
+          {JOURNEY_TYPES.map((jt) => (
             <TouchableOpacity
-              key={region.rkey}
-              style={[styles.chip, selectedRegions.includes(region.rkey) && styles.chipActive]}
-              onPress={() => toggleRegion(region.rkey)}
+              key={jt.value}
+              style={[styles.chip, journeyType === jt.value && styles.chipActive]}
+              onPress={() => setJourneyType(jt.value)}
             >
-              <Text style={[styles.chipText, selectedRegions.includes(region.rkey) && styles.chipTextActive]}>
-                {region.label}
-              </Text>
+              <Text style={[styles.chipText, journeyType === jt.value && styles.chipTextActive]}>{jt.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Text style={styles.fieldLabel}>Coverage Dates</Text>
-        <View style={styles.row}>
-          <TouchableOpacity style={[styles.inputWithIcon, styles.inputFlex]} onPress={() => openDatePicker('start')}>
-            <Ionicons name="calendar-outline" size={17} color={Colors.primary} />
-            <Text style={[styles.inputIconText, startDate ? styles.pickerText : styles.pickerPlaceholder]}>
-              {startDate ? formatDisplayDate(startDate) : 'Start date'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.inputWithIcon, styles.inputFlex]} onPress={() => openDatePicker('end')}>
-            <Ionicons name="calendar-outline" size={17} color={Colors.primary} />
-            <Text style={[styles.inputIconText, endDate ? styles.pickerText : styles.pickerPlaceholder]}>
-              {endDate ? formatDisplayDate(endDate) : 'End date'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {journeyType === 'STANDALONE' ? (
+          <>
+            <Text style={styles.fieldLabel}>Where are you travelling to?</Text>
+            <View style={styles.chipRow}>
+              {POPULAR_REGIONS.map((region) => (
+                <TouchableOpacity
+                  key={region.rkey}
+                  style={[styles.chip, selectedRegions.includes(region.rkey) && styles.chipActive]}
+                  onPress={() => toggleRegion(region.rkey)}
+                >
+                  <Text style={[styles.chipText, selectedRegions.includes(region.rkey) && styles.chipTextActive]}>
+                    {region.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Coverage Dates</Text>
+            <View style={styles.row}>
+              <TouchableOpacity style={[styles.inputWithIcon, styles.inputFlex]} onPress={() => openDatePicker('start')}>
+                <Ionicons name="calendar-outline" size={17} color={Colors.primary} />
+                <Text style={[styles.inputIconText, startDate ? styles.pickerText : styles.pickerPlaceholder]}>
+                  {startDate ? formatDisplayDate(startDate) : 'Start date'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.inputWithIcon, styles.inputFlex]} onPress={() => openDatePicker('end')}>
+                <Ionicons name="calendar-outline" size={17} color={Colors.primary} />
+                <Text style={[styles.inputIconText, endDate ? styles.pickerText : styles.pickerPlaceholder]}>
+                  {endDate ? formatDisplayDate(endDate) : 'End date'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
+
+        {journeyType === 'STUDENT' ? (
+          <>
+            <Text style={styles.fieldLabel}>Country you're studying in</Text>
+            <View style={styles.inputWithIcon}>
+              <Ionicons name="school-outline" size={17} color={Colors.primary} />
+              <TextInput
+                style={styles.inputIconTextField}
+                placeholder="Country code, e.g. US, FR, DE"
+                placeholderTextColor={Colors.textMuted}
+                value={countryCode}
+                onChangeText={(v) => setCountryCode(v.toUpperCase().slice(0, 2))}
+                autoCapitalize="characters"
+                maxLength={2}
+              />
+            </View>
+
+            <Text style={styles.fieldLabel}>Coverage Start Date</Text>
+            <TouchableOpacity style={styles.inputWithIcon} onPress={() => openDatePicker('start')}>
+              <Ionicons name="calendar-outline" size={17} color={Colors.primary} />
+              <Text style={[styles.inputIconText, startDate ? styles.pickerText : styles.pickerPlaceholder]}>
+                {startDate ? formatDisplayDate(startDate) : 'Start date'}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.fieldLabel}>Coverage Duration</Text>
+            <View style={styles.chipRow}>
+              {STUDENT_DURATIONS.map((d) => (
+                <TouchableOpacity
+                  key={d.cd}
+                  style={[styles.chip, studentDuration === d.cd && styles.chipActive]}
+                  onPress={() => setStudentDuration(d.cd)}
+                >
+                  <Text style={[styles.chipText, studentDuration === d.cd && styles.chipTextActive]}>{d.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        {journeyType === 'AMT' ? (
+          <>
+            <Text style={styles.fieldLabel}>Coverage Region</Text>
+            <View style={styles.chipRow}>
+              {AMT_REGION_CHOICES.map((choice) => (
+                <TouchableOpacity
+                  key={choice.value}
+                  style={[styles.chip, amtRegionChoice === choice.value && styles.chipActive]}
+                  onPress={() => setAmtRegionChoice(choice.value)}
+                >
+                  <Text style={[styles.chipText, amtRegionChoice === choice.value && styles.chipTextActive]}>
+                    {choice.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.fieldLabel}>Coverage Start Date</Text>
+            <TouchableOpacity style={styles.inputWithIcon} onPress={() => openDatePicker('start')}>
+              <Ionicons name="calendar-outline" size={17} color={Colors.primary} />
+              <Text style={[styles.inputIconText, startDate ? styles.pickerText : styles.pickerPlaceholder]}>
+                {startDate ? formatDisplayDate(startDate) : 'Start date'}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.fieldLabel}>Trip Duration</Text>
+            <View style={styles.chipRow}>
+              {AMT_DURATIONS.map((d) => (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.chip, amtDuration === d && styles.chipActive]}
+                  onPress={() => setAmtDuration(d)}
+                >
+                  <Text style={[styles.chipText, amtDuration === d && styles.chipTextActive]}>{d} days</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        ) : null}
 
         <View style={styles.travellerHeaderRow}>
           <Text style={styles.fieldLabel}>Traveller Ages</Text>

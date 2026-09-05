@@ -413,6 +413,7 @@ const CustomerProfileScreen = ({ navigation }) => {
             status: policy.status,
             date: policy.createdAt,
             amount: policy.amount,
+            bookingId: policy.tripjackBookingId,
           })),
         ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
@@ -424,12 +425,14 @@ const CustomerProfileScreen = ({ navigation }) => {
               renderEmptyState('calendar-outline', 'No bookings yet', 'Trips you book will show up here.')
             ) : (
               combinedBookings.map((item) => {
-                const isTappable = item.kind === 'flight' || item.kind === 'activity';
+                const isTappable = item.kind === 'flight' || item.kind === 'activity' || item.kind === 'tripsafe';
                 const CardWrapper = isTappable ? TouchableOpacity : View;
                 const wrapperProps = item.kind === 'flight'
                   ? { activeOpacity: 0.7, onPress: () => navigation.navigate('MyFlightBookings') }
                   : item.kind === 'activity'
                   ? { activeOpacity: 0.7, onPress: () => navigation.navigate('ActivityBooking', { bookingReference: item.reference }) }
+                  : item.kind === 'tripsafe'
+                  ? { activeOpacity: 0.7, onPress: () => navigation.navigate('TripSafeBooking', { viewBookingId: item.bookingId }) }
                   : {};
                 return (
                   <CardWrapper key={item.key} style={styles.bookingCard} {...wrapperProps}>

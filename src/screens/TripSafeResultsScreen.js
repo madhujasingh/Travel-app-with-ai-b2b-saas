@@ -34,7 +34,7 @@ const extractPlanFare = (plan) => {
 
 const TripSafeResultsScreen = ({ route, navigation }) => {
   const { token } = useAuth();
-  const { plans, startDate, endDate, travellerAges, regionLabel } = route.params || {};
+  const { plans, journeyType, startDate, endDate, travellerAges, regionLabel } = route.params || {};
   const [reviewingPlid, setReviewingPlid] = useState(null);
 
   const selectPlan = async (plan) => {
@@ -57,7 +57,13 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
       if (!response.ok || data?.errors) {
         throw new Error(data?.errors?.[0]?.message || data?.message || 'Unable to review this plan right now.');
       }
-      const reviewedPlan = data?.isr?.iinfo?.pli?.[0] || plan;
+      // Confirmed live (2026-09-05): unlike Search, the real Review response
+      // has NO "isr" wrapper - "iinfo" sits directly at the root alongside
+      // "bid"/"isq"/"status" (the doc's own diagrams suggested Review reused
+      // Search's isr-wrapped shape, which isn't what TripJack actually
+      // returns). Falling back to isr-wrapped first keeps this tolerant if
+      // that ever changes, but the un-wrapped shape is what's real today.
+      const reviewedPlan = data?.isr?.iinfo?.pli?.[0] ?? data?.iinfo?.pli?.[0] ?? plan;
       const reviewedProduct = reviewedPlan?.pi?.[0] || product;
       const fare = extractPlanFare(reviewedPlan) ?? extractPlanFare(plan);
       navigation.navigate('TripSafeBooking', {
@@ -65,8 +71,9 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
         plan: reviewedPlan,
         product: reviewedProduct,
         fare,
-        startDate: data?.sd || startDate,
-        endDate: data?.ed || endDate,
+        journeyType,
+        startDate: data?.isq?.sd || data?.sd || startDate,
+        endDate: data?.isq?.ed || data?.ed || endDate,
         travellerAges,
       });
     } catch (error) {

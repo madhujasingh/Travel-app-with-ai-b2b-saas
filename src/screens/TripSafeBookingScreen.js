@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -52,12 +52,34 @@ const syncTripSafeBooking = async (token, entry) => {
   }
 };
 
+// Tries the documented itemInfos.INSURANCE wrapper first, then falls back
+// to iinfo sitting directly at the root (the same kind of wrapper-skipping
+// Review turned out to have) - a real booking confirmed this resolves
+// correctly either way. Module-level so it can be used both by the
+// component and to derive a resumed policy's display fields before any
+// state exists yet.
+const getBookedPlan = (details) =>
+  details?.itemInfos?.INSURANCE?.iinfo?.pli?.[0] ?? details?.iinfo?.pli?.[0] ?? null;
+
 const TripSafeBookingScreen = ({ route, navigation }) => {
   const { token, user } = useAuth();
-  const { bookingId, plan, product, fare, startDate, endDate, travellerAges } = route.params || {};
+  // viewBookingId is set when opened from Profile > Bookings to view an
+  // already-completed policy (see CustomerProfileScreen) - in that mode
+  // there's no plan/product/fare from a fresh search+review, only the
+  // TripJack booking id to fetch and display.
+  const { bookingId, plan, product, fare, journeyType, startDate, endDate, travellerAges, viewBookingId } = route.params || {};
+  const isViewMode = Boolean(viewBookingId);
+  // tripsafe-api/08-student-api-integration.txt - Student bookings need an
+  // extra "sc" (student course/sponsor) object per traveller; AMT/Standalone
+  // use the same Book payload shape (doc: "no changes required").
+  const isStudent = journeyType === 'STUDENT';
 
-  const planName = product?.pi || product?.pn || 'Travel Insurance Plan';
-  const destinationSummary = product?.rname || '';
+  const [booking, setBooking] = useState(null);
+  const [loadingResume, setLoadingResume] = useState(isViewMode);
+
+  const bookedProduct = getBookedPlan(booking)?.pi?.[0];
+  const planName = product?.pi || product?.pn || bookedProduct?.pi || bookedProduct?.pn || 'Travel Insurance Plan';
+  const destinationSummary = product?.rname || bookedProduct?.rname || '';
 
   const [travellers, setTravellers] = useState(
     (travellerAges || [30]).map((age) => ({
@@ -70,6 +92,17 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
       gen: 'M',
       nomineeName: '',
       nomineeRelation: 'SPOUSE',
+      // Student-only fields (tripsafe-api/08-student-api-integration.txt
+      // "sc" object) - harmless to keep on every traveller's state, only
+      // validated/sent when isStudent.
+      courseName: '',
+      courseDurationMonths: '',
+      universityName: '',
+      universityCity: '',
+      sponsorName: '',
+      sponsorDob: '',
+      sponsorRelation: '',
+      sponsorEmail: '',
     }))
   );
   const [deliveryEmail, setDeliveryEmail] = useState(user?.email || '');
@@ -77,21 +110,20 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
     user?.phone && user.phone !== '0000000000' ? digitsOnly(user.phone).slice(-10) : ''
   );
 
-  const [phase, setPhase] = useState('form'); // form | booking | confirmed
+  const [phase, setPhase] = useState(isViewMode ? 'confirmed' : 'form'); // form | booking | confirmed
   const [busy, setBusy] = useState(false);
-  const [booking, setBooking] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelled, setCancelled] = useState(false);
-  const [dobPicker, setDobPicker] = useState({ visible: false, index: null });
+  const [dobPicker, setDobPicker] = useState({ visible: false, index: null, field: 'dob' });
 
   const updateTraveller = (index, field, value) => {
     setTravellers((prev) => prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)));
   };
 
-  const openDobPicker = (index) => setDobPicker({ visible: true, index });
+  const openDobPicker = (index, field = 'dob') => setDobPicker({ visible: true, index, field });
   const chooseDob = (dateString) => {
-    updateTraveller(dobPicker.index, 'dob', dateString);
-    setDobPicker({ visible: false, index: null });
+    updateTraveller(dobPicker.index, dobPicker.field, dateString);
+    setDobPicker({ visible: false, index: null, field: 'dob' });
   };
 
   const validate = () => {
@@ -111,6 +143,19 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
       // Doc FAQ: nominee info is MANDATORY - booking fails without it.
       if (!t.nomineeName.trim()) {
         return `Enter a nominee name for Traveller ${i + 1}.`;
+      }
+      if (
+        isStudent &&
+        (!t.courseName.trim() ||
+          !t.courseDurationMonths.trim() ||
+          !t.universityName.trim() ||
+          !t.universityCity.trim() ||
+          !t.sponsorName.trim() ||
+          !t.sponsorDob ||
+          !t.sponsorRelation.trim() ||
+          !t.sponsorEmail.trim())
+      ) {
+        return `Fill in all course and sponsor details for Traveller ${i + 1}.`;
       }
     }
     return null;
@@ -135,6 +180,22 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
               pnum: t.pnum.trim().toUpperCase(),
               gen: t.gen,
               ni: [{ nn: t.nomineeName.trim(), nr: t.nomineeRelation }],
+              // tripsafe-api/08-student-api-integration.txt - confirmed
+              // 8-field "sc" object, Student journey only.
+              ...(isStudent
+                ? {
+                    sc: {
+                      cn: t.courseName.trim(),
+                      cdm: Number(t.courseDurationMonths),
+                      un: t.universityName.trim(),
+                      uc: t.universityCity.trim(),
+                      sn: t.sponsorName.trim(),
+                      sdob: t.sponsorDob,
+                      sr: t.sponsorRelation.trim(),
+                      se: t.sponsorEmail.trim(),
+                    },
+                  }
+                : {}),
             })),
           },
         ],
@@ -159,6 +220,31 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
     return data;
   };
 
+  // Opened from Profile > Bookings with only a TripJack booking id - fetch
+  // and render it directly instead of starting a fresh search+book flow.
+  useEffect(() => {
+    if (!isViewMode) return;
+    let active = true;
+    (async () => {
+      try {
+        const details = await fetchBookingDetails(viewBookingId);
+        if (active) setBooking(details);
+      } catch (error) {
+        if (active) {
+          Alert.alert('Travel Insurance', error.message || 'Unable to load this policy right now.', [
+            { text: 'OK', onPress: () => navigation.goBack() },
+          ]);
+        }
+      } finally {
+        if (active) setLoadingResume(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isViewMode, viewBookingId]);
+
   const handleBookAndPay = async () => {
     const validationError = validate();
     if (validationError) {
@@ -168,10 +254,11 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
     setBusy(true);
     setPhase('booking');
     try {
+      const bookPayload = buildBookingPayload();
       const bookResponse = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/book`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(buildBookingPayload()),
+        body: JSON.stringify(bookPayload),
       });
       const bookData = await bookResponse.json();
       if (!bookResponse.ok || bookData?.errors || bookData?.Status === false) {
@@ -221,7 +308,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
   // Details) are what the Amendment APIs need in travellerKeys - not the
   // Review-time values, in case anything shifted during Book.
   const getTravellerKeys = () => {
-    const bookedPlan = booking?.itemInfos?.INSURANCE?.iinfo?.pli?.[0];
+    const bookedPlan = getBookedPlan(booking);
     const bookedProduct = bookedPlan?.pi?.[0];
     const iti = bookedProduct?.iti || [];
     if (!bookedPlan?.plid || !bookedProduct?.pid || iti.length === 0) return null;
@@ -283,18 +370,38 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
     if (!id || !amendmentId) return;
     setCancelling(true);
     try {
+      const cancelPayload = { amendmentId, bookingId: id, type: 'INSURANCE_CANCELLATION', travellerKeys };
       const response = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/amendment/cancel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ amendmentId, bookingId: id, type: 'INSURANCE_CANCELLATION', travellerKeys }),
+        body: JSON.stringify(cancelPayload),
       });
       const data = await response.json();
       if (!response.ok || data?.errors) {
         throw new Error(data?.errors?.[0]?.message || data?.message || 'Unable to cancel this policy right now.');
       }
+      // amendmentItems[0].status is the one field the doc's FAQ explicitly
+      // documents as the confirmation signal (SUCCESS or REJECTED). A real
+      // REJECTED response (2026-09-05) also had a nested per-traveller
+      // "status": "CANCELLED" field that looked like a success signature -
+      // but Booking-Details doesn't expose any per-traveller status to
+      // cross-check against, so that nested field can't actually be
+      // verified as ground truth (an earlier fix here trusted it and was
+      // wrong to). For anything touching a refund, trust the documented
+      // field and report an honest failure rather than guess "success".
       const status = data?.amendmentItems?.[0]?.status;
       if (status !== 'SUCCESS') {
-        throw new Error(`Cancellation could not be confirmed (status: ${status || 'unknown'}).`);
+        // Surface both signals so this is diagnosable without reopening
+        // debug logging - TripJack's REJECTED here may mean this new
+        // product's cancellation flow isn't fully functional yet on this
+        // UAT/test-key account (same class of issue as Cabs' vendor/wallet
+        // gaps), not necessarily a bug in this app.
+        const nestedStatus = data?.insuranceCancellationResponse?.iif?.pli?.[0]?.pi?.[0]?.iti?.[0]?.status;
+        throw new Error(
+          `TripJack did not confirm this cancellation (status: ${status || 'unknown'}` +
+            `${nestedStatus ? `, traveller record shows "${nestedStatus}"` : ''}). ` +
+            'This may mean cancellation isn\'t fully enabled yet for this account - check with TripJack if it persists.'
+        );
       }
       setCancelled(true);
       const refundAmount = Math.abs(Number(data?.insuranceCancellationResponse?.tmr || 0));
@@ -310,6 +417,16 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
       ]);
     } catch (error) {
       Alert.alert('Cancellation', error.message || 'Unable to cancel this policy right now.');
+      // Refresh regardless of outcome - if TripJack's async processing (the
+      // same asynchronous-after-the-fact pattern seen with Cabs) actually
+      // does cancel it a moment later, the next status check should reflect
+      // that instead of staying stuck on stale data.
+      try {
+        const refreshed = await fetchBookingDetails(id);
+        setBooking(refreshed);
+      } catch (refreshError) {
+        // ignore - not worth a second alert on top of the one above
+      }
     } finally {
       setCancelling(false);
     }
@@ -319,7 +436,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
   const isCancelled = cancelled || order?.status === 'CANCELLED';
   const isFailed = order?.status === 'FAILED';
   const canCancel = !isCancelled && !isFailed;
-  const confirmedTravellers = booking?.itemInfos?.INSURANCE?.iinfo?.pli?.[0]?.pi?.[0]?.iti || [];
+  const confirmedTravellers = getBookedPlan(booking)?.pi?.[0]?.iti || [];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -420,6 +537,72 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {isStudent ? (
+                  <>
+                    <Text style={styles.nomineeLabel}>Course & Sponsor Details (required)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={t.courseName}
+                      onChangeText={(v) => updateTraveller(index, 'courseName', v)}
+                      placeholder="Course name (e.g. Computer Science)"
+                      placeholderTextColor={Colors.textMuted}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      value={t.courseDurationMonths}
+                      onChangeText={(v) => updateTraveller(index, 'courseDurationMonths', digitsOnly(v))}
+                      placeholder="Course duration (months)"
+                      placeholderTextColor={Colors.textMuted}
+                      keyboardType="number-pad"
+                    />
+                    <View style={styles.row}>
+                      <TextInput
+                        style={[styles.input, styles.inputFlex]}
+                        value={t.universityName}
+                        onChangeText={(v) => updateTraveller(index, 'universityName', v)}
+                        placeholder="University name"
+                        placeholderTextColor={Colors.textMuted}
+                      />
+                      <TextInput
+                        style={[styles.input, styles.inputFlex]}
+                        value={t.universityCity}
+                        onChangeText={(v) => updateTraveller(index, 'universityCity', v)}
+                        placeholder="University city"
+                        placeholderTextColor={Colors.textMuted}
+                      />
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={t.sponsorName}
+                      onChangeText={(v) => updateTraveller(index, 'sponsorName', v)}
+                      placeholder="Sponsor name"
+                      placeholderTextColor={Colors.textMuted}
+                    />
+                    <TouchableOpacity style={styles.inputWithIcon} onPress={() => openDobPicker(index, 'sponsorDob')}>
+                      <Ionicons name="calendar-outline" size={17} color={Colors.primary} />
+                      <Text style={[styles.inputIconText, t.sponsorDob ? styles.pickerText : styles.pickerPlaceholder]}>
+                        {t.sponsorDob ? formatDisplayDate(t.sponsorDob) : 'Sponsor date of birth'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.input}
+                      value={t.sponsorRelation}
+                      onChangeText={(v) => updateTraveller(index, 'sponsorRelation', v)}
+                      placeholder="Sponsor relation (e.g. Parent, Legal Heir)"
+                      placeholderTextColor={Colors.textMuted}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      value={t.sponsorEmail}
+                      onChangeText={(v) => updateTraveller(index, 'sponsorEmail', v)}
+                      placeholder="Sponsor email"
+                      placeholderTextColor={Colors.textMuted}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+                  </>
+                ) : null}
               </View>
             ))}
 
@@ -460,7 +643,14 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
           </View>
         ) : null}
 
-        {phase === 'confirmed' ? (
+        {phase === 'confirmed' && loadingResume ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator color={Colors.primary} size="large" />
+            <Text style={styles.loadingText}>Loading your policy...</Text>
+          </View>
+        ) : null}
+
+        {phase === 'confirmed' && !loadingResume ? (
           <>
             <View
               style={[
@@ -528,10 +718,10 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
 
       <DatePickerModal
         visible={dobPicker.visible}
-        title="Date of Birth"
+        title={dobPicker.field === 'sponsorDob' ? 'Sponsor Date of Birth' : 'Date of Birth'}
         maxDate={new Date()}
         onSelect={chooseDob}
-        onClose={() => setDobPicker({ visible: false, index: null })}
+        onClose={() => setDobPicker({ visible: false, index: null, field: 'dob' })}
       />
     </SafeAreaView>
   );
