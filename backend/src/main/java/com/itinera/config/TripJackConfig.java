@@ -14,6 +14,13 @@ public class TripJackConfig {
     // shape), so no production default is set here yet - confirm the real
     // one with TripJack before going live.
     private String cabsBaseUrl = "https://apitest-cabs.tripjack.com";
+    // Cabs Book/Payment both require "agentId" - TripJack's own numeric User
+    // Id for this account (the same one referenced when generating the API
+    // key / whitelisting an IP on their portal: "Navigate to the User detail
+    // for the User id you wish to create an API Key"). Not derivable from
+    // any API call in the docs and not customer-specific - one fixed value
+    // per account, injected server-side so the frontend never needs it.
+    private String cabsAgentId;
     private String apiKey;
     // Separate UAT/certification key for NEW, not-yet-certified TripJack
     // products (Cabs, TripSafe) - kept distinct from apiKey (production,
@@ -51,6 +58,14 @@ public class TripJackConfig {
 
     public void setCabsBaseUrl(String cabsBaseUrl) {
         this.cabsBaseUrl = cabsBaseUrl;
+    }
+
+    public String getCabsAgentId() {
+        return cabsAgentId;
+    }
+
+    public void setCabsAgentId(String cabsAgentId) {
+        this.cabsAgentId = cabsAgentId;
     }
 
     public String getApiKey() {

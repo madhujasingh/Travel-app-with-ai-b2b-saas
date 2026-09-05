@@ -27,6 +27,9 @@ import FlightsScreen from './src/screens/FlightsScreen';
 import ActivitiesScreen from './src/screens/ActivitiesScreen';
 import ActivityDetailScreen from './src/screens/ActivityDetailScreen';
 import ActivityBookingScreen from './src/screens/ActivityBookingScreen';
+import CabsScreen from './src/screens/CabsScreen';
+import CabResultsScreen from './src/screens/CabResultsScreen';
+import CabBookingScreen from './src/screens/CabBookingScreen';
 import FlightBookingScreen from './src/screens/FlightBookingScreen';
 import FlightReissueScreen from './src/screens/FlightReissueScreen';
 import MyFlightBookingsScreen from './src/screens/MyFlightBookingsScreen';
@@ -308,6 +311,9 @@ export default function App() {
               <Stack.Screen name="Activities" component={ActivitiesScreen} />
               <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
               <Stack.Screen name="ActivityBooking" component={ActivityBookingScreen} />
+              <Stack.Screen name="Cabs" component={CabsScreen} />
+              <Stack.Screen name="CabResults" component={CabResultsScreen} />
+              <Stack.Screen name="CabBooking" component={CabBookingScreen} />
               <Stack.Screen name="FlightBooking" component={FlightBookingScreen} />
               <Stack.Screen name="FlightReissue" component={FlightReissueScreen} />
               <Stack.Screen name="MyFlightBookings" component={MyFlightBookingsScreen} />

@@ -97,6 +97,16 @@ const HomeScreen = ({ navigation }) => {
       image: SERVICE_IMAGES.activities,
       screen: 'Activities',
     },
+    {
+      id: 6,
+      title: 'Cabs',
+      subtitle: 'Airport, outstation & local rides',
+      // No matching illustration yet (the other 5 came from a provided
+      // reference image) - falls back to an icon tile instead of leaving
+      // this one blank. Swap in a real image the same way once available.
+      icon: 'car-outline',
+      screen: 'Cabs',
+    },
   ];
 
   const handleSearch = () => {
@@ -211,9 +221,15 @@ const HomeScreen = ({ navigation }) => {
                     end={{ x: 1, y: 1 }}
                     style={styles.serviceCardGradient}
                   >
-                    <View style={styles.serviceImageWrap}>
-                      <Image source={service.image} style={styles.serviceImage} resizeMode="cover" />
-                    </View>
+                    {service.image ? (
+                      <View style={styles.serviceImageWrap}>
+                        <Image source={service.image} style={styles.serviceImage} resizeMode="cover" />
+                      </View>
+                    ) : (
+                      <View style={[styles.serviceImageWrap, styles.serviceIconFallback]}>
+                        <Ionicons name={service.icon} size={22} color={Colors.primaryDark} />
+                      </View>
+                    )}
                     <View style={styles.serviceTextWrap}>
                       <Text style={styles.serviceTitle}>{service.title}</Text>
                       <Text style={styles.serviceSubtitle} numberOfLines={2}>
@@ -649,6 +665,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: Colors.card,
     marginBottom: 10,
+  },
+  serviceIconFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   serviceImage: {
     width: '100%',
