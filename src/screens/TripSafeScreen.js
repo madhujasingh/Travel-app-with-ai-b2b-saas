@@ -60,12 +60,14 @@ const AMT_REGION_CHOICES = [
   { value: 'XUSC', label: 'Worldwide excl. US & Canada', rkeys: ['MDE', 'EUR', 'SCH', 'ASI'] },
 ];
 
-// Search Matrix (tripsafe-api/11-uat-certification.txt) + Book Scenarios
-// (same file) both confirm AMT durations as exactly 30/45/60 days - the
-// AMT integration page's own "Important Note" additionally lists 90, but
-// that's contradicted by 3 other places in the doc (see open question #12
-// in tripsafe-api/13-open-questions-to-verify.txt), so it's left out here.
-const AMT_DURATIONS = [30, 45, 60];
+// Confirmed live (2026-09-05) via TripJack's own validation error, which
+// resolves open question #12: "ed" and "sd" must differ by EXACTLY 365
+// days (the annual policy window) always, and separately, "coverage"
+// (a "cd" field, same idea as Student's coverage-duration field) must be
+// 30/45/60/90 - two independent things, not one. 90 IS valid after all -
+// this list previously excluded it based on other doc pages that turned
+// out to be incomplete.
+const AMT_DURATIONS = [30, 45, 60, 90];
 
 const formatDisplayDate = (isoDate) => {
   if (!isoDate) return '';
@@ -73,10 +75,18 @@ const formatDisplayDate = (isoDate) => {
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+// Builds the result from local date components (year/month/day), same as
+// DatePickerModal's own toDateString - NOT via toISOString(), which
+// converts to UTC and silently shifts the date back a day in any positive
+// UTC-offset timezone (e.g. IST), producing "sd + 364 days" instead of
+// "+365" and tripping TripJack's exact-365-day AMT validation.
 const addDays = (isoDate, days) => {
   const date = new Date(`${isoDate}T00:00:00`);
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const TripSafeScreen = ({ navigation }) => {
@@ -200,7 +210,21 @@ const TripSafeScreen = ({ navigation }) => {
       const choice = AMT_REGION_CHOICES.find((c) => c.value === amtRegionChoice);
       isq = {
         sd: startDate,
-        ed: addDays(startDate, amtDuration),
+        // Confirmed live (2026-09-05): despite TripJack's own error text
+        // literally saying "must be equal to 365 days", the real
+        // requirement is 364 - verified by direct API testing (365 always
+        // fails, 364 always succeeds, isolated from every other field).
+        // This matches the doc's own real sample payload's actual span
+        // (2025-12-20 to 2026-12-19 = 364 days by calendar arithmetic,
+        // despite the doc's surrounding prose calling it "12 months") -
+        // an earlier pass here wrongly "corrected" this to 365 assuming
+        // the doc's dates were a typo; they weren't.
+        ed: addDays(startDate, 364),
+        // "adr" (undocumented anywhere in the doc's verbose tables, only
+        // ever appears in sample payloads) confirmed live as the real
+        // coverage-duration field for AMT - "cd" (Student's field name)
+        // does NOT work for AMT.
+        adr: String(amtDuration),
         isc: { iri: choice.rkeys.map((rkey) => ({ rkey, rt: 'POPULARREGION' })) },
         iti: parsedAges.map((age) => ({ age })),
         ict: 'AMT',

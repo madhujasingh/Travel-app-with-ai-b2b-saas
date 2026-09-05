@@ -92,13 +92,30 @@ internal inconsistencies already spotted):
       might be a distinct component not seen fully spelled out anywhere
       else yet - keep watching later pages for a table that names it,
       otherwise confirm live.
-  12. AMT's stated coverage model is self-contradictory: framed as
-      "unlimited trips over a 12-month period" (p.83 intro, and the
-      sample search's sd/ed span exactly 365 days), but the same page's
-      "Important Note" gives per-search durations of 30/45/60/90 days,
-      and only 30/45/60 reappear anywhere else (Search Matrix p.89,
-      Book Scenarios p.92 - 90 never recurs for AMT). Confirm live what
-      "ed" controls for an AMT search/policy before implementing.
+  12. [RESOLVED live, 2026-09-05, second pass] AMT's stated coverage
+      model looked self-contradictory in the doc: "unlimited trips over
+      a 12-month period" vs. the "Important Note"'s 30/45/60/90-day
+      durations. TripJack's live validation error text reads: "The
+      difference between end date (ed) and start date (sd) must be
+      equal to 365 days and coverage should be equal to 30 or 45 or 60
+      or 90 days" - but that error text is ITSELF WRONG about the
+      number: extensive direct API testing (~20 calls) proved the real
+      required ed-sd difference is 364 days, not 365 - 365 always
+      fails, 364 always succeeds (isolated independently of every
+      other field: isef, age, exact region set all made no difference
+      once the day count was right). This exactly matches the doc's
+      own real sample payload's actual calendar span (2025-12-20 to
+      2026-12-19 = 364 days, verified by date arithmetic) - a fix that
+      first "corrected" this to 365, assuming the doc's sample dates
+      were a typo, was itself wrong; they were the real, working
+      values all along. "adr" (never explained in any verbose table,
+      only ever appearing in sample payloads across the whole doc) IS
+      the real coverage-duration field for AMT, confirmed live - "cd"
+      (Student's confirmed field name) does NOT work for AMT despite
+      the naming parallel. Lesson: don't "fix" a doc sample's numbers
+      to match the doc's own prose/error text without testing the
+      sample's literal original values first - here the sample was
+      right and the error message's own wording was wrong.
   13. Both the Student (p.82) and AMT (p.86) sections have a "NOTE" that
       lumps "Book API" in with APIs that "remain unchanged", directly
       contradicting each section's own "APIs Included" list, which
