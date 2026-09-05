@@ -10,6 +10,13 @@ const SORT_OPTIONS = [
   { value: 'seats', label: 'Seats: Low to High' },
 ];
 
+// fareBreakup.totalFare is TripJack's pre-tax ("net") amount, NOT the final
+// payable total, despite the name - confirmed live when Book rejected a
+// payload built from totalFare alone with "Expected net amount is
+// <totalFare>, Expected Gross amount is <totalFare+totalTax>". The real
+// amount the customer pays is totalFare + totalTax.
+const grandTotalOf = (quote) => Number(quote?.fareBreakup?.totalFare || 0) + Number(quote?.fareBreakup?.totalTax || 0);
+
 // One card per vehicle group (quotesInfo[]) - each carries its own single
 // quote (quotes[0]) per every sample in the docs, so this flattens the two
 // levels into one list item rather than nesting a second FlatList.
@@ -26,8 +33,8 @@ const CabResultsScreen = ({ route, navigation }) => {
     .map((group) => ({ group, quote: group?.quotes?.[0] }))
     .filter((item) => item.quote)
     .sort((a, b) => {
-      const priceA = Number(a.quote?.fareBreakup?.totalFare) || 0;
-      const priceB = Number(b.quote?.fareBreakup?.totalFare) || 0;
+      const priceA = grandTotalOf(a.quote);
+      const priceB = grandTotalOf(b.quote);
       const seatsA = Number(a.group.paxCapacity) || 0;
       const seatsB = Number(b.group.paxCapacity) || 0;
       if (sortBy === 'seats') {
@@ -39,8 +46,9 @@ const CabResultsScreen = ({ route, navigation }) => {
   const renderCard = ({ item }) => {
     const { group, quote } = item;
     const fare = quote.fareBreakup || {};
-    const totalFare = Number(fare.totalFare || 0);
+    const netFare = Number(fare.totalFare || 0);
     const totalTax = Number(fare.totalTax || 0);
+    const payableTotal = netFare + totalTax;
     const inclusions = quote.policies?.inclusions || [];
     const cancellationPolicy = quote.policies?.cancellationPolicy || [];
     const bestRefund = cancellationPolicy.find((p) => p.refundPercentage === 100);
@@ -89,7 +97,7 @@ const CabResultsScreen = ({ route, navigation }) => {
 
         <View style={styles.cardFooter}>
           <View>
-            <Text style={styles.fareValue}>₹{totalFare.toLocaleString()}</Text>
+            <Text style={styles.fareValue}>₹{payableTotal.toLocaleString()}</Text>
             {totalTax > 0 ? <Text style={styles.fareTaxNote}>incl. ₹{totalTax.toLocaleString()} taxes</Text> : null}
           </View>
           <TouchableOpacity

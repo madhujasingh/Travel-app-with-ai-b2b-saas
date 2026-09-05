@@ -70,6 +70,7 @@ public class SecurityConfig {
                 // passthrough endpoints above, these need a real logged-in user.
                 .requestMatchers("/flight-bookings/**").authenticated()
                 .requestMatchers("/activity-bookings/**").authenticated()
+                .requestMatchers("/cab-bookings/**").authenticated()
                 // Cabs is UAT/certification only (see CabsService/TripJackClient) -
                 // every endpoint, including quotes, requires auth, unlike flights/
                 // hotels' public discovery split, since even a "search" here runs

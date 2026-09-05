@@ -19,6 +19,30 @@ import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { phoneDigits } from '../utils/inputSanitizers';
 
+// Persists this cab booking against the logged-in user's account (upserted
+// server-side by tripjackBookingId - see CabBookingService) so it shows up
+// in Profile > Bookings, same pattern as FlightBookingScreen's
+// syncFlightBooking. Best-effort: a sync hiccup shouldn't block the booking
+// flow since the TripJack booking itself already succeeded independently.
+const syncCabBooking = async (token, entry) => {
+  if (!token) return;
+  try {
+    await fetch(`${API_CONFIG.BASE_URL}/cab-bookings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        tripjackBookingId: entry.bookingId,
+        routeSummary: entry.routeSummary,
+        vehicleLabel: entry.vehicleLabel,
+        totalFare: entry.totalFare,
+        status: entry.status,
+      }),
+    });
+  } catch (error) {
+    // ignored - best-effort sync
+  }
+};
+
 const CabBookingScreen = ({ route, navigation }) => {
   const { token, user } = useAuth();
   const { quote, group, journeyInfo, routeDetails, journeyType } = route.params || {};
@@ -36,9 +60,16 @@ const CabBookingScreen = ({ route, navigation }) => {
   const [cancelling, setCancelling] = useState(false);
   const [cancelled, setCancelled] = useState(false);
 
+  // fareBreakup.totalFare is TripJack's pre-tax ("net") amount, NOT the
+  // final payable total, despite the name - confirmed live when Book
+  // rejected a payload built from totalFare alone with "Expected net amount
+  // is <totalFare>, Expected Gross amount is <totalFare+totalTax>". The
+  // amount the customer actually pays is netFare + totalTax.
   const fare = quote?.fareBreakup || {};
-  const totalFare = Number(fare.totalFare || 0);
+  const netFare = Number(fare.totalFare || 0);
   const totalTax = Number(fare.totalTax || 0);
+  const payableTotal = netFare + totalTax;
+  const routeSummary = `${routeDetails?.origin?.displayAddress || ''} → ${routeDetails?.destination?.displayAddress || ''}`;
 
   const validate = () => {
     if (!firstName.trim() || !lastName.trim()) {
@@ -93,11 +124,24 @@ const CabBookingScreen = ({ route, navigation }) => {
         vendorId: quote?.vendorId,
       },
       pricingInfo: {
-        netAmount: (totalFare - totalTax).toFixed(2),
+        // Confirmed live via TripJack's own validation error ("Expected net
+        // amount is <netFare>, Expected Gross amount is <netFare+totalTax>")
+        // - net = the quote's own totalFare as-is, gross = net + tax, NOT
+        // the other way around despite "totalFare" sounding inclusive.
+        netAmount: netFare.toFixed(2),
         addonsPrice: '0.00',
+        // The plain Booking sample in the doc omits these two, but the
+        // Embedded Booking sample (same pricingInfo shape) includes them -
+        // confirmed live: omitting them causes a 500 on TripJack's side
+        // ("Cannot read field intCompact because <parameter1> is null" -
+        // intCompact is a java.math.BigDecimal internal, meaning their
+        // server treats a missing field here as a null BigDecimal and
+        // doesn't guard against it before doing arithmetic).
+        tjTaxAmount: totalTax.toFixed(2),
+        tjManagementFee: '0.00',
         agentMarkup: 0,
         agentMarkupSplitup: { onwardJourneyMarkup: 0, returnJourneyMarkup: 0 },
-        grossAmount: totalFare.toFixed(2),
+        grossAmount: payableTotal.toFixed(2),
       },
       passengerDetail,
       serviceRequest: serviceRequest.trim(),
@@ -169,6 +213,13 @@ const CabBookingScreen = ({ route, navigation }) => {
       const details = await fetchBookingDetails(bookingId);
       setBooking(details || { order: { bookingId, status } });
       setPhase('confirmed');
+      syncCabBooking(token, {
+        bookingId,
+        routeSummary,
+        vehicleLabel: group?.label,
+        totalFare: details?.order?.amount ?? payableTotal,
+        status: details?.order?.status || status,
+      });
     } catch (error) {
       Alert.alert('Cab Booking', error.message || 'Unable to complete this booking right now.');
       setPhase('form');
@@ -184,6 +235,13 @@ const CabBookingScreen = ({ route, navigation }) => {
     try {
       const details = await fetchBookingDetails(bookingId);
       setBooking(details);
+      syncCabBooking(token, {
+        bookingId,
+        routeSummary,
+        vehicleLabel: group?.label,
+        totalFare: details?.order?.amount ?? payableTotal,
+        status: details?.order?.status,
+      });
     } catch (error) {
       Alert.alert('Booking Status', error.message || 'Unable to refresh booking status.');
     } finally {
@@ -243,6 +301,13 @@ const CabBookingScreen = ({ route, navigation }) => {
         throw new Error(data?.error?.message || data?.message || 'Unable to cancel this booking right now.');
       }
       setCancelled(true);
+      syncCabBooking(token, {
+        bookingId,
+        routeSummary,
+        vehicleLabel: group?.label,
+        totalFare: order?.amount ?? payableTotal,
+        status: 'CANCELLED',
+      });
       Alert.alert('Cancellation Successful', `Refunded: ₹${Number(data?.data?.refundAmount || 0).toLocaleString()}`, [
         { text: 'OK', onPress: () => navigation.popToTop() },
       ]);
@@ -255,7 +320,22 @@ const CabBookingScreen = ({ route, navigation }) => {
 
   const order = booking?.order;
   const isCancelled = cancelled || order?.status === 'CANCELLED';
-  const canCancel = order?.status === 'PAYMENT_SUCCESS' && !isCancelled;
+  // Confirmed live: a real booking can come back FAILED after payment (the
+  // assigned vendor - e.g. "MOZIO" - couldn't actually fulfil it) with
+  // TripJack auto-refunding (paymentStatus "REFUND_SUCCESS"). Previously
+  // this rendered identically to a successful booking (green checkmark,
+  // "Cab Booked") since only isCancelled was ever checked - genuinely
+  // misleading for a booking that didn't happen.
+  const isFailed = order?.status === 'FAILED';
+  // Cabs' full status vocabulary isn't documented anywhere (unlike flights'
+  // explicit table) - requiring an exact "PAYMENT_SUCCESS" match broke live:
+  // a real, definitely-still-active booking lost its Cancel button after
+  // Refresh Status returned some other status value. Show Cancel for
+  // anything that isn't already cancelled/failed instead of whitelisting one
+  // exact string - TripJack's own Cancellation API will reject it if it's
+  // genuinely not cancellable at this point anyway. A FAILED order has
+  // nothing left to cancel (TripJack already auto-refunds it).
+  const canCancel = !isCancelled && !isFailed;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -276,7 +356,7 @@ const CabBookingScreen = ({ route, navigation }) => {
               <Text style={styles.summaryRoute} numberOfLines={2}>
                 {routeDetails?.origin?.displayAddress} → {routeDetails?.destination?.displayAddress}
               </Text>
-              <Text style={styles.summaryFare}>₹{totalFare.toLocaleString()}</Text>
+              <Text style={styles.summaryFare}>₹{payableTotal.toLocaleString()}</Text>
             </View>
 
             <View style={styles.card}>
@@ -334,7 +414,7 @@ const CabBookingScreen = ({ route, navigation }) => {
             </View>
 
             <TouchableOpacity style={styles.primaryButton} onPress={handleBookAndPay} disabled={busy}>
-              <Text style={styles.primaryButtonText}>Book & Pay ₹{totalFare.toLocaleString()}</Text>
+              <Text style={styles.primaryButtonText}>Book & Pay ₹{payableTotal.toLocaleString()}</Text>
             </TouchableOpacity>
           </>
         ) : null}
@@ -351,19 +431,25 @@ const CabBookingScreen = ({ route, navigation }) => {
             <View
               style={[
                 styles.statusHeaderCard,
-                isCancelled ? styles.statusHeaderCancelled : styles.statusHeaderConfirmed,
+                isCancelled || isFailed ? styles.statusHeaderCancelled : styles.statusHeaderConfirmed,
               ]}
             >
               <Ionicons
-                name={isCancelled ? 'close-circle' : 'checkmark-circle'}
+                name={isCancelled ? 'close-circle' : isFailed ? 'alert-circle' : 'checkmark-circle'}
                 size={30}
-                color={isCancelled ? Colors.error : Colors.success}
+                color={isCancelled || isFailed ? Colors.error : Colors.success}
               />
               <Text style={styles.statusHeaderTitle}>
-                {isCancelled ? 'Booking Cancelled' : 'Cab Booked'}
+                {isCancelled ? 'Booking Cancelled' : isFailed ? 'Booking Failed' : 'Cab Booked'}
               </Text>
               <Text style={styles.statusHeaderSubtitle}>
-                {isCancelled ? 'This ride has been cancelled.' : 'Your driver details will be shared before pickup.'}
+                {isCancelled
+                  ? 'This ride has been cancelled.'
+                  : isFailed
+                  ? `The assigned vendor couldn't fulfil this booking.${
+                      order?.paymentStatus === 'REFUND_SUCCESS' ? ' Your payment has been refunded.' : ''
+                    }`
+                  : 'Your driver details will be shared before pickup.'}
               </Text>
             </View>
 
@@ -372,13 +458,19 @@ const CabBookingScreen = ({ route, navigation }) => {
                 <Text style={styles.metaLabel}>Booking ID</Text>
                 <Text style={styles.metaValue}>{order?.bookingId}</Text>
               </View>
+              {isFailed && order?.paymentStatus ? (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Payment Status</Text>
+                  <Text style={styles.metaValue}>{order.paymentStatus}</Text>
+                </View>
+              ) : null}
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Status</Text>
                 <Text style={styles.metaValue}>{order?.status}</Text>
               </View>
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Amount</Text>
-                <Text style={styles.metaValueAccent}>₹{Number(order?.amount || totalFare).toLocaleString()}</Text>
+                <Text style={styles.metaValueAccent}>₹{Number(order?.amount || payableTotal).toLocaleString()}</Text>
               </View>
               {order?.rideStatus ? (
                 <View style={styles.metaRow}>
@@ -389,7 +481,7 @@ const CabBookingScreen = ({ route, navigation }) => {
               {order?.helpline ? <Text style={styles.helplineText}>{order.helpline}</Text> : null}
             </View>
 
-            {order?.trackingLink && !isCancelled ? (
+            {order?.trackingLink && !isCancelled && !isFailed ? (
               <TouchableOpacity style={styles.secondaryButton} onPress={() => Linking.openURL(order.trackingLink)}>
                 <Ionicons name="navigate-outline" size={15} color={Colors.primaryDark} />
                 <Text style={styles.secondaryButtonText}>Track Your Ride</Text>

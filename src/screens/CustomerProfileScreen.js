@@ -45,6 +45,10 @@ const CustomerProfileScreen = ({ navigation }) => {
   const [activityBookingsLoading, setActivityBookingsLoading] = useState(false);
   const [activityBookingsLoaded, setActivityBookingsLoaded] = useState(false);
 
+  const [cabBookings, setCabBookings] = useState([]);
+  const [cabBookingsLoading, setCabBookingsLoading] = useState(false);
+  const [cabBookingsLoaded, setCabBookingsLoaded] = useState(false);
+
   // This screen stays mounted across navigations (pushed on top of
   // CustomerTabs), so the "loaded once" flags below would otherwise cache a
   // stale/empty result forever - e.g. visiting Bookings before making a
@@ -55,6 +59,7 @@ const CustomerProfileScreen = ({ navigation }) => {
       setBookingsLoaded(false);
       setFlightBookingsLoaded(false);
       setActivityBookingsLoaded(false);
+      setCabBookingsLoaded(false);
     }, [])
   );
 
@@ -213,6 +218,44 @@ const CustomerProfileScreen = ({ navigation }) => {
     };
   }, [activeTab, token, activityBookingsLoaded]);
 
+  useEffect(() => {
+    if (activeTab !== 'bookings' || !token || cabBookingsLoaded) {
+      return;
+    }
+
+    let active = true;
+
+    const loadCabBookings = async () => {
+      setCabBookingsLoading(true);
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/cab-bookings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || data?.error || 'Unable to load cab bookings');
+        }
+        if (active) {
+          setCabBookings(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (active) {
+          setCabBookings([]);
+        }
+      } finally {
+        if (active) {
+          setCabBookingsLoading(false);
+          setCabBookingsLoaded(true);
+        }
+      }
+    };
+
+    loadCabBookings();
+    return () => {
+      active = false;
+    };
+  }, [activeTab, token, cabBookingsLoaded]);
+
   const getStatusColor = (status) => {
     switch ((status || '').toUpperCase()) {
       case 'COMPLETED': return '#4CAF50';
@@ -280,7 +323,7 @@ const CustomerProfileScreen = ({ navigation }) => {
         );
 
       case 'bookings': {
-        const combinedLoading = bookingsLoading || flightBookingsLoading || activityBookingsLoading;
+        const combinedLoading = bookingsLoading || flightBookingsLoading || activityBookingsLoading || cabBookingsLoading;
         const combinedBookings = [
           ...bookings.map((booking) => ({
             key: `itinerary-${booking.id}`,
@@ -309,6 +352,15 @@ const CustomerProfileScreen = ({ navigation }) => {
             status: flight.status,
             date: flight.createdAt,
             amount: flight.totalFare,
+          })),
+          ...cabBookings.map((cab) => ({
+            key: `cab-${cab.id}`,
+            kind: 'cab',
+            icon: 'car-outline',
+            title: cab.vehicleLabel ? `${cab.vehicleLabel} - ${cab.routeSummary || 'Cab'}` : (cab.routeSummary || 'Cab'),
+            status: cab.status,
+            date: cab.createdAt,
+            amount: cab.totalFare,
           })),
         ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
