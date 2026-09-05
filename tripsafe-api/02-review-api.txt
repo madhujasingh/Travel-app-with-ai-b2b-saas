@@ -1,0 +1,90 @@
+----------------------------------------------------------------------
+REVIEW API (p.16-20+, continues into part 2)
+----------------------------------------------------------------------
+Purpose: Submits selected insurance plans + product IDs (obtained from
+Search API) for premium calculation, booking, or detailed plan
+retrieval.
+
+Method: POST
+API: /insurance/v1/review
+
+Sample Request Payload:
+{
+  "pli": [
+    {
+      "plid": "{isid0219009173_0_regular}",
+      "pi": [
+        { "pid": "{ABHI-PLAN_250-WW-AAI-BOXX}" }
+      ]
+    }
+  ]
+}
+
+Request Verbose:
+  pli[]     - list of plan info
+    plid      - plan id, taken from the Search API response.
+                Example: isid8037318205_1_seniorcitizen
+    pi[]      - Product info
+      pid       - Product Id, taken w.r.t. the Plan Id from the search
+                  response. Example: ABHI-PLAN_100-WW-AAI-BOXX
+
+Response Verbose (top-level, p.17):
+  bid - Booking Id: unique id received IN the review response (i.e.
+        Review is what actually allocates the booking id, same pattern
+        as TripJack Flights' AirReviewResponse.bookingId - the "booking"
+        step later just confirms/finalizes it, doesn't allocate a new id).
+  sd  - Start date of insurance coverage (YYYY-MM-DD)
+  ed  - End date of insurance coverage (YYYY-MM-DD)
+
+Review response's "isq" nested shape (p.18) - same isq structure as
+Search (isc.iri[].rkey/rt, isc.pisc.rkey/rt, iti[].age), PLUS:
+  "searchId" - unique search id for every search result (present here
+               echoed back too, same as Search's top-level response).
+
+Review response's "isr" (Insurance Search Result) nested shape (p.19-20)
+- structurally identical to Search's isr/pi/pbft/Ifc shapes documented
+  above, i.e. Review's response re-returns the full plan/product/fare
+  breakdown (iinfo.pli[].plid/pi, pi.{pid,pn,pi,lp,aps,rname,pbft},
+  Pfd.{Ppd,Ppdf,Ifc}, pbft.{bv,name,type,bfp,dsc}, Ifc.{AP,IP,IPGST,
+  APGST,BF,SPGST,AC,SP,TF,IMU,ACTDS,NF}) - not retyped here to avoid
+  duplication, see SEARCH API section above for the full field list.
+  New/different piece at the end: "pltype": "REGULAR" (same "ignore
+  this field" note as Search).
+
+REVIEW API - FAQs continued (p.21-22):
+  Q: Can multiple plans from different providers be reviewed
+     simultaneously in the pli array?
+  A: No - only 1 plid per search/review.
+
+  Q: Are there constraints on the number of pids per plid? Must all be
+     from the same insurer?
+  A: Yes - same pattern as TripJack AIR (flights), where you choose the
+     priceId corresponding to a fare identifier: here you choose the
+     pid corresponding to plid.
+
+  Q: How are conflicts resolved if plans overlap in age eligibility or
+     region applicability?
+  A: No conflicts as such - handled already in the Search response
+     (i.e. Search only ever returns eligible/applicable plans).
+
+  Q: What happens if a plid or pid is invalid or manipulated?
+  A: Error thrown:
+     {
+       "errors": [
+         { "errCode": "400", "message": "Bad Request", "details": "Invalid productId" }
+       ]
+     }
+
+  Q: Does the Review API return both premium values and detailed benefits?
+  A: Yes - along with booking id, benefits, premium cost.
+
+  Q: Are benefits returned grouped by insurance provider (e.g. ABHI, BOXX)?
+  A: No - individual benefits given by both, explicitly displayed in
+     both Search & Review responses (not grouped by provider).
+
+  Q: Does the response include a validation status for each product/plan?
+  A: Basic validations like age, nominee, DOB, and coverage date are included.
+
+  Q: Is there a timeout window after which reviewed plans expire/become invalid?
+  A: Not yet (no timeout implemented as of this doc version).
+

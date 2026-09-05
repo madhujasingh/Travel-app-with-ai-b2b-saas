@@ -1,0 +1,160 @@
+----------------------------------------------------------------------
+BOOKING API (p.23-29)
+----------------------------------------------------------------------
+Purpose: Creates the insurance booking by submitting the selected plan,
+traveller details, payment information, and delivery contacts. ALL
+submitted data must EXACTLY match the Insurance Review Request (same
+plid/pid/age/traveller-count, or it's rejected - see FAQs below).
+
+Method: POST
+API: /oms/v1/insurance/book
+
+Sample Request Payload - Wallet Mode of Payment:
+{
+  "paymentInfos": [
+    { "paymentMedium": "WALLET", "amount": 1175 }
+  ]
+}
+
+Sample Request Payload - Credit Line Mode of Payment:
+{
+  "paymentInfos": [
+    { "paymentMedium": "CREDIT_LINE", "amount": 1175 }
+  ]
+}
+
+Full Sample Request Payload (combining p.24-25's continuation - this is
+ONE request body, split across two page-images):
+{
+  "bookingId": "{{insBookingId}}",
+  "paymentInfos": [
+    { "paymentMedium": "WALLET", "amount": 7500.00 }
+  ],
+  "pli": [
+    {
+      "plid": "{{PlanId}}",
+      "pi": [
+        {
+          "pid": "{{ProductId}}",
+          "iti": [
+            {
+              "id": 1,
+              "dob": "1985-06-15",
+              "age": 61,
+              "fn": "xxxx",
+              "ln": "xxxx",
+              "eid": "xxxx@domain.com",
+              "pnum": "X12345678",
+              "cnum": "9810961535",
+              "pincode": "123456",
+              "gen": "M",
+              "ni": [
+                { "nn": "xxxx", "nr": "Brother" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "deliveryInfo": {
+    "emails": [ "xxxx@domain.com" ],
+    "contacts": [ "9587507322" ]
+  }
+}
+
+NOTE: the number of travellers, ages, and plan selections MUST match
+the Insurance Review Request exactly.
+
+BOOKING API Request Verbose (top level):
+  Booking id  - Booking Id, unique id received in the Review response
+                (i.e. same "bid" from Review - NOT a new id at Booking
+                time; Booking finalizes the id Review already allocated).
+  paymentInfos - Payment Information
+    paymentMedium - "WALLET" (wallet transactions) or "CREDIT_LINE"
+                    (credit line transactions)
+    amount        - TripSafe Insurance Amount
+
+  pli[] - list of plan info
+    plid   - plan id, taken from Search response
+    pi[]   - Product info
+      pid    - Product Id, taken w.r.t. Plan Id from search response
+    iti[]  - "iti" Insurance Traveller information (nested under pi,
+             per the request payload structure above - NOT a sibling of
+             pli like in Search/Review, since Booking needs full
+             per-traveller PII, not just age)
+      dob    - Date of birth (YYYY-MM-DD)
+      age    - Age of the traveller
+      fn     - First name of the traveller
+      ln     - Last name of the traveller
+      eid    - Email ID of the traveller
+      pnum   - Passport number of the traveller
+      gen    - gender of Traveller (M / F)
+      ni[]   - Nominee info
+        nn     - Name of the nominee
+        nr     - Relationship between the traveller and the nominee
+                 (see "List of Nominee Relations" below)
+
+  deliveryInfo - top-level sibling of pli, NOT nested inside it:
+    emails[]   - delivery email(s)
+    contacts[] - delivery contact number(s)
+
+List of Nominee Relations (nr values):
+  SPOUSE   - Spouse of the traveller
+  CHILD    - Child of the traveller
+  PARENT   - Parent of the traveller
+  SIBLING  - Sibling of the traveller
+  FRIEND   - Friend of the traveller
+  GUARDIAN - Guardian of the traveller
+  OTHER    - Any other relationship
+
+BOOKING API Response Keys (top-level, minimal - full detail comes from
+a separate Booking-Details call afterward, same "Book -> poll
+Booking-Details" pattern as Flights/Cabs):
+  bid    - Booking Id: unique id
+  Status - Success: TRUE
+
+BOOKING API - FAQs (p.28-29):
+  Q: Exact structure/logic for validating consistency between Review
+     API and Booking API (e.g. age, plid, pid)?
+  A: Parameters like plid, pid, and age must match those from the
+     review step.
+
+  Q: Is bookingId a client-generated ID? Must it be unique?
+  A: It's a system-generated unique ID.
+
+  Q: What happens if traveller data (age, dob, pnum, etc.) is missing
+     or inconsistent with the Review step?
+  A: { "errCode": "400", "message": "Bad Request", "details": "Invalid productId" }
+
+  Q: Which fields are mandatory for a traveller (dob, fn, ln, eid,
+     pnum, gen, pincode)? Are some optional by plan?
+  A: All fields are mandatory EXCEPT pincode. Required: dob, fn, ln,
+     eid, pnum, gen.
+
+  Q: Is ni (nominee info) optional, and what happens if it's omitted?
+  A: MANDATORY. Booking FAILS if nominee details are missing.
+
+  Q: Can mobile numbers under contacts support international formats?
+  A: No - only Indian format (+91) is supported.
+
+  Q: What is the supported list of paymentMedium values (WALLET, CARD,
+     UPI, NETBANKING)?
+  A: Currently only WALLET & CREDIT_LINE are supported via API (NOT
+     CARD/UPI/NETBANKING, despite those being asked about).
+
+  Q: Can multiple payment methods be used via paymentInfos? How are
+     partial/split payments handled?
+  A: NOT supported. No Block API functionality is available (i.e. no
+     hold-then-pay-later flow like Flights/Hotels/Cabs have - Booking
+     is a single, immediate, full-payment call only).
+
+  Q: Are there validation checks on passport number (pnum) and date
+     formats (e.g. dob)?
+  A: Both are validated.
+
+  Q: What happens if extra or fewer travellers are submitted compared
+     to the Review request?
+  A: { "errCode": "1134", "message": "Please update details for every pax",
+       "details": "invalid traveller count provided for plan idisid1077830193_0_regular" }
+

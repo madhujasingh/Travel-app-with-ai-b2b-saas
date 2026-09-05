@@ -1,0 +1,270 @@
+----------------------------------------------------------------------
+BOOKING-DETAILS API (p.30-40)
+----------------------------------------------------------------------
+Purpose: Retrieves the details of a completed insurance booking using
+the bookingId returned after a successful booking.
+
+Method: POST
+API: /oms/v1/insurance/booking-details
+
+Sample Request Payload:
+{ "bookingId": "{{insBookingId}}" }
+
+Request Parameter Verbose:
+  bid - Booking Id: unique id (the unique insurance booking reference
+        ID received from the Insurance Booking API response).
+
+Booking Details API Sample Response (full, reconstructed across pages
+30-37 - one continuous JSON object; some numeric-looking fields below
+have suspiciously long digit counts in the source PDF render, likely
+an OCR/rendering artifact on the doc's real (shorter) sample values -
+flagged inline, confirm against a live response rather than copying
+these exact digit strings):
+{
+  "order": {
+    "bookingId": "XXXXXXX",
+    "bookingUserId": "XXXXXXX",
+    "partnerId": "0",
+    "amount": 730.00,
+    "markup": 0.00,
+    "orderType": "INSURANCE",
+    "channelType": "MOBILE",
+    "loggedInUserId": "61025303",
+    "deliveryInfo": {
+      "emails": [ "XXXXXX@gmail.com" ],
+      "contacts": [ "XXXXX" ]
+    },
+    "status": "SUCCESS",
+    "createdOn": "2025-06-16T00:46:31.599",
+    "processedOn": "2025-06-16T00:46:31.948",
+    "id": 34489000007,
+    "additionalInfo": {
+      "ft": "ONLINE",
+      "ps": "SUCCESS",
+      "iid": "TS-3444",
+      "ips": true,
+      "fut": {
+        "S": "2025-06-16T00:46:31.948",
+        "PS": "2025-06-16T00:46:31.846"
+      },
+      "ifo": false,
+      "iperp": true,
+      "isbpo": true
+    }
+  },
+  "itemInfos": {
+    "INSURANCE": {
+      "iinfo": {
+        "pli": [
+          {
+            "plid": "isid1758420714_0_regular",
+            "pi": [
+              {
+                "pid": "ABHI-PLAN_50-ASIA-AAI-BOXX",
+                "pn": "$50,000",
+                "pi": "Silver Plus",
+                "ip": "ABHI",
+                "aps": [ "AAI", "BOXX" ],
+                "rname": "ASIA",
+                "pbft": [
+                  {
+                    "bv": "POPUP",
+                    "name": "Mugging Cover",
+                    "ic": "Theft Covers",
+                    "type": "INSURANCE_BENEFIT",
+                    "dsc": "Payout in case of loss of funds due to mugging.",
+                    "sumins": "Upto $200",
+                    "bfp": "ABHI"
+                  },
+                  {
+                    "bv": "POPUP",
+                    "name": "Lost Luggage Assistance",
+                    "ic": "Travel Assistance",
+                    "type": "ASSISTANCE_BENEFIT",
+                    "dsc": "Coordination with airline to help file missing luggage report, PIR etc.",
+                    "bfp": "AAI"
+                  },
+                  {
+                    "bv": "POPUP",
+                    "name": "Digital Risk Assessment",
+                    "type": "ASSISTANCE_BENEFIT",
+                    "dsc": "Better understand your cyber awareness through a risk assessment survey",
+                    "bfp": "BOXX"
+                  }
+                ],
+                "iti": [
+                  {
+                    "id": 1,
+                    "dob": "1992-07-26",
+                    "age": 32,
+                    "fn": "XXXX",
+                    "ln": "XXXXXXX",
+                    "isio": true,
+                    "eid": "XXXXXXX@gmail.com",
+                    "pnum": "AA984045",
+                    "gen": "male",
+                    "ni": [ { "nn": "XXXXXX", "nr": "FATHER" } ],
+                    "fd": {
+                      "ifc": {
+                        "AC": 278.00, "NF": 457.56, "SP": 618.64, "TF": 730.00,
+                        "BXP": 10.00, "IMU": 647.40, "IGST": 111.36, "ACTDS": 5.56,
+                        "APGST": 1.80, "IPGST": 9.00, "SPGST": 111.36, "BXPGST": 1.80
+                      }
+                    },
+                    "policyId": "TSOXXN11038682",
+                    "ti": "Mr",
+                    "cnum": "9722222028"  // page render showed an implausibly long digit string here - treat as OCR noise, confirm live
+                    "isbpo": true,
+                    "optedAddons": {
+                      "brbServiceNumber": "7099138908725344", // same OCR-length caveat as cnum above
+                      "isBrbJobCompleted": false
+                    },
+                    "izt": true
+                  }
+                ],
+                "tfd": {
+                  "ifc": {
+                    "AC": 278.00, "AP": 10.00, "BF": 82.60,
+                    "NF": 457.56, "SP": 618.64, "TF": 730.00,
+                    "BXP": 10.00, "IMU": 647.40, "IGST": 111.36, "ACTDS": 5.56,
+                    "APGST": 1.80, "IPGST": 9.00, "SPGST": 111.36, "BXPGST": 1.80
+                    // one more field/value ("...": 50.00) was split across a
+                    // page break in the source and its key name got cut off -
+                    // likely a duplicate/variant of one of the above (BF is
+                    // 82.60 elsewhere - this loose "50.00" doesn't obviously
+                    // match any field seen so far; confirm live)
+                  }
+                }
+              }
+            ],
+            "pltype": "REGULAR"
+          }
+        ],
+        "activeFrom": "2025-06-16"
+      },
+      "isq": {
+        "sd": "2025-06-16",
+        "ed": "2025-06-20",
+        "isc": { "iri": [ { "rkey": "TH", "rt": "COUNTRY" } ] },
+        "iti": [
+          {
+            "id": 1, "dob": "1992-07-26", "age": 32,
+            "fn": "XXXXXXX", "ln": "XXXXX XXXX", "isio": true,
+            "eid": "XXXXXX@gmail.com", "pnum": "AA984045", "gen": "male",
+            "ni": [ { "nn": "XXXXXX", "nr": "FATHER" } ],
+            "policyId": "TSON11038682", "ti": "Mr", "cnum": "9722229920",
+            "isbpo": true,
+            "optedAddons": { "brbServiceNumber": "70991333307253", "isBrbJobCompleted": false },
+            "izt": true
+          }
+        ],
+        "isp": {},
+        "isef": false
+      },
+      "ios": "SUCCESS"
+    }
+  },
+  "gstInfo": {},
+  "status": { "success": true, "httpStatus": 200 },
+  "metaInfo": {
+    "Users": {
+      "61025303": {
+        "name": "XXXXXX",
+        "role": "AGENT",
+        "userId": "610898925303",
+        "partnerId": "0",
+        "additionalInfo": { "gps": [] },
+        "parentUserId": "610289795303",
+        "userConf": {},
+        "totalBalance": 5893.43
+      }
+    }
+  }
+}
+
+(NOTE: "isp" appears here as an empty object {} - this is the same
+mystery field flagged as an open question after Search API above. Seeing
+it as {} here doesn't resolve what it's for, just confirms it exists on
+the Review/Booking-Details response shape too, always empty in this
+sample.)
+
+Booking Details API Response Verbose (p.38-40):
+  order
+    Booking Id     - unique id received
+    "amount"       - TripSafe Insurance Amount
+    "markup"       - Agent markup if any
+    "Delivery info"- Agent Info
+      email          - email id of traveller
+      Contact        - traveller contact num.
+    status
+    "createdOn"    - Booking creation time
+  "itemInfos"
+    INSURANCE
+      iinfo - insurance information
+        plid - plan id taken from Search Resp
+        "pi" - Product info
+          "pid" - Product Id, taken w.r.t. Plan Id from search resp
+          pn    - Product name
+          Ip    - Insurance Provider Name (e.g. ABHI)
+          aps   - List of Assistance Provider (AAI, BOXX)
+          rname - Region name
+          pbft  - Product benefits information
+            bv    - Visibility of the benefit (ON_BANNER, ON_COMPARE)
+            name  - Benefit name
+            type  - Benefit type (ASSISTANCE, INSURER)
+            bfp   - benefit provider
+            dsc   - description if any
+          iti - Insurance Traveller Info
+            Id    - traveller no.
+            Dob   - Date of birth (YYYY-MM-DD)
+            Age   - age of the traveller
+            Fn    - first name of the traveller
+            Ln    - last name of the traveller
+            Isio  - insurance opted (optional)
+            Eid   - Email ID of the traveller
+            Pnum  - Passport number of the traveller
+            Gen   - Gender of Traveller
+            Ni    - Nominee information
+              "nn"  - Name of the nominee
+            Ifc - Insurance fare component
+              SPGST, AC, SP, TF, ACTDS, NF (same field set as Search/Review)
+          "policyId" - Unique Travel Policy Id generated PER TRAVELLER
+            (i.e. one policyId per traveller, not one per booking - a
+            multi-traveller booking has multiple policyIds, one inside
+            each iti[] entry, as shown in the sample above.)
+  *** isq & iti are repeated again in the response and CAN BE IGNORED ***
+      (per the doc's own explicit note - i.e. the isq/iti block sibling
+      to iinfo at the itemInfos.INSURANCE level is a redundant echo,
+      not new information - the authoritative traveller/policy data is
+      inside iinfo.pli[].pi[].iti[] instead.)
+
+BOOKING-DETAILS API-FAQs (p.41):
+  Q: Is this API idempotent? Can it be safely called multiple times?
+  A: API is NOT idempotent; each hit returns a unique response. Yes, it
+     CAN safely be called multiple times (i.e. no side effects from
+     repeated calls, just don't expect byte-identical responses).
+
+  Q: What fields are guaranteed in the response regardless of provider
+     (e.g. bookingId, amount, status)?
+  A: Email ID, contact number, gender, policyId.
+     (NOTE: this answer doesn't actually list bookingId/amount/status
+     despite the question naming them - likely means those ARE also
+     guaranteed as "obviously always present" and this FAQ is only
+     calling out the less-obvious ones. Don't read this as "bookingId
+     might be absent.")
+
+  Q: Are optional fields like additionalInfo, fd.ifc, and iti.policyId
+     always returned even if empty or zeroed?
+  A: No - they are never empty (i.e. these fields are always populated
+     with real values, never returned as blank/zero placeholders).
+
+  Q: Does the response provide a history of status changes (e.g.
+     CREATED, SUCCESS), or only the final status?
+  A: Response includes BOTH status history and final status.
+
+  Q: Can a booking be retrieved using alternate identifiers like
+     policyId, email, or passport number?
+  A: Bookings can currently be retrieved ONLY via booking ID in the
+     API. Policy ID can be used in "Manage Cart" via the TripJack
+     Portal (not via API).
+

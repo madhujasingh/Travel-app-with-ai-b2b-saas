@@ -1,0 +1,178 @@
+======================================================================
+3. API DOCUMENTATION
+======================================================================
+
+----------------------------------------------------------------------
+SEARCH API (p.8-15)
+----------------------------------------------------------------------
+Purpose: Returns available insurance plans based on provided regions
+and traveller ages.
+
+Method: POST
+API: /insurance/v1/searchquery-list
+
+Sample Request Payload:
+{
+  "isq": {
+    "sd": "2025-02-24",
+    "ed": "2025-02-26",
+    "isc": {
+      "iri": [
+        { "rkey": "ASI", "rt": "POPULARREGION" },
+        { "rkey": "US",  "rt": "COUNTRY" }
+      ]
+    },
+    "iti": [
+      { "age": 41 },
+      { "age": 43 },
+      { "age": 61 },
+      { "age": 62 }
+    ]
+  }
+}
+
+Request Verbose (top level):
+  sd  - Start date of insurance coverage (YYYY-MM-DD).
+  ed  - End date of insurance coverage (YYYY-MM-DD).
+  isc - Insurance search criteria, includes region info.
+    isc.iri[] - Region details where insurance will be applicable.
+      iri.rkey - Name of the region (e.g. "Europe", "Asia", "India", "USA").
+      iri.rt   - Type of region (e.g. "Country", "Continent"/"POPULARREGION").
+    isc.iti[] - Insurance Traveller Info: list of travellers the search
+                is being performed for. For Search API only "age" is
+                required.
+      iti.age - Age of the traveller.
+
+Full nested shape of "isq" (combining both verbose tables shown, pages
+9 and 11 - page 11's table is the more complete/later one):
+  isq
+    sd    - start date (YYYY-MM-DD)
+    ed    - end date (YYYY-MM-DD)
+    isc   - Insurance search criteria
+      iri[]      - region details where insurance applies
+        rkey       - region name (e.g. "Europe","Asia","India","USA")
+        rt         - region type (e.g. "Country","Continent")
+      pisc       - Product insurance search criteria
+        rkey       - region name
+        rt         - region type
+      iti[]      - Insurance Traveller Info (age only, for Search)
+        age        - traveller age
+    "searchId" - Unique search id for every search result (top-level,
+                 sibling of isq presumably - returned in response)
+    "isr"      - Insurance Search Result (response object)
+      iinfo        - insurance info
+        pli[]         - list of plan info
+          plid           - plan id
+          pi             - product info (see below)
+
+InsuranceSearchResult (top-level response wrapper, p.10) - only 2 keys
+documented explicitly at this top level (sd/ed echoed back); the real
+substance is nested under "isr" as shown above/below:
+  sd - start date of insurance coverage (YYYY-MM-DD)
+  ed - end date of insurance coverage (YYYY-MM-DD)
+
+"pi" - Product info (full shape, pages 12/19 - identical both times):
+  pi
+    pid    - Product ID
+    pn     - Product name
+    pi     - productIdentifier (e.g. "$50k Travel cover", "$100k Travel Cover")
+             (NOTE: yes, the doc names both the parent object AND this
+             child field "pi" - literally "pi.pi" in the real JSON per
+             the doc's own labelling. Verify against a live response
+             before assuming this is a documentation typo.)
+    lp     - Insurance Provider Name (e.g. "ABHI")
+             (NOTE: page 12 prints the key as "Ip" (capital I, lowercase p);
+             this is almost certainly the same field as "lp" - doc's
+             own font/OCR is inconsistent on capitalization here. Verify
+             the exact casing against a real live response/Postman
+             collection rather than trusting either page's rendering.)
+    aps    - List of Assistance Providers (e.g. "AAI", "BOXX")
+    rname  - Region name
+    pbft   - Product benefits information (see nested shape below)
+  Pfd (sibling of "pi", under the same pli[] entry per page 19's
+       fuller diagram) - Product fare details:
+    Ppd    - Contains per-day price of each age-type traveller
+    Ppdf   - Day number to age-wise fare component
+    Ifc    - Insurance fare component (see below)
+  pbft - Product Benefit (nested under pi, or possibly under pli - the
+         two page renderings (12 vs 20) disagree slightly on exact
+         nesting depth; treat as belonging to the product/plan level):
+    bv     - Visibility of the benefit (ON_BANNER, ON_COMPARE)
+    name   - Benefit name
+    type   - Benefit type (ASSISTANCE, INSURER)
+    bfp    - benefit provider
+    dsc    - description if any
+  Ifc - Insurance fare component (fields collected across pages 12-13,
+        appears to be ONE flat object with all of these fields - the
+        page break in the PDF split it into two boxes, not two nested
+        levels):
+    AP     - Across Assistance Price
+    IP     - Insurer Price
+    IPGST  - Insurance Markup GST
+    APGST  - Across Assistance GST
+    BF     - Base Fare
+    SPGST  - Selling Price GST
+    AC     - Agent Commission
+    SP     - Selling Price
+    TF     - Total Fare
+    IMU    - Insurer Markup
+    ACTDS  - Agent Commission TDS
+    NF     - Net Fare
+  "pltype" - "REGULAR" (doc explicitly says: ignore this field)
+
+SEARCH API - FAQs (p.13-15):
+  Q: Expected format/validation for rkey values - is there a definitive list?
+  A: Yes, a predefined list of valid rkey values is used WITH
+     rt: POPULARREGION specifically:
+       SCH -> Schengen
+       EUR -> Europe
+       MDE -> Middle East
+       USC -> US & Canada
+       ASI -> Asia
+     (Country-type rkeys presumably follow the separate "Country Mapping
+     Codes" catalogue linked on p.7, not this list.)
+
+  Q: Can rt accept multiple types in a single request, or must each
+     region have a distinct rt?
+  A: API supports both Popular Region and Country types together in a
+     single search request (i.e. iri[] can mix rt:"POPULARREGION" and
+     rt:"COUNTRY" entries, as shown in the sample payload itself: one
+     entry rkey="ASI"/rt="POPULARREGION", another rkey="US"/rt="COUNTRY").
+
+  Q: What happens if unsupported/invalid rkey or rt values are passed?
+  A: Response is: "No insurance search results found." (not a hard
+     error/exception - a soft empty-result message.)
+
+  Q: Max number of travellers (iti) allowed per request?
+  A: Up to 10 travellers per request. Valid age range: 0-75 years.
+
+  Q: Can traveller age be fractional (e.g. 1.5 years)?
+  A: No - age must be an integer. Fractional ages are rejected.
+
+  Q: What happens if sd > ed (invalid date range)? Is this validated?
+  A: Same soft error as invalid rkey/rt: "No insurance search results found."
+
+  Q: Is the isp object used for advanced filtering (insurer, coverage type)?
+  A: No - isp is NOT used for filtering. It's for internal insurance
+     product identification only.
+     (NOTE: "isp" isn't otherwise documented/shown in any sample payload
+     in pages 1-20 - possibly a typo for "isc" or "pisc" in the doc
+     itself, or a field introduced later in the doc past page 20.
+     Flag this and check later sections / ask TripJack if it matters.)
+
+  Q: Are age restrictions enforced at the plan or product level? How
+     are validation failures conveyed?
+  A: Enforced at the PRODUCT level. Violations return the same standard
+     error (not a distinct one).
+
+  Q: Does the response contain plan metadata (plan ID, benefits,
+     pricing, insurer, etc.)?
+  A: Yes - Plan ID, pricing, insurer, and benefits are all included.
+
+  Q: Is pagination supported in the Search API response for large
+     result sets?
+  A: Not supported currently.
+
+  Q: Typical/expected latency for Search API under normal load?
+  A: Around 800-1200 ms under normal load.
+

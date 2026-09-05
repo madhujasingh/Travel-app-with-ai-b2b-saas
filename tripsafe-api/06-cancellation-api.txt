@@ -1,0 +1,136 @@
+----------------------------------------------------------------------
+CANCELLATION API (p.52-58)
+----------------------------------------------------------------------
+Purpose: Confirms/finalizes the cancellation using the amendmentId
+obtained from Raise-Amendments. This is STEP 2 of the two-step flow.
+
+Method: POST
+API: /oms/v1/ins/amendment/confirm-insurance-cancellation
+
+Cancellation API Request Payload:
+{
+  "amendmentId": "id",
+  "bookingId": "TJS70010000707761",
+  "type": "INSURANCE_CANCELLATION",
+  "travellerKeys": {
+    "isid7153520427_0_REGULAR": {
+      "ABHI-PLAN_100-WW-AAI": [
+        { "id": 1 }
+      ]
+    }
+  }
+}
+
+IMPORTANT: "type" here is "INSURANCE_CANCELLATION" - DIFFERENT from
+Raise-Amendments' "type": "CANCELLATION". Confirm this distinction is
+real and intentional (not a doc typo) before coding against it - it's
+easy to copy-paste the wrong constant between the two calls.
+
+Cancellation API Request Verbose:
+  Amendment id - Amendment id received from the Raise API
+  Booking Id   - Booking ID for which cancellation needs to be raised
+  type         - Type of amendment
+    travellerKeys - same {plid: {pid: [{id: paxId}]}} shape as Raise
+
+Cancellation API Response (full, reconstructed p.53-55):
+{
+  "amendmentItems": [
+    {
+      "amendmentId": "060000729805",
+      "bookingId": "TJS70850000729798",
+      "status": "SUCCESS",
+      "partnerId": "0",
+      "orderType": "INSURANCE"
+    }
+  ],
+  "insuranceCancellationResponse": {
+    "iif": {
+      "pli": [
+        {
+          "pi": [
+            {
+              "pid": "ABHI-PLAN_100-WW-AAI-BOXX",
+              "pn": "$100,000", "pi": "Gold Plus", "ip": "ABHI",
+              "aps": [ "Across Assist", "BOXX" ], "rname": "Worldwide",
+              "pbft": {},  // rendered as an empty object in this specific
+                           // sample (vs an array of benefit objects
+                           // everywhere else) - possibly just because
+                           // this cancel-confirm response omits benefit
+                           // detail, not proof "pbft" is ever an object
+                           // type generally. Confirm live.
+              "iti": [
+                {
+                  "policyId": "TSON11033814",
+                  "status": "CANCELLED",  // final per-traveller status
+                  "isbpo": true,
+                  "optedAddons": {
+                    "brbServiceNumber": "70850000729798",
+                    "isBrbJobCompleted": false
+                  },
+                  "izt": true
+                }
+              ],
+              "tfd": {
+                "ifc": {
+                  "SPGST": 245.59, "CGST": 122.80, "AC": 614.00, "SP": 1364.41,
+                  // same unresolved cut-off key/180.90 value as before
+                  "BXP": 10.00, "NF": 1008.28, "ACTDS": 12.28, "BXPGST": 1.80,
+                  "TF": 1610.00, "SGST": 122.80
+                }
+              },
+              "ibrbf": false, "iesf": false, "iboxf": false
+            }
+          ],
+          "pltype": "REGULAR"
+        }
+      ]
+    },
+    "ic": 614.00,     // HERE it really is "ic" (matches the shared verbose
+                      // table) - strengthens the theory that the earlier
+                      // Raise response's "ie" was a typo/OCR error for "ic"
+    "tmr": -1610.00,  // NEGATIVE here (confirm/actual), vs POSITIVE in the
+                      // Raise preview response - sign flips between
+                      // preview and confirm; treat as intentional
+                      // (direction of money movement), not a bug
+    "insuranceType": "TRIPSAFE"
+  },
+  "status": { "success": true, "httpStatus": 200 }
+}
+
+Cancellation API Response Verbose (p.56-57) - this is the SAME table as
+Raise Amendment's (see note above) reused for this endpoint too, with
+one clear staleness spotted: the table's "Status" description still
+says "Raised (the amendment is in raise mode)" copy-pasted from the
+Raise table, even though the real Cancellation response sample above
+shows "status": "SUCCESS" (not "REQUESTED"/"Raised") - trust the real
+sample's "SUCCESS" over this stale-looking verbose text.
+  amendmentItems.amendmentId / bookingId / Status / Amount / Partner id
+    / orderType - same as Raise table above (Partner id and orderType
+    explicitly "can be ignored" both times)
+  "insuranceCancellationResponse"
+    "iif" - iif.pli[].pi[] -> pid/pn/Ip/aps/rname/pbft (product benefits info)
+      iti[] -> "policyId" (Unique Policy Id), "status": "CANCELLED"
+               (final status of booking)
+      ifc/tfd -> SPGST, AC, SP, TF, ACTDS, NF
+    "ic" - Insurance cancellation (amount)
+    "tmr" - Total amount to be refunded
+
+CANCELLATION API-FAQs (p.58):
+  Q: Can multiple amendment IDs be passed and cancelled in one request?
+  A: Not supported. One amendment ID per request.
+
+  Q: What is the behavior if the amendment ID is invalid or already processed?
+  A: Status will be returned as REJECTED.
+
+  Q: Is the cancellation process reversible? Can an accidental
+     cancellation be rolled back?
+  A: Cancellation is NOT reversible.
+
+  Q: What status values can be expected in the response (PENDING,
+     SUCCESS, FAILED)?
+  A: "Only REJECTED is currently returned." (Oddly phrased given the
+     real sample response above clearly shows "SUCCESS" on the happy
+     path - most likely means "REJECTED is the only FAILURE-case status
+     value", with SUCCESS being the separate happy-path value, not that
+     every response is literally REJECTED. Confirm live.)
+

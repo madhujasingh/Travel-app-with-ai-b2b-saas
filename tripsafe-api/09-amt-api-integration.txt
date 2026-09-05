@@ -1,0 +1,110 @@
+======================================================================
+ANNUAL MULTI TRIP (AMT) API INTEGRATION
+======================================================================
+
+--- PAGE 83 ---
+
+Annual Multi Trip Insurance provides coverage for unlimited trips
+taken during a 12-month period. Allows one-time purchase for a year,
+avoiding repetitive policy buying.
+
+2 new plans!!
+  - TripSafe Titanium Annual ($500,000 Cover).
+  - TripSafe Platinum Annual ($250,000 Cover).
+
+Add this to your search, to make it an AMT plan:
+  "ict": "amt"
+
+Important Note:
+  - Coverage for (30/45/60/90 days) respectively.
+  - Region will have the 2 options: Worldwide(WW) and Worldwide excl
+    US & Canada(XUSC)
+
+  [INCONSISTENCY: the opening paragraph frames AMT as "coverage for
+  unlimited trips taken during a 12-month period" (i.e. an annual
+  policy), but the Important Note then gives per-policy durations of
+  30/45/60/90 days - and the AMT Book Scenarios later (p.92) and the
+  Search Matrix (p.89) both confirm the duration options are only
+  30/45/60 days (90 is listed here but doesn't reappear anywhere else
+  for AMT). Read as: the "12-month period" is the policy's validity
+  window, and 30/45/60(/90?) is a separate fixed "duration" sub-field
+  within it - but the doc never explains what "duration" means for an
+  annual/unlimited-trips product, or why 90 appears here but nowhere
+  else for AMT. Confirm live what "ed" (end date) actually represents
+  for an AMT search - a fixed sub-trip length, or the 12-month policy
+  end date, or both.]
+
+APIs Included:
+  - Search API - AMT plan search functionality
+  - Review API - Same as existing implementation; no changes required
+  - Book API - AMT plan booking functionality
+
+--- PAGE 84-85 ---
+
+AMT Search API - Sample Request Payload:
+
+{
+  "isq": {
+    "sd": "2025-12-20",
+    "ed": "2026-12-19",
+    "isc": {
+      "iri": [
+        { "rkey": "MDE", "rt": "POPULARREGION" },
+        { "rkey": "EUR", "rt": "POPULARREGION" },
+        { "rkey": "SCH", "rt": "POPULARREGION" },
+        { "rkey": "ASI", "rt": "POPULARREGION" }
+      ]
+    },
+    "iti": [
+      { "age": 4 }
+    ],
+    "isef": false,
+    "ict": "AMT",
+    "adr": "45"
+  }
+}
+
+  [note: "sd"/"ed" here span a full year (2025-12-20 to 2026-12-19 =
+  exactly 365 days) - consistent with the "12-month period" framing,
+  not the 30/45/60/90-day one. "adr" reappears from the Standalone
+  flow (seen in Part 3/4) - never fully explained there either; still
+  unconfirmed what it stands for.]
+
+Request Verbose:
+  sd    Start date of the insurance coverage (format: YYYY-MM-DD).
+  ed    End date of the insurance coverage (format: YYYY-MM-DD).
+  isc   Insurance search criteria, which includes region information.
+    iri : Region details where the insurance will be applicable
+      rkey : Name of the region (e.g., "Europe", "Asia", "India", "USA")
+      rt : Type of region (e.g., "Country", "Continent")
+    iti : List of travelers for whom the insurance search is being
+          performed, for the search API we require only age
+      Age: Age of the traveler.
+
+--- PAGE 86 ---
+
+    ict :- Insurance channel type
+      "ict": "amt" //annual multi trip
+
+NOTE :- All other APIs, including the Review API, Book API and
+Booking Details API, remain unchanged and continue to operate as
+standalone APIs.
+
+  [INCONSISTENCY: this note lumps Book API in with "remain unchanged",
+  but the APIs Included list on p.83 explicitly separately calls out
+  "Book API - AMT plan booking functionality" (implying AMT-specific
+  behavior), same contradiction pattern as the Student section (p.82
+  said Book changes for Student too, without saying so this bluntly).
+  Read both notes as "the API endpoint/URL is the same, but the AMT/
+  Student request payload differs" rather than "literally nothing
+  changes" - confirm live.]
+
+  [Also flag: rkey's description above (p.85) gives "India" as an
+  example region name, but the actual Popular Region Mapping table
+  (p.90 below) only defines 5 valid rkey codes - MDE, EUR, SCH, USC,
+  ASI - none of which is India. Either India is reachable through a
+  country-type search (not POPULARREGION) elsewhere in the doc, or the
+  description's example list is generic/aspirational rather than
+  literal. Don't assume "India" is a valid rkey value without checking
+  live.]
+

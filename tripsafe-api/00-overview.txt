@@ -1,0 +1,111 @@
+TripJack — TripSafe API Documentation
+Version 6.0 | CONFIDENTIAL
+(Transcribed from "TripSafe Documentation - v6.pdf", 94 pages, in parts. Indentation below reflects the doc's own nested-box diagrams = real JSON object nesting, not just visual grouping.)
+
+======================================================================
+VERSION HISTORY
+======================================================================
+1.0  08-07-2025  Search, Review, Booking, Amendments APIs
+2.0  07-08-2025  Request Response Verbose, FAQs
+3.0  16-10-2025  Embedded API Integration
+4.0  02-02-2026  Student & AMT API Integration
+5.0  13-02-2026  UAT Certifications & Checklists
+6.0  11-03-2026  Modify review, Exclusive Embedded API
+
+======================================================================
+TABLE OF CONTENTS (page numbers per the PDF)
+======================================================================
+1. Introduction .............................. 4
+   - Steps to Whitelist IP and Generate API Key
+2. Service Definition ........................ 6
+   - Environment & Postman API Collection
+   - Country Code Catalogue
+3. API Documentation
+   - Search API .............................. 8
+   - Review API .............................. 16
+   - Booking API ............................. 23
+   - Booking Details API ..................... 33
+   - Amendment API ........................... 42
+   - Cancellation API ........................ 52
+   - Embedded API Integration ................ 59
+   - Student API Integration ................. 66
+   - Annual Multi Trip [AMT] API Integration . 83
+4. Standard Validation and Errors
+   - API Validations ......................... 87
+   - SLA ...................................... 87
+5. UAT Certification
+   - Search Matrix / Test Cases .............. 89
+6. Security Guidelines ........................ 94
+
+======================================================================
+1. INTRODUCTION (p.4)
+======================================================================
+TripSafe is a new travel insurance product covering travellers on
+INTERNATIONAL trips. Offered in 4 "journeys" (integration modes):
+
+  - Embedded   - API clients can offer to purchase travel insurance at
+                 the time of FLIGHT booking (tied to a TripJack flight
+                 booking).
+  - Standalone - API clients can offer insurance purchase unlinked to
+                 any booking on the TJ portal.
+  - Student    - Travel insurance plans specifically for students
+                 travelling abroad for education, over a longer
+                 duration.
+  - AMT        - TripSafe Annual Multi-Trip: covers UNLIMITED trips
+                 per year, each trip up to a specified max duration
+                 (30/45/60/90 days).
+
+TripSafe API: REST over HTTPS, JSON, SSL-secured. Same shared-apikey-
+header model as every other TripJack product here (Flights, Hotels,
+Cabs): all steps (search -> review -> booking) use api key header
+"apikey".
+
+  API-KEY - your sandbox or production API key.
+
+NOTE: if an API key already exists, reuse it. Use the assigned key in
+the request header as "apiKey". Contact support for production access.
+
+----------------------------------------------------------------------
+STEPS TO WHITELIST IP AND GENERATE API KEY (p.5-6)
+----------------------------------------------------------------------
+Same account-portal flow as Cabs (see cabs-api/cab-api-doc.txt) -
+literally the same "API Configuration" left-nav screen, same account.
+1. Navigate to User Detail for the User id you want an API key for.
+   - Find "API Configuration" on the left nav.
+2. Fill IP Address and Email:
+   - Provide a valid IPv4 address and a contact email.
+   - Click "Update" to save.
+3. Generate API Key:
+   - Select the APIs you intend to use from the available list.
+   - Click "Save" to confirm selection.
+   - A new API Key is generated automatically once saved.
+
+======================================================================
+2. SERVICE DEFINITION (p.7)
+======================================================================
+UAT Environment  - Domain: https://apitest.tripjack.com
+Production Environment - Domain: https://tripjack.com
+  (NOTE: this is the SAME production domain literally listed in the
+  Cabs doc, which I confirmed live actually responds with real JSON API
+  errors, not a marketing homepage - see project_tripjack_cabs_integration
+  memory. So this production domain is plausibly correct/real, just
+  not accessible with a key that hasn't been enabled for the product.)
+
+Endpoints Overview Summary:
+  API Name              Method  Endpoint                                          Purpose
+  Search API            POST    /insurance/v1/searchquery-list                    Fetch available insurance plans
+  Review API            POST    /insurance/v1/review                              Plan selection & premium calculation
+  Booking API           POST    /oms/v1/insurance/book                            Finalize insurance booking
+  Booking Details API   POST    /oms/v1/insurance/booking-details                 Retrieve completed booking details
+  Raise Amendment API   POST    /oms/v1/ins/amendment/raise                       Raise amendment request
+  Cancellation API      POST    /oms/v1/ins/amendment/confirm-insurance-cancellation  Confirm booking cancellation
+
+  (NOTE: unlike Cabs (mixed GET/POST) and Flights, every TripSafe
+  endpoint listed here is POST, including Booking Details itself.)
+
+Postman Documentation: "Tripsafe APIs Postman Collection" (link in doc,
+not yet fetched - ask user if needed).
+
+Country Codes Catalogue: "Country Mapping Codes" (link in doc, not yet
+fetched - referenced as "rkey" values elsewhere, e.g. below).
+

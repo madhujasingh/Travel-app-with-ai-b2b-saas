@@ -76,6 +76,10 @@ public class SecurityConfig {
                 // hotels' public discovery split, since even a "search" here runs
                 // against a real TripJack account's test key.
                 .requestMatchers("/cabs/**").authenticated()
+                .requestMatchers("/tripsafe-bookings/**").authenticated()
+                // TripSafe is also UAT/certification only (see
+                // TripSafeService/TripJackClient) - same rationale as Cabs above.
+                .requestMatchers("/tripsafe/**").authenticated()
                 // Same split as flights - Listing/Detail/Review/Static-Detail are
                 // pre-booking discovery, public; Book/Confirm-Book/Booking
                 // Details/Cancel move money or expose a specific booking's PII.

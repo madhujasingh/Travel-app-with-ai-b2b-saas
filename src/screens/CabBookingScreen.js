@@ -278,6 +278,37 @@ const CabBookingScreen = ({ route, navigation }) => {
               ]
             );
           } catch (error) {
+            // "Amendment not Allowed for this booking status" usually means
+            // the booking already reached a terminal state (typically FAILED
+            // + auto-refunded) asynchronously since this screen last loaded
+            // it - TripJack processes vendor fulfillment after payment
+            // succeeds, so PAYMENT_SUCCESS isn't necessarily final (confirmed
+            // live: a booking shown as PAYMENT_SUCCESS moments earlier had
+            // already flipped to FAILED by the time Cancel was tapped). Re-
+            // fetch and show the real reason instead of TripJack's raw
+            // amendment-rejection text, which reads like a bug otherwise.
+            try {
+              const refreshed = await fetchBookingDetails(bookingId);
+              setBooking(refreshed);
+              if (refreshed?.order?.status === 'FAILED') {
+                setCancelling(false);
+                Alert.alert(
+                  'Already Failed',
+                  `This booking already failed${
+                    refreshed.order.paymentStatus === 'REFUND_SUCCESS' ? ' and your payment has already been refunded' : ''
+                  } - there is nothing left to cancel.`
+                );
+                return;
+              }
+              if (refreshed?.order?.status === 'CANCELLED') {
+                setCancelled(true);
+                setCancelling(false);
+                Alert.alert('Already Cancelled', 'This booking was already cancelled.');
+                return;
+              }
+            } catch (refreshError) {
+              // ignore - fall through to showing the original error below
+            }
             setCancelling(false);
             Alert.alert('Cancellation', error.message || 'Unable to fetch cancellation charges right now.');
           }

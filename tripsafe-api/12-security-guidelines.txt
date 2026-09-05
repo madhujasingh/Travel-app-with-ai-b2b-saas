@@ -1,0 +1,7 @@
+6. Security & Usage Guidelines:
+  - Keep API keys secure.
+  - Response payload can have more keys, Consume keys which are
+    mentioned above in API response.
+  - If keys are exposed, regenerate your keys.
+  - Do not hardcode credentials in code.
+

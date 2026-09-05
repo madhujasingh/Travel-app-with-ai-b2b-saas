@@ -49,6 +49,10 @@ const CustomerProfileScreen = ({ navigation }) => {
   const [cabBookingsLoading, setCabBookingsLoading] = useState(false);
   const [cabBookingsLoaded, setCabBookingsLoaded] = useState(false);
 
+  const [tripsafeBookings, setTripsafeBookings] = useState([]);
+  const [tripsafeBookingsLoading, setTripsafeBookingsLoading] = useState(false);
+  const [tripsafeBookingsLoaded, setTripsafeBookingsLoaded] = useState(false);
+
   // This screen stays mounted across navigations (pushed on top of
   // CustomerTabs), so the "loaded once" flags below would otherwise cache a
   // stale/empty result forever - e.g. visiting Bookings before making a
@@ -60,6 +64,7 @@ const CustomerProfileScreen = ({ navigation }) => {
       setFlightBookingsLoaded(false);
       setActivityBookingsLoaded(false);
       setCabBookingsLoaded(false);
+      setTripsafeBookingsLoaded(false);
     }, [])
   );
 
@@ -256,6 +261,44 @@ const CustomerProfileScreen = ({ navigation }) => {
     };
   }, [activeTab, token, cabBookingsLoaded]);
 
+  useEffect(() => {
+    if (activeTab !== 'bookings' || !token || tripsafeBookingsLoaded) {
+      return;
+    }
+
+    let active = true;
+
+    const loadTripsafeBookings = async () => {
+      setTripsafeBookingsLoading(true);
+      try {
+        const response = await fetch(`${API_CONFIG.BASE_URL}/tripsafe-bookings`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data?.message || data?.error || 'Unable to load travel insurance bookings');
+        }
+        if (active) {
+          setTripsafeBookings(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        if (active) {
+          setTripsafeBookings([]);
+        }
+      } finally {
+        if (active) {
+          setTripsafeBookingsLoading(false);
+          setTripsafeBookingsLoaded(true);
+        }
+      }
+    };
+
+    loadTripsafeBookings();
+    return () => {
+      active = false;
+    };
+  }, [activeTab, token, tripsafeBookingsLoaded]);
+
   const getStatusColor = (status) => {
     switch ((status || '').toUpperCase()) {
       case 'COMPLETED': return '#4CAF50';
@@ -323,7 +366,7 @@ const CustomerProfileScreen = ({ navigation }) => {
         );
 
       case 'bookings': {
-        const combinedLoading = bookingsLoading || flightBookingsLoading || activityBookingsLoading || cabBookingsLoading;
+        const combinedLoading = bookingsLoading || flightBookingsLoading || activityBookingsLoading || cabBookingsLoading || tripsafeBookingsLoading;
         const combinedBookings = [
           ...bookings.map((booking) => ({
             key: `itinerary-${booking.id}`,
@@ -361,6 +404,15 @@ const CustomerProfileScreen = ({ navigation }) => {
             status: cab.status,
             date: cab.createdAt,
             amount: cab.totalFare,
+          })),
+          ...tripsafeBookings.map((policy) => ({
+            key: `tripsafe-${policy.id}`,
+            kind: 'tripsafe',
+            icon: 'shield-checkmark-outline',
+            title: policy.planName ? `${policy.planName}${policy.destinationSummary ? ` - ${policy.destinationSummary}` : ''}` : 'Travel Insurance',
+            status: policy.status,
+            date: policy.createdAt,
+            amount: policy.amount,
           })),
         ].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 

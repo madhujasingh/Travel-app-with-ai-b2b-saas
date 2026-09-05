@@ -1,0 +1,142 @@
+======================================================================
+TRANSCRIPTION COMPLETE - ALL 94 PAGES OF "TripSafe Documentation -
+v6.pdf" HAVE BEEN TRANSCRIBED (Parts 1-5).
+======================================================================
+
+OPEN QUESTIONS TO VERIFY LIVE (do not trust blindly, per this doc's own
+internal inconsistencies already spotted):
+
+  0. [RESOLVED in Part 5] The Student "sc" object's 8 field meanings,
+     previously only guessed at the end of Part 4, are now confirmed
+     directly by the doc's own verbose table (p.81-82): cn (course
+     name), cdm (CourseDurationMonths), un (UniversityName), uc
+     (UniversityCity), sn (SponsorName), sdob (SponsorDOB), sr
+     (SponsorRelation), se (SponsorEmail). All 8 guesses were correct.
+  1. Is the insurer-name field "lp" or "Ip" (lowercase L-p vs capital
+     I-p) - every page so far renders it slightly differently
+     ("Ip"/"lp"/"ip" depending on page) - confirm exact JSON key casing
+     against a real response before coding against it.
+  2. Is "pi" really both the product-info object's key name AND a field
+     inside it (productIdentifier, e.g. "Silver Plus") - i.e. really
+     "pi.pi" in real JSON? The Booking-Details sample response
+     confirms this literally: {"pid":..., "pn":..., "pi": "Silver Plus",
+     "ip": "ABHI", ...} - so yes, CONFIRMED real, not a doc typo.
+  3. What is "isp"? Still never explained beyond "not used for
+     filtering, for internal insurance product identification" (Search
+     FAQ) - appears as an always-empty object {} in the one real sample
+     response transcribed so far. Treat as opaque/ignorable unless a
+     later page explains it further.
+  4. Exact nesting depth of "pbft" (product benefit) and "Pfd"/"tfd"
+     (product/traveller fare details) relative to "pi" and "iti" - THE
+     BOOKING-DETAILS SAMPLE RESPONSE RESOLVES THIS for at least that
+     endpoint: pbft and iti are both siblings, nested under pi (i.e.
+     pi.pbft[] and pi.iti[]), and EACH iti[] entry has its OWN "fd.ifc"
+     (per-traveller fare component), while "tfd.ifc" sits as a sibling
+     of iti[] under the same pi entry (i.e. total-for-that-product fare
+     component, one level up from a single traveller's own fd.ifc).
+     This is more reliable than the earlier Search/Review page diagrams
+     (12/19-20), which suggested a shallower/different nesting - trust
+     THIS confirmed-by-real-sample structure over those hand-drawn box
+     diagrams where they conflict.
+  5. Multiple long digit strings in the Booking-Details sample response
+     (cnum, brbServiceNumber) render with implausibly many digits in
+     the source PDF - likely a PDF-to-text extraction artifact
+     duplicating/repeating digits, not real sample data. Don't trust
+     the exact digit count/value of these two fields from this doc;
+     confirm shape (that they're numeric-string fields) only.
+  6. Raise-Amendments response has "ie": 614.00 at the
+     insuranceCancellationResponse level; the Cancellation (confirm)
+     response has "ic": 614.00 in the exact same position/value - and
+     the ONE shared verbose table documents it as "ic" both times. Lean
+     "ic" is correct everywhere and "ie" was a one-off doc typo/OCR
+     error - confirm live, don't assume the field name differs by
+     endpoint without proof.
+  7. Raise-Amendments request uses "type": "CANCELLATION"; the
+     Cancellation (confirm) request uses "type": "INSURANCE_CANCELLATION"
+     - two different constants for what might be conceptually "the same
+     amendment type" at two steps of one flow. Confirmed as written
+     (not a transcription error on my part - both page renderings were
+     unambiguous), but still worth double-checking live since sending
+     the wrong constant to the wrong endpoint would be an easy mistake.
+  8. "bid" means TWO DIFFERENT THINGS in this document depending on
+     section: (a) everywhere in Search/Review/Booking-Details =
+     the INSURANCE booking id (Review response's own bid field), (b) in
+     the Embedded API Integration section (p.59) = a TripJack
+     FLIGHT/AIR booking id, explicitly said to be omittable for the
+     "External Embedded" (non-TripJack-flight) flow. When later reading
+     whatever Section B ("Internal"/TripJack-flight-linked Embedded
+     flow, if it exists past p.60) turns out to be, expect it to
+     require this flight bid - watch for the two meanings colliding in
+     one endpoint's request/response.
+  9. Cancellation (confirm) response's "pbft" rendered as an empty
+     object "{}" in that one sample, vs an array of benefit objects
+     "[...]" everywhere else (Search/Review/Booking-Details/Raise-
+     Amendments samples) - probably just because a cancel-confirm
+     response doesn't bother re-including benefit detail, not proof
+     that pbft's type varies. Confirm live if this matters for parsing
+     (e.g. don't assume pbft is always an array without a null/empty
+     check).
+  10. "ibrbf"/"iesf"/"iboxf" (booleans, first appear in Raise-Amendments
+      and Cancellation responses, p.44-45/54-55) are never explained
+      anywhere in the doc - guessing these are per-addon "is [X] feature
+      active/fulfilled" flags (baggage-related/eSIM-related/BOXX-
+      related, matching the aps: ["AAI","BOXX"] assistance providers
+      and the "optedAddons.brbServiceNumber" baggage-tracking field seen
+      elsewhere) but this is a guess, not confirmed by the doc text.
+  11. One numeric field's KEY got cut off across a PDF page break in
+      THREE separate sample responses (Raise-Amendments' fd.ifc AND
+      tfd.ifc, Cancellation's tfd.ifc) - always the same value, 180.90,
+      always appearing right after "BF" and before "NF"/"BXP" in the
+      field list. Given IPGST/APGST/SPGST/BXPGST are all already
+      accounted for elsewhere in the same object, this unresolved field
+      might be a distinct component not seen fully spelled out anywhere
+      else yet - keep watching later pages for a table that names it,
+      otherwise confirm live.
+  12. AMT's stated coverage model is self-contradictory: framed as
+      "unlimited trips over a 12-month period" (p.83 intro, and the
+      sample search's sd/ed span exactly 365 days), but the same page's
+      "Important Note" gives per-search durations of 30/45/60/90 days,
+      and only 30/45/60 reappear anywhere else (Search Matrix p.89,
+      Book Scenarios p.92 - 90 never recurs for AMT). Confirm live what
+      "ed" controls for an AMT search/policy before implementing.
+  13. Both the Student (p.82) and AMT (p.86) sections have a "NOTE" that
+      lumps "Book API" in with APIs that "remain unchanged", directly
+      contradicting each section's own "APIs Included" list, which
+      calls out Book API as having new plan-specific booking
+      functionality. Read as "same endpoint URL, different payload
+      shape" - confirm live, don't assume zero payload differences.
+  14. rkey's field description (p.85, and again in the p.91 Glossary)
+      lists "India" as an example valid value, but the actual Popular
+      Region Mapping table (p.90) only defines 5 real rkey codes -
+      MDE/EUR/SCH/USC/ASI - none for India. Don't assume "India" (or
+      "IND") is a valid POPULARREGION rkey without confirming live.
+  15. "Modify review API" appears exactly once, in the SLA response-time
+      table (p.88), with no corresponding endpoint documented anywhere
+      else in this 94-page doc. Ask TripJack what this endpoint is
+      before assuming TripSafe doesn't need/have it.
+  16. Section 4's blanket validation rule "Date Range Limit: Coverage
+      duration must not exceed 90 days" (p.87) directly conflicts with
+      the per-journey-type Search Matrix (p.89): Standalone allows up
+      to 180 days, Student allows up to 735 days. Treat the p.89 matrix
+      as authoritative per journey type; the p.87 rule is likely
+      outdated, mistitled, or AMT-specific despite its generic heading.
+  17. UAT Test Case TC04 (p.91) pairs journey type "Embedded" with a
+      Popular Region payload ("rkey":"MDE") - but nothing in the entire
+      Embedded API Integration section (Part 4, Section A/B) describes
+      a destination-region field in the embedded search/review/book
+      request; embedded coverage is tied to the flight itinerary
+      instead. Possibly a copy/paste artifact in this test-case table -
+      confirm live whether embedded search even accepts an "isc.iri"
+      block.
+  18. Support & Incident Management table (p.88) lost its actual
+      priority-tier labels during PDF extraction - all four rows show
+      a bare "P" where a label like P0/P1/P2/P3 should be. Severity
+      description and SLA times are intact; only the short tier label
+      itself is missing - check the source PDF visually if the exact
+      label naming matters.
+  19. The 1134 multi-pax-count error sample's "details" string (p.94)
+      reads "...for plan idisid1077830193_0_regular" with no space -
+      almost certainly "plan id" + the actual id value ("isid...")
+      concatenated by PDF extraction, not the real error text. Confirm
+      the real format live before matching against this string in code.
+

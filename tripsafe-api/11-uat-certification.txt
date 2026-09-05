@@ -1,0 +1,191 @@
+======================================================================
+5. UAT CERTIFICATION (TEST CASES)
+======================================================================
+
+--- PAGE 89 ---
+
+Search Matrix & Test Coverage
+  Journey Type            | Region Allowed | Country Allowed | Date Logic                        | Duration Rule
+  Standalone              | Yes            | Yes             | Start Date - End Date              | Flexible (Max 180 days from Start Date)
+  Student                 | No             | Country Only    | Start Date + Coverage Duration     | 30/60/90/120/180/240/270/365/735 Days
+  AMT                     | Region Only    | No              | Start Date + Fixed Duration        | 30/45/60 Days Only
+  Embedded (One Way Air)  | Yes            | Yes             | Departure Date                     | Departure Date + 180 Days Max
+  Embedded (Round Trip Air)| Yes           | Yes             | Departure - Arrival Date           | As per flight itinerary
+
+--- PAGE 90 ---
+
+Popular Region Mapping:
+  rkey (Region name) | Region
+  MDE                 | Middle East
+  EUR                 | Europe
+  SCH                 | Schengen
+  USC                 | USA/Canada
+  ASI                 | Asia
+
+Region Payload Format - All Region-based searches must follow the
+below payload structure:
+  { "rkey": "MDE", "rt": "POPULARREGION" }
+  { "rkey": "EUR", "rt": "POPULARREGION" }
+  { "rkey": "SCH", "rt": "POPULARREGION" }
+  { "rkey": "USC", "rt": "POPULARREGION" }
+  { "rkey": "ASI", "rt": "POPULARREGION" }
+
+Worldwide (WW)
+  Includes: - MDE, EUR, SCH, ASI, USC
+
+Worldwide Excluding US & Canada (XUSC)
+  Includes: - MDE, EUR, SCH, ASI (Excludes USC)
+
+--- PAGE 91 ---
+
+Tripsafe Glossary:
+  rkey : Name of the region (e.g., "Europe", "Asia", "India", "USA")
+  rt : Type of region (e.g., "Country", "Continent")
+
+UAT Test Cases -
+4.1 Search Flow
+  TC ID | Journey Type | Search Type    | Destination (Payload Format)                    | Start Date      | End Date / Duration      | Traveller Ages    | Plan Selected
+  01    | Standalone   | Popular Region | { "rkey": "EUR", "rt":"POPULARREGION" }         | Today + 5       | Valid                    | 30, 65, 12        | Tripsafe Gold Plus
+  02    | Standalone   | Country        | { "rkey": "US", "rt": "COUNTRY" }               | Today + 5       | Today + 180              | 22, 5, 3, 45, 56, 67 | Tripsafe Platinum
+  03    | Student      | Country Only   | { "rkey": "MY", "rt": "COUNTRY" }               | Today + 5       | 30 / 90 (Duration Based) | 40, 18            | Tripsafe Student Gold
+  04    | Embedded     | Region         | { "rkey": "MDE", "rt": "POPULARREGION" }        | As per Air Search | As per Air Search      | 35, 40, 60        | Tripsafe Classic Super
+  05    | AMT          | Region Only    | WW or XUSC Mapping                              | Today + 5       | 30 / 45 / 60             | Valid             | Tripsafe Platinum Annual
+
+  [FLAG on TC04: this is the only place in the whole document that
+  pairs the Embedded journey type with a region/rkey payload
+  ("POPULARREGION"). Nowhere in the Embedded API Integration section
+  (Section A "External" or Section B "TripJack Air Booking", covered
+  in Part 4, pages ~55-80) was a destination-region field part of the
+  embedded search/review/book request - the embedded flow's coverage
+  is tied to the flight itinerary (departure/arrival airports and
+  dates), not a chosen region. Confirm live whether Embedded search
+  actually accepts/requires an "isc.iri" region block like Standalone/
+  AMT do, or whether this test case row is describing something
+  different (e.g. reusing the region field for a different, undoc'd
+  purpose) - it may simply be a copy/paste artifact from the row
+  above/below in this table.]
+
+--- PAGE 92 ---
+
+4.2 Standalone - Book Scenarios
+  01. Perform a standalone search covering any 3 countries, with a
+      coverage duration of 5 days, for 4 travelers (ages as per
+      choice).
+  02. Perform a standalone search covering 2 Popular Regions, with a
+      coverage duration of 90 days, for 10 travelers (ages as per
+      choice).
+
+4.3 Student - Book Scenarios
+  01. Perform a Student search covering 1 Country only, with Start
+      Date + 180 days duration, for 1-3 travellers (Age 18-45).
+  02. Perform a Student search covering 1 Country only, with Start
+      Date + 365 days duration, for multiple travellers within
+      eligibility criteria.
+      Note:-
+        - End Date should not be passed separately. (pass in cd)
+        - Age must be within 18-45.
+
+  [note: "pass in cd" here almost certainly means the "cdm"
+  (CourseDurationMonths) field inside the "sc" object confirmed on
+  p.81, not a literally different field named "cd" - likely shorthand/
+  typo in this test-scenario note. Confirm live rather than assuming
+  a separate "cd" field exists.]
+
+4.4. AMT (Annual Multi Trip) - Book Scenarios
+  01. Perform an AMT search covering 1 Popular Region, with Start
+      Date + 30 days fixed duration, for 4 travellers.
+  02. Perform an AMT search covering 1 Popular Region, with Start
+      Date + 60 days fixed duration, for 8 travellers.
+      Note:-
+        - Duration must strictly be 30 / 45 / 60 days.
+        - Any other duration should return validation error.
+        - [bullet left empty in the source document - no third note
+          was written under this list]
+
+4.5 Embedded - Book Scenarios
+  01. Perform an Embedded (One Way Air) search where Start date is
+      the departure date and end date is +90 days.
+  02. Perform an Embedded (Round Trip Air) search where insurance
+      coverage strictly matches Departure and Arrival dates from
+      flight itinerary.
+
+  [note: scenario 01 says end date is "+90 days" from departure, but
+  the Search Matrix (p.89) says Embedded (One Way Air) duration rule
+  is "Departure Date + 180 Days Max" - 90 is within the 180 max so not
+  a contradiction, just an example using a smaller number than the
+  ceiling; not flagging as an inconsistency, just noting for clarity.]
+
+--- PAGE 93 ---
+
+Final Validation & Compliance Notes
+  1. All region mappings must strictly follow API contracts.
+  2. Journey-type restrictions must be validated at API layer.
+  3. Duration validation must be enforced as per journey rules.
+  4. Please provide Request & response for all methods that you are
+     implementing.
+  5. Certification request by API Partner (API Partner makes a
+     certification request by providing JSON Request/Response along
+     with confirmation numbers for the test cases)
+  6. Test Cases Verification - will verify the test cases using JSON
+     Request/Response and suggest, if there is any change required.
+     The turnaround time for the test case verification is around 1-2
+     working days.
+  7. Sign off and Live access - On successful completion of all the
+     above steps, Tripjack.com will give sign off and provide Live
+     access details to the client. It is strongly recommended that the
+     API Partner also completes their UAT before making the services
+     live at their end.
+
+Going Live Steps:
+  Certification Process
+    Clients must provide all the test cases mentioned in the document.
+    - Logs should be in json format.
+    - No modification in logs should be there.
+    - API Key also needs to be attached along with the logs.
+    - There should be different files for each request and response.
+    - Passenger Name should be proper. (TBA, Test cannot be passed for
+      certification)
+
+Error Responses -
+  HTTP Code | Message              | Reason                  | Response
+  400        | Bad Request          | Missing required field  | {"error" : "missing age"}
+  401        | Unauthorized         | Invalid API Key          | {"error" : "unauthorized"}
+  403        | Unauthorized         | Invalid Token            | {"error" : "Invalid Token"}
+  500        | Internal Server Error| System Issue             | {"Error": something went wrong}
+
+  [note: HTTP 403's "Message" column says "Unauthorized" - identical
+  to 401's message - even though the Reason differs (Invalid API Key
+  vs Invalid Token). Both HTTP code AND message text look ambiguous
+  for distinguishing the two cases client-side; the "Reason" column is
+  documentation-only; confirm whether the actual response body's
+  "error" text differs enough at runtime to tell 401 vs 403 apart
+  programmatically, since the status code/message alone won't.]
+
+*** Below error are thrown in case of Incorrect dates, plan id,
+product id which may differ from search to book,
+*** Please note the plan id & Product id need to be consistent from
+search to Book Request else the below error shall be thrown.
+
+--- PAGE 94 ---
+
+  1. { "errCode": "400",
+       "message": "Bad Request",
+       "details": "Invalid productId" }
+  2. "No insurance search results found."
+
+*** In case of multi-pax search, if extra or fewer travelers are
+submitted in the Booking API compared to the Review request API, the
+below is thrown:
+
+  "errors": [{ "errCode": "1134",
+               "message": "Please update details for every pax",
+               "details": "invalid traveller count provided for plan
+               idisid1077830193_0_regular" }]
+
+  [FLAG: the "details" string reads as "...for plan idisid1077830193_
+  0_regular" with no space between "id" and the actual id value -
+  almost certainly a PDF extraction artifact merging the label "plan
+  id" with the id value itself (something like "isid1077830193_0_
+  regular"). Don't copy this string literally into code/tests; confirm
+  the real delimiter/format live.]
+

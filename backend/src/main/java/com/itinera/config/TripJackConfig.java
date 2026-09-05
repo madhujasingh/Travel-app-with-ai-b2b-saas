@@ -21,6 +21,11 @@ public class TripJackConfig {
     // any API call in the docs and not customer-specific - one fixed value
     // per account, injected server-side so the frontend never needs it.
     private String cabsAgentId;
+    // TripSafe (travel insurance) UAT host - "Service Definition" (p.7 of
+    // TripSafe Documentation v6) lists the same production domain as Cabs
+    // ("https://tripjack.com"), which is unverified/plausible-but-unconfirmed
+    // for the same reason - not enabled on any key we hold yet.
+    private String tripsafeBaseUrl = "https://apitest.tripjack.com";
     private String apiKey;
     // Separate UAT/certification key for NEW, not-yet-certified TripJack
     // products (Cabs, TripSafe) - kept distinct from apiKey (production,
@@ -66,6 +71,14 @@ public class TripJackConfig {
 
     public void setCabsAgentId(String cabsAgentId) {
         this.cabsAgentId = cabsAgentId;
+    }
+
+    public String getTripsafeBaseUrl() {
+        return tripsafeBaseUrl;
+    }
+
+    public void setTripsafeBaseUrl(String tripsafeBaseUrl) {
+        this.tripsafeBaseUrl = tripsafeBaseUrl;
     }
 
     public String getApiKey() {

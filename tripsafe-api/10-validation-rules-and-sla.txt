@@ -1,0 +1,77 @@
+======================================================================
+4. API REQUEST VALIDATION RULES FOR TRIPSAFE INTEGRATION
+======================================================================
+
+--- PAGE 87 ---
+
+Please ensure the following validations are in place:
+  - Age Restriction: Searches for travellers above 70 years of age are
+    not permitted.
+  - Restricted Countries: Searches involving the following blacklisted
+    countries are disallowed: Myanmar(MM), Iran(IR), North Korea(NK).
+  - Date Range Limit: Coverage duration must not exceed 90 days.
+  - Traveller Limit: A maximum of 10 travellers is allowed per search
+    request.
+  - Cancellation Policy: TripSafe can be cancelled up to 24 hours
+    prior to the coverage start date.
+
+  [MAJOR INCONSISTENCY: "Date Range Limit: ... must not exceed 90
+  days" is stated here as a blanket rule for "TripSafe Integration" in
+  general, but the Search Matrix table (p.89) gives per-journey-type
+  duration rules that clearly exceed 90 days in two cases: Standalone
+  allows up to 180 days from Start Date, and Student allows up to 735
+  days. Only AMT (30/45/60, and per p.83, possibly 90) and Embedded
+  One-Way (180 days max, also technically over the stated limit) stay
+  within/near it. Treat the 90-day cap in this section as either
+  outdated, AMT-specific despite the generic heading, or simply wrong
+  - confirm live per journey type using the p.89 matrix instead of
+  this blanket rule.]
+
+Service Level Agreement (SLA)
+
+1. Performance & Availability
+  Category              | Metric            | SLA Commitment
+  Availability           | System Uptime     | 99.9% availability
+  Rate limiting (RPM)    | Request Per Minute| 40 RPM
+
+2. API Response Time Commitments
+  API                   | Expected Response Time
+  Search API            | < 200 ms
+  Review API            | < 500 ms
+  Booking API           | < 1 seconds
+
+--- PAGE 88 ---
+
+  Booking Details API   | < 700 ms
+  Amendment API         | < 1 seconds
+  Cancellation API      | < 1 seconds
+  Modify review API     | < 700ms
+
+  [FLAG: "Modify review API" appears here for the first time in the
+  entire 94-page document - it is never introduced, described, or
+  given a sample request/response anywhere in the Search/Review/
+  Booking/Booking-Details/Raise-Amendments/Cancellation/Embedded/
+  Student/AMT sections transcribed in Parts 1-5. Either it's an
+  endpoint that exists but wasn't documented in this doc version, or
+  it's a copy-paste leftover from another TripJack product's SLA
+  table. Ask TripJack directly what this endpoint is before assuming
+  it doesn't apply to TripSafe.]
+
+Timeout Configuration
+  API Category                   | Timeout Value
+  Insurance APIs                 | 60 seconds
+  Air Book API (Embedded Flow)   | 60 seconds
+
+Support & Incident Management
+  P  Critical (Total outage)      < 30 mins
+  P  High (Major feature broken)  1-2 hrs
+  P  Moderate (Minor feature broken) < 6 hrs
+  P  Minor (Non blockers)         Part of dev sprints
+
+  [FLAG: the priority-level column only extracted as a bare "P" for
+  all four rows - the actual labels (likely P0/P1/P2/P3 or P1-P4) were
+  lost, probably a small icon/badge in the original PDF that didn't
+  extract as text. The severity descriptions and SLAs themselves are
+  intact; only the short priority-tier label per row is missing/
+  unconfirmed.]
+

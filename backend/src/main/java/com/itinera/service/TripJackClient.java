@@ -30,6 +30,10 @@ public class TripJackClient {
     // whose docs haven't been reviewed yet), so this gets a proper
     // constructor-built client like the others rather than a one-off.
     private final RestClient cabsRestClient;
+    // TripSafe (travel insurance) - same UAT-only, testApiKey-only treatment
+    // as Cabs above; every TripSafe endpoint is POST (including Booking
+    // Details, unlike Cabs), so no GET helper is needed for it.
+    private final RestClient tripsafeRestClient;
     private final TripJackConfig tripJackConfig;
 
     public TripJackClient(TripJackConfig tripJackConfig) {
@@ -59,6 +63,12 @@ public class TripJackClient {
 
         this.cabsRestClient = RestClient.builder()
                 .baseUrl(trimTrailingSlash(tripJackConfig.getCabsBaseUrl()))
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+
+        this.tripsafeRestClient = RestClient.builder()
+                .baseUrl(trimTrailingSlash(tripJackConfig.getTripsafeBaseUrl()))
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
@@ -93,6 +103,12 @@ public class TripJackClient {
     // than string concatenation ensures values are properly percent-encoded.
     public JsonNode getCabs(Function<UriBuilder, URI> uriFunction) {
         return get(cabsRestClient, uriFunction, tripJackConfig.getTestApiKey(), "TripJack test API key is not configured");
+    }
+
+    // TripSafe - every documented endpoint (Search, Review, Book, Booking
+    // Details, Raise-Amendments, Cancellation) is POST with a JSON body.
+    public JsonNode postTripSafe(String path, JsonNode payload) {
+        return post(tripsafeRestClient, path, payload, tripJackConfig.getTestApiKey(), "TripJack test API key is not configured");
     }
 
     // Cancel Booking takes the bookingId as a URL path segment with no request body.

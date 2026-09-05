@@ -1,0 +1,284 @@
+----------------------------------------------------------------------
+STUDENT API INTEGRATION (p.66-83+)
+----------------------------------------------------------------------
+New Travel Insurance plans specifically for students travelling abroad
+for education over a LONGER duration than standard TripSafe plans.
+
+3 new plans:
+  - TripSafe Student Gold      ($100,000 Cover)
+  - TripSafe Student Platinum  ($250,000 Cover)
+  - TripSafe Student Titanium  ($500,000 Cover)
+
+To make a Search request a student-plan search, add:
+  "ict": "STUDENT"  // insurance channel type
+  "cd":  "180"      // coverage duration (comment in doc's own sample
+                     // lists valid values as 30,60,90,180,360,730,1095
+                     // - but see the "Important Note" below, which
+                     // only documents 4 of those 7 for Student
+                     // specifically; the other 3 (30/60/90/360) might
+                     // be valid for a DIFFERENT channel type reusing
+                     // this same "cd" field, e.g. AMT - confirm live,
+                     // don't assume all 7 work for ict=STUDENT.)
+
+Important Note:
+  - Eligible Age Group: 18 to 45 years ONLY.
+  - Available Coverage Durations for Student (values to fill in "cd"):
+      6 Months -> 180
+      1 Year   -> 365
+      2 Years  -> 730
+      3 Years  -> 1095
+
+APIs Included:
+  - Search API - Student plan search functionality (new)
+  - Review API - SAME as existing implementation; no changes required
+  - Book API   - Student plan booking functionality (new fields, see below)
+
+Student Search API - Sample Request Payload:
+{
+  "isq": {
+    "sd": "2025-12-26",
+    "cd": "180",
+    "isc": { "iri": [ { "rkey": "US", "rt": "COUNTRY" } ] },
+    "iti": [ { "age": 20 }, { "age": 29 } ],
+    "ict": "STUDENT"  // Insurance Channel type
+  }
+}
+(No "ed" in the request - TripSafe computes the end date from sd+cd
+server-side; confirmed because the RESPONSE's echoed-back isq DOES
+include a computed "ed", see full response below.)
+
+Student Search Request Verbose (p.67-68, isc detail continues on p.74):
+  sd  - Start date of insurance coverage (YYYY-MM-DD)
+  cd  - Coverage Duration
+  isc - Insurance search criteria, includes region info
+    iri[]
+      rkey - Name of Country opted to study (e.g. France, Australia,
+             Canada, Europe, Asia) [p.68's own table mislabels this
+             column "rn" instead of "rkey" - a labeling slip, since
+             every real sample payload for Student (and everywhere
+             else in this doc) uses "rkey"; p.74's version of this same
+             table correctly says "rkey" - trust the samples/p.74 over
+             p.68's "rn".]
+      rt   - Type of region (e.g. "Country", "POPULARREGION")
+    pisc - Product insurance search criteria (same rkey/rt shape)
+    iti[] - list of travellers (age only, for Search)
+  "ict" - Insurance channel type ("ict": "STUDENT")
+
+NOTE (p.69): the following fields MAY appear in the Search API response
+but are NON-FUNCTIONAL for the student flow and should be IGNORED:
+  isef, pci, adr
+(This doesn't contradict the "isef = is embedded flow" guess from
+Section B above - it just means isef is irrelevant specifically when
+ict=STUDENT, since Student isn't the Embedded flow.)
+
+Student Search - Full Sample Response (reconstructed p.69-73; request
+and response content run together across these pages without a clear
+heading split in the source):
+{
+  "isq": {
+    "sd": "2025-12-27",
+    "ed": "2026-08-23",  // computed server-side, echoed back
+    "isc": { "iri": [
+      { "rkey": "AU", "rt": "COUNTRY" }, { "rkey": "FR", "rt": "COUNTRY" },
+      { "rkey": "UA", "rt": "COUNTRY" }, { "rkey": "GB", "rt": "COUNTRY" }
+    ] },
+    "pisc": { "iri": [
+      { "rkey": "AU", "rt": "COUNTRY" }, { "rkey": "FR", "rt": "COUNTRY" },
+      { "rkey": "UA", "rt": "COUNTRY" }, { "rkey": "GB", "rt": "COUNTRY" }
+    ] },
+    "iti": [ { "age": 21 }, { "age": 23 }, { "age": 45 } ],
+    "isef": false,
+    "searchId": "isid2348922435",
+    "ict": "STUDENT",
+    "adr": 0,
+    "pci": { "student_platinum": 43, "student_silver": 43, "student_gold": 43 }
+  },
+  "isr": {
+    "iinfo": {
+      "pli": [
+        {
+          "plid": "isid2348922435_0_regular",
+          "pi": [
+            {
+              "pid": "ABHI-PLAN_250_STUDENT-XUSC-AAI-STD",
+              "pn": "$250,000",
+              "pi": "Student Platinum",
+              "ip": "ABHI",
+              "aps": [ "AAI STD" ],
+              "rname": "Worldwide excluding US & Canada",
+              "pbft": [
+                {
+                  "bv": "POPUP", "name": "Tracking",
+                  "type": "ASSISTANCE_BENEFIT",
+                  "dsc": "Report mishandled baggage to the airline and get a File Reference Number. Report this to Blue Ribbon Bags within 24 hours.",
+                  "bfp": "BRB_STD"
+                }
+                // source rendering shows stray "},"/":"/": ]," fragments
+                // right after this entry - almost certainly 1+ MORE
+                // pbft benefit objects existed here that didn't extract
+                // legibly. Do not assume "Tracking" is the plan's only
+                // benefit.
+              ],
+              "pfd": {
+                "ppd": {
+                  "ppdf": {
+                    "240": [  // key looks like a day-count bucket (240
+                              // days of coverage?) - matches "Ppdf: day
+                              // number to age wise fare component" from
+                              // the original Search API field list (see
+                              // Part 1 of this file) - i.e. ppdf is
+                              // keyed by a day-number STRING, each
+                              // holding an array of per-age fare entries
+                      { "age": 21, "ifc": {
+                          "APGST": 15.10, "AC": 3822.00, "TF": 8200.00,
+                          "SPGST": 1250.85, "ACTDS": 76.44, "NF": 4454.44 } },
+                      { "age": 23, "ifc": {
+                          "AC": 3822.00, "TF": 8200.00,
+                          "SPGST": 1250.85, "ACTDS": 76.44, "NF": 4454.44 } }
+                      // an age:45 entry almost certainly follows, not
+                      // fully visible in the extracted pages
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "ibrbf": false, "iesf": false, "iboxf": false,
+    "comm": 55,
+    "ptf": 9050  // "Plan total fare" per the verbose table below
+  }
+}
+
+Student Search Result Verbose (p.73-77):
+  sd/ed - start/end date (YYYY-MM-DD)
+  isc.iri[].rkey/rt, isc.pisc.iri[].rkey/rt, isc.iti[].age - as above
+  "ict" - Insurance channel type
+  "searchId" - unique search id
+  "isr" - Insurance search result
+    iinfo.pli[].plid, .pi (product info: pid, pn, pi/productIdentifier,
+    Ip, aps, rname, pbft)
+    Pfd - Product fare details: Ppd (per-day price per age), Ppdf (day
+          number -> age-wise fare component), Ifc (fare component)
+    pbft -> bv, name, type, bfp, dsc
+    Ifc -> this table only lists AC/TF/ACTDS/NF (fewer than the 12-field
+           set seen in real samples elsewhere, including THIS SAME
+           section's own real response above, which also shows
+           APGST/SPGST) - treat this table as an abbreviated/incomplete
+           list, not authoritative on which Ifc fields actually exist.
+    "The below keys may vary in value according to plan opted (Gold,
+    Silver, Platinum etc)" - CONFIRMS the meaning of 3 previously-
+    unexplained boolean flags (resolves earlier open question #10):
+      "ibrbf" - true/false - "Is BRB free" (BRB = Blue Ribbon Bags, the
+                baggage-tracking assistance provider seen elsewhere as
+                "bfp": "BRB_STD" and the "optedAddons.brbServiceNumber"
+                field in standalone bookings)
+      "iesf"  - true/false - "Is eSIM free"
+      "iboxf" - true/false - "Is BOXX free" (BOXX = one of the two core
+                assistance providers seen throughout, alongside AAI)
+      "comm"  - Commission (numeric)
+    "ptf" - Plan total fare
+
+STUDENT BOOK REQUEST API (p.78-80, table continues into Part 5):
+{
+  "bookingId": "TJS70480000740917",
+  "paymentInfos": [ { "paymentMedium": "WALLET", "amount": 27350 } ],
+  "deliveryInfo": {
+    "emails": [ "anandini.vaidya+4@tripjack.com" ],
+    "contacts": [ "" ]
+  },
+  "pli": [
+    {
+      "plid": "isid4896472750_0_regular",
+      "pi": [
+        {
+          "pid": "ABHI-PLAN_250_STUDENT-XUSC-AAI-STD-BRB_STD",
+          "iti": [
+            {
+              "dob": "2003-03-25", "age": 22, "fn": "Deepa", "ln": "SINHA",
+              "eid": "anandini.vaidy+4@tripjack.com", "pnum": "KJHGF123",
+              "gen": "female", "ti": "Ms", "cnum": "9090909090",
+              "ni": [ { "nn": "Legal Heir", "nr": "LEGAL HEIR" } ],
+              "sc": {
+                "cn": "Computer Science",
+                "cdm": 24,
+                "un": "XYZ University",
+                "uc": "New York",
+                "sn": "John Doe",
+                "sdob": "1975-08-15",
+                "sr": "Legal Heir",
+                "se": "johndoe@example.com"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+NEW "sc" object under each Student iti[] entry - not yet backed by a
+verbose table in the pages read so far (the "Student Book Request
+Verbose" table cuts off mid-way on p.80, right after "Dob" - CONTINUE
+READING to find the rest and confirm/correct these NAME GUESSES, none
+of which are backed by doc text yet, only inferred from field-name
+patterns + the one sample's values):
+  cn   - (guess) Course Name (e.g. "Computer Science")
+  cdm  - (guess) Course Duration in Months (e.g. 24)
+  un   - (guess) University Name (e.g. "XYZ University")
+  uc   - (guess) University City (e.g. "New York")
+  sn   - (guess) Sponsor Name (e.g. "John Doe") - distinct from the
+         nominee (ni.nn) despite this one sample reusing "Legal Heir"
+         for both sr and the nominee's nr
+  sdob - (guess) Sponsor Date of Birth
+  sr   - (guess) Sponsor Relationship (mirrors "ni.nr" naming pattern)
+  se   - (guess) Sponsor Email
+
+Student Book Request Verbose (partial - cuts off at p.80):
+  Booking id   - Booking Id, unique id received in the review response
+  paymentInfos - paymentMedium (mode of payment e.g. "Wallet"), amount
+                 (TripSafe Insurance Amount)
+  pli - plid (from Search resp), pi.pid (from Search resp, wrt plid)
+    "iti" - Insurance Traveller information
+      "Dob" - Date of birth (YYYY-MM-DD)
+      [TABLE CUTS OFF HERE mid-list - remaining iti fields, and crucially
+      the new "sc" object, not yet documented by this table - confirm on
+      the next page(s).]
+
+--- PAGE 81 (Student Book Request Verbose, continued from Part 4) ---
+
+  [continuing the per-traveller ("iti") verbose table]
+    Age   Age of the traveler.
+    Fn    First name of the traveler.
+    Ln    Last name of the traveler.
+    Eid   Email ID of the traveler.
+    Pnum  Passport number of the traveler.
+    Gen   gender of Traveller (M / F)
+    Ni
+      "nn" - Name of the nominee.
+      "nr" - Relationship between the traveler and the nominee.
+
+  [new sub-table, the "sc" (student course) object - THIS RESOLVES THE
+  PART-4 OPEN QUESTION: the 8 guessed field names/meanings were all
+  correct]
+    "sc": student course
+      "cn": "Computer Science",   // course name
+      "cdm": 24,                   // CourseDurationMonths
+      "un": "XYZ University"       //UniversityName
+      "uc": "New York",            //UniversityCity
+      "sn": "John Doe",            //SponsorName
+      "sdob": "1975-08-15"         //SponsorDOB
+      "sr": "Legal Heir"           //SponsorRelation
+
+--- PAGE 82 ---
+
+      "se": "johndoe@example.com"  //SponsorEmail
+
+  [sc object confirmed complete at 8 fields: cn, cdm, un, uc, sn, sdob,
+  sr, se]
+
+NOTE :- All other APIs, including the Review API and Booking Details
+API, remain unchanged and continue to operate as standalone APIs.
+

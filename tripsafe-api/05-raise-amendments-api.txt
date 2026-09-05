@@ -1,0 +1,194 @@
+----------------------------------------------------------------------
+RAISE-AMENDMENTS API (p.42-51)
+----------------------------------------------------------------------
+Purpose: Raises an amendment (currently CANCELLATION only - see FAQs)
+against an existing insurance booking. This is STEP 1 of a two-step
+cancel flow - Raise gives back a refund PREVIEW + an amendmentId;
+the separate Cancellation API (next section) is STEP 2, which actually
+CONFIRMS it. Same "preview charges, then confirm" pattern already used
+for TripJack Cabs (see cabs-api/cab-api-doc.txt, Amendment Charges vs
+Amendment Cancellation) - build the frontend the same two-step way.
+
+Method: POST
+API: /oms/v1/ins/amendment/raise
+
+Raise Amendments Request Payload:
+{
+  "amendmentId": "",
+  "bookingId": "TJS70010000707761",
+  "type": "CANCELLATION",
+  "travellerKeys": {
+    "isid8397749008_0_regular": {
+      "ABHI-PLAN_100_CLASSIC-WW-AAI": [
+        { "id": 1 }
+      ]
+    }
+  }
+}
+
+Amendment API Request Verbose:
+  Amendment id - (blank/empty string on the raise request)
+  Booking Id   - Booking ID for which cancellation needs to be raised
+  type         - Type of amendment (only "CANCELLATION" supported - see FAQs)
+    travellerKeys - includes plan id & product info id, nested as:
+                    { <plid>: { <pid>: [ { "id": <pax id> } ] } }
+      "<plid>" (e.g. "isid0219009173_0_regular") - plan id, differs
+               per booking, retrievable from Booking Details API.
+      "<pid>"  (e.g. "ABHI-PLAN_250-WW-AAI-BOXX") - Product id,
+               retrievable from Booking Details API.
+      "id"     - "Pax ID" (i.e. the traveller's iti[].id from the
+                 original booking, NOT a new value).
+  PARTIAL CANCELLATION: to cancel only SOME travellers on a multi-pax
+  booking, only include their pax "id"s in the travellerKeys[plid][pid]
+  array and omit the others (confirmed explicitly in the FAQs below).
+
+Raise Amendments API Response (full, reconstructed p.43-47):
+{
+  "amendmentItems": [
+    {
+      "amendmentId": "060000729805",
+      "bookingId": "TJS70850000729798",
+      "status": "REQUESTED",
+      "amount": -1610.00,
+      "partnerId": "0",
+      "orderType": "INSURANCE"
+    }
+  ],
+  "insuranceCancellationResponse": {
+    "iif": {
+      "pli": [
+        {
+          "plid": "isid9679980587_0_regular",
+          "pi": [
+            {
+              "pid": "ABHI-PLAN_100-WW-AAI-BOXX",
+              "pn": "$100,000",
+              "pi": "Gold Plus",
+              "ip": "ABHI",
+              "aps": [ "Across Assist", "BOXX" ],
+              "rname": "Worldwide",
+              "pbft": [
+                {
+                  "bv": "POPUP", "name": "Emergency Medical Expenses",
+                  "ic": "Medical Covers", "type": "INSURANCE_BENEFIT",
+                  "dsc": "For availing immediate emergency medical assistance required on account of any illness/injury sustained or contracted whilst on a trip. (Deductible $100)",
+                  "sumins": "Upto $100,000", "bfp": "ABHI"
+                },
+                {
+                  "bv": "BANNER", "name": "Cyber Protection Education",
+                  "type": "ASSISTANCE_BENEFIT", "bfp": "BOXX"
+                }
+              ],
+              "iti": [
+                {
+                  "id": 1, "dob": "1965-04-15", "age": 60,
+                  "fn": "arvind", "ln": "panwar", "isio": true,
+                  "eid": "arvind.panwar@tripjack.com", "pnum": "A2345678",
+                  "pincode": "123456", "gen": "M",
+                  "ni": [ { "nn": "Arvind" } ],
+                  "fd": {
+                    "ifc": {
+                      "AC": 614.00, "AP": 10.00, "BF": 235.26,
+                      // one field's key got cut across a page break here,
+                      // value 180.90 - never resolved which key it is,
+                      // confirm live
+                      "NF": 1008.28, "SP": 1364.41, "TF": 1610.00,
+                      "BXP": 10.00, "IMU": 1374.74,
+                      "CGST": 122.80,  // NEW field, not seen before p.42
+                      "SGST": 122.80,  // NEW field, not seen before p.42
+                      "ACTDS": 12.28, "APGST": 0.00, "IPGST": 32.56,
+                      "SPGST": 245.59, "BXPGST": 1.80
+                    }
+                  },
+                  "policyId": "TSON11033814",
+                  "isbpo": true,
+                  "optedAddons": {
+                    "brbServiceNumber": "70850000729798",
+                    "isBrbJobCompleted": false
+                  },
+                  "izt": true
+                }
+              ],
+              "tfd": {
+                "ifc": {
+                  "BF": 235.26, "SGST": 122.80, "TF": 1610.00, "SP": 1364.41,
+                  "IMU": 1374.74, "CGST": 122.80, "IPGST": 32.56, "AC": 614.00,
+                  "APGST": 0.00, "ACTDS": 12.28, "BXPGST": 1.80, "SPGST": 245.59,
+                  "NF": 1008.28, "AP": 10.00, "BXP": 10.00
+                  // same unresolved-key/180.90 field repeated here too
+                }
+              },
+              "ibrbf": false,  // meaning not documented anywhere in this
+              "iesf": false,   // doc - likely per-addon "is X feature/
+              "iboxf": false   // fulfilled" flags (baggage/esim/boxx?) - guess only
+            }
+          ],
+          "pltype": "REGULAR"
+        }
+      ]
+    },
+    "ie": 614.00,   // NOTE: field name here is "ie" - but see Cancellation
+                    // API below, whose real sample response has "ic" in
+                    // the exact same position/value pattern, and the
+                    // shared verbose table (p.56, written once for both
+                    // APIs) documents it as "ic". Lean toward "ic" being
+                    // correct and "ie" here being a doc typo/OCR error -
+                    // CONFIRM LIVE before coding against either.
+    "tmr": 1610.00, // Total amount to be refunded - POSITIVE here (a
+                    // preview, nothing charged/refunded yet)
+    "insuranceType": "TRIPSAFE"
+  },
+  "status": { "success": true, "httpStatus": 200 }
+}
+
+Raise Amendment API Response Verbose (p.48-50, this table is written
+ONCE and doc explicitly reuses it to also describe the Cancellation API
+response on p.56 - same shape both times per the doc):
+  amendmentItems
+    amendmentId  - amendment id generated, will be passed into the
+                   Cancellation API next
+      "bookingId"  - TripSafe Booking ID
+      "Status"     - "Raised" (the amendment is in raise mode)
+      "Amount"     - Cancellation amount
+      "Partner id" - can be ignored
+      "orderType"  - "INSURANCE" (can be ignored)
+  "insuranceCancellationResponse"
+    "iif" - Insurance Info
+      plid - plan id taken from Search Resp
+      "pi" - Product info: pid, pn, Ip (Insurance Provider Name),
+             aps (Assistance Providers), rname (Region name)
+      iti - Insurance Traveller Info: Id, Dob, Age, Fn, Ln, Isio
+            (insurance opted, optional), Eid, Pnum, Gen, Ni (nominee
+            info -> nn)
+      ifc/tfd - Insurance fare component (SPGST, AC, SP, TF, ACTDS, NF -
+                doc groups "ifc/tfd" together, implying they share one
+                field set; tfd = total across all pax, per-traveller
+                fd.ifc = that one traveller's own share)
+    "ic" - Insurance cancellation (amount) [see "ie" vs "ic" flag above]
+    "tmr" - Total amount to be refunded
+
+RAISE AMENDMENT API-FAQs (p.50-51):
+  Q: What amendment types are supported beyond CANCELLATION (e.g.
+     traveller correction, plan swap)?
+  A: Only CANCELLATION is supported currently.
+
+  Q: How is a partial cancellation structured in the request payload?
+  A: Handled by modifying the "id" field under the respective product
+     ID and traveller - i.e. list only the pax id(s) you want cancelled
+     inside travellerKeys[plid][pid][], omitting the rest, e.g.:
+     { "amendmentId": "", "bookingId": "TJS70850000729798",
+       "type": "CANCELLATION",
+       "travellerKeys": { "isid9679980587_0_regular": {
+         "ABHI-PLAN_100-WW-AAI-BOXX": [ { "id": 1 } ] } } }
+
+  Q: Is there a time limit post-booking within which amendments must
+     be raised?
+  A: Amendments must be raised AT LEAST 24 HOURS BEFORE the coverage
+     start date.
+
+  Q: How is the refund amount calculated? Is there a breakdown of the
+     amount returned in the response?
+  A: TripSafe cancellation is only allowed up to 24 hours before
+     coverage. No line-item breakdown currently in the API - just the
+     single "tmr" total.
+

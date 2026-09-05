@@ -107,6 +107,13 @@ const HomeScreen = ({ navigation }) => {
       icon: 'car-outline',
       screen: 'Cabs',
     },
+    {
+      id: 7,
+      title: 'Travel Insurance',
+      subtitle: 'Cover your trip against the unexpected',
+      icon: 'shield-checkmark-outline',
+      screen: 'TripSafe',
+    },
   ];
 
   const handleSearch = () => {

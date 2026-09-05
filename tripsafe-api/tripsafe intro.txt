@@ -1,0 +1,88 @@
+🛡️ TripSafe API – Global Travel Insurance & Assistance
+
+What is TripSafe?
+
+TripSafe is a comprehensive travel protection solution that addresses a wide range of travel-related contingencies through 30+ insurance and assistance benefits, including:
+
+Travel Insurance powered by Aditya Birla Health Insurance for unexpected medical expenses
+
+Coverage for adventure sports activities
+
+Passport loss and mugging protection
+
+Complimentary eSIM valid across 175 countries, including 500MB of free data in 72 countries for every traveller
+
+Complimentary baggage protection and tracking through Blue Ribbon Bags for the entire travelling group (worth ₹330 per passenger)
+
+24x7 claims assistance and support during and after travel
+
+Coverage for trip delays, cancellations, accidents, medical emergencies, and more
+
+Affordable plan options catering to diverse traveller needs
+
+Why Integrate TripSafe?
+
+Enhance customer confidence with comprehensive travel protection
+
+Cover the entire customer journey, including booking, amendments, and cancellations
+
+Simple REST-based API integration over HTTPS with JSON payloads
+
+Secure authentication through dedicated sandbox and production API keys
+
+Additional ancillary revenue opportunities with minimal implementation effort
+
+Available APIs
+
+Search API – Fetch available TripSafe plans
+
+Review API – Retrieve coverage details and premium calculations
+
+Booking API – Issue policies instantly
+
+Booking Details API – Access issued policy information
+
+Amendment API – Manage policy modifications
+
+Cancellation API – Process policy cancellations
+
+Embedded API – Issue policies directly using a TripJack Flight ID in a single request
+
+Student API – Long-duration travel insurance for students studying abroad
+
+Annual Multi-Trip (AMT) API – Unlimited travel coverage for 12 months
+
+Additional Support
+
+Structured UAT Certification Framework
+
+Formal SLA Documentation
+
+Dedicated onboarding and integration support
+
+
+
+Next Steps
+
+To help you get started, we have attached the following:
+
+TripSafe API Documentation
+
+Cabs API Documentation
+
+TripSafe Product Brochures (Coverage Details, Plan Information, and Benefits)
+
+Both APIs utilize a common authentication framework through a shared apiKey header and support dedicated UAT and Production environments.
+
+Upon completion of integration, our team will assist you through a structured certification process to ensure a smooth and successful go-live.
+
+API Access & Onboarding
+
+Detailed instructions for API key generation and IP whitelisting are available in the attached documentation. Should you require any assistance during integration, testing, or production onboarding, our team will be happy to support you.
+
+We look forward to partnering with you and enabling these solutions on your platform. Please feel free to reach out with any questions or to schedule a technical walkthrough with our team.
+
+Thank you, and we look forward to a successful integration journey.
+
+
+

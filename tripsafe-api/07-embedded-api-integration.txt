@@ -1,0 +1,184 @@
+----------------------------------------------------------------------
+EMBEDDED API INTEGRATION (p.59+)
+----------------------------------------------------------------------
+Section A: External Embedded Flow (Non-TripJack Flight Bookings)
+
+1. Overview: Lets API partners offer TripSafe insurance for flight
+   bookings made OUTSIDE TripJack, without requiring a TripJack Air
+   Booking ID. Designed for partners using MULTIPLE flight suppliers -
+   insurance attachment works irrespective of flight source.
+
+2. Channel Configuration: pass this field in the Search API request:
+   "ict": "API_EMB"
+
+3. Key Integration Guidelines:
+   1. Channel Identifier: Mandatory - "ict": "API_EMB" must be passed
+      in the Search API request.
+   2. AIR Booking ID Handling: the (flight) booking id is NOT required
+      for this flow - do NOT pass it in the Search request. (NOTE: the
+      doc calls this "bid" in this section's prose - THIS IS A
+      DIFFERENT "bid" THAN THE ONE USED ELSEWHERE IN THIS DOC. Every
+      other "bid" in this document (Review API response, Booking-
+      Details request) means the INSURANCE booking id. Here, "bid"
+      means a TripJack AIR/FLIGHT booking id, for linking the insurance
+      purchase to a specific flight. Same two-letter abbreviation, two
+      totally different meanings depending on section - do not confuse
+      them when coding.)
+   3. API Behavior across the rest of the flow once ict is set:
+      - Search API: requires addition of ict (only change)
+      - Review API: No change
+      - Booking API: No change
+      - Booking Details API: No change
+      - Amendment API: No change
+      - Cancellation API: No change
+   4. Traveller & Trip Data: passed exactly per the standard API
+      contract already documented above - nothing embedded-specific.
+
+4. Integration Flow - Step 1: Insurance Search API
+   Endpoint: /insurance/v1/searchquery-list
+   Include: "ict": "API_EMB"
+   Do NOT include the flight bid.
+
+   Sample:
+   {
+     "isq": {
+       "sd": "2026-04-01",
+       "ed": "2026-04-15",
+       "isc": { "iri": [ { "rkey": "TH", "rt": "COUNTRY" } ] },
+       "iti": [ { "age": 30 } ]
+     },
+     "ict": "API_EMB"  // <- only addition needed vs standalone flow
+   }
+
+Section B: Embedded Flow (TripJack Air Booking) (p.61-64)
+Existing flow remains UNCHANGED and continues to require a TripJack AIR
+Booking ID for insurance attachment (contrast Section A above, which
+deliberately avoids needing one).
+
+Step 1: AIR Search API -> AIR Review API
+  - Trigger a Flight Search API request to get available price ids.
+  - Select a flight/price id and call the AIR Review API to retrieve
+    price detail.
+
+Step 2: Insurance Search -> Review API
+  - From the Insurance Search API response, choose: PID (Product ID),
+    IID (Insurer ID) [NOTE: "IID" here is a NEW abbreviation for what
+    every other section of this doc calls "plid" - see the real Step 2
+    sample below, which uses top-level key "iid" holding a plid-shaped
+    value. Same concept, different name in this one flow.]
+  - Call the Insurance Review API, passing: the selected PID and IID,
+    and the corresponding Air Booking Review ID obtained in Step 1.
+
+Step 3: Insurance Review API -> AIR BOOK API
+  - From the Insurance Review API response, note: Insurance Total Fare,
+    AIR Booking ID.
+  - Call the AIR BOOK API (TripJack's existing Flights endpoint, NOT a
+    TripSafe endpoint), passing: selected AIR PRICE + INS PRICE summed
+    together into "amount", and the Air Booking Review ID from Step 1.
+
+Step 4: AIR BOOK API -> AIR BOOKING RETRIEVE API
+  - From the AIR BOOK API response, fetch the booking id and retrieve
+    the same (i.e. call Flights' own booking-details).
+  - In THAT response, under the "ipi" tag, you get the INS BOOKING ID
+    (i.e. the flight's own booking-details response embeds the linked
+    insurance booking id somewhere under an "ipi" field - not otherwise
+    described in this doc; watch for this if/when touching Flights'
+    booking-details response shape for an embedded-insurance booking).
+
+1. Embedded INS Search API - Sample Request Payload:
+{
+  "isq": {
+    "sd": "2025-10-31",
+    "ed": "2025-11-30",
+    "isc": {
+      "iri": [
+        { "rkey": "IN", "rt": "COUNTRY" },
+        { "rkey": "AE", "rt": "COUNTRY" }
+      ]
+    },
+    "iti": [
+      {
+        "id": 1, "age": 39, "dob": "1986-04-01",
+        "ti": "", "fn": "", "ln": "", "eid": "", "cnum": "",
+        "pnum": "", "pnan": "", "isio": true
+      }
+    ],
+    "isp": { "pht": "REGULAR" },
+    "isef": true
+  },
+  "bid": "TJS11580000738782"  // Air Booking Id received in the AIR REVIEW RESP.
+}
+
+CONFIRMS an earlier open question: "bid" at THIS top level (Embedded
+Search, TripJack-Air-linked flow) = the FLIGHT/AIR booking id - a
+totally different thing from every other "bid" in this document (which
+means the INSURANCE booking id). Two unrelated concepts, same two-
+letter name, depending entirely on which endpoint/section you're
+looking at.
+
+Also NEW here vs the standalone iti[] shape: "pnan" (meaning not
+explained anywhere in this doc - possibly "passport nationality",
+unconfirmed guess) and a populated "isp": {"pht": "REGULAR"} - so isp is
+NOT always an empty object as first seen; it can carry a "pht" field
+(meaning also unexplained - possibly "plan holder type", unconfirmed
+guess). "isef" appears here as true - given it's specifically true in
+THIS embedded-flow-request context, and was seen false in earlier
+NON-embedded booking-details responses, "isef" most plausibly means "is
+embedded flow" - a reasonable but still unconfirmed inference.
+
+2. Embedded INS REVIEW API - Sample Request Payload:
+{
+  "iid": "isid6775429683_0_regular",
+  "pid": "ABHI-PLAN_75-ASIA-BOXX-AAI_8-ZETEXA-BRB",
+  "refid": "TJS11890000738898",  // AIR booking id
+  "sd": "2025-10-31",
+  "ed": "2025-11-30",
+  "iti": [
+    {
+      "ti": "MrS", // rendering looks garbled (likely "Mrs") - confirm live
+      "fn": "MEENA1", // trailing "1" likely OCR noise for "MEENA" - confirm live
+      "ln": "SINGH", "age": 39, "id": 1,
+      "eid": "anandini.vaidya@tripjack.com", "cnum": "9810961535",
+      "isio": true, "dob": "1987-09-09"
+    }
+  ]
+}
+
+Note the field-name PROLIFERATION for "the flight booking reference"
+across just these 2 steps: "bid" (Embedded Search, per section 1 above)
+vs "refid" (Embedded Review, here) - both hold a TripJack Flights
+booking id, per this section's own prose calling it "Air Booking Review
+ID" both times. THREE names so far for one concept across this doc
+(bid / refid / "Air Booking Review ID" in prose) - be very deliberate
+about which field name each specific embedded endpoint actually expects
+when coding this, don't assume they're interchangeable.
+
+3. Embedded AIR BOOK API:
+  - Fetch the AIR BOOK API (existing TripJack Flights /oms/v1/air/book
+    endpoint in this same codebase - see FlightService.bookFlight), and
+    in "amount" include the SUM of Flight fare + Insurance fare
+    (i.e. one combined payment covers both the flight and the
+    insurance in a single Flights Book call - TripSafe itself is never
+    separately paid for in this flow).
+
+Terms & Conditions - External Embedded Flow (API_EMB) (p.65 - this
+applies to SECTION A, the non-TripJack-flight embedded flow, not
+Section B above):
+  1. Applicability: only for insurance bookings made in conjunction
+     with flight bookings OUTSIDE the TripJack platform.
+  2. Channel Usage: triggered via "ict": "API_EMB" in the Search request.
+  3. Exclusive Embedded Plans (Class Super): plans in this category are
+     INTENDED TO BE SOLD ONLY as part of the embedded journey (designed
+     to be offered alongside a flight booking).
+  4. Standalone Usage: no strict SYSTEM validation prevents selling
+     these plans standalone - but partners are EXPECTED to adhere to
+     the intended usage and avoid selling them outside the embedded
+     context. (I.e. this is a business/contractual rule, not something
+     the API itself enforces - our own app logic should still avoid
+     surfacing "Class Super" plans outside an actual embedded/flight
+     flow, even though nothing stops us technically.)
+  5. Compliance Responsibility: the API partner (us) is responsible for
+     correct plan-type usage per the defined flow. Deviation may trigger
+     "reconciliation processes" (unspecified consequence - presumably a
+     billing/audit matter with TripJack, not an API-level block).
+
