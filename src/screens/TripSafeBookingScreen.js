@@ -262,7 +262,27 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
       });
       const bookData = await bookResponse.json();
       if (!bookResponse.ok || bookData?.errors || bookData?.Status === false) {
-        throw new Error(bookData?.errors?.[0]?.message || bookData?.message || 'Unable to complete this booking right now.');
+        const rawMessage = bookData?.errors?.[0]?.message || bookData?.message || '';
+        // errCode 2581 "Already order exist with same booking reference"
+        // means THIS bookingId already has a real order on TripJack's side
+        // from an earlier attempt (e.g. re-tapping Book & Pay after the
+        // screen reset but kept the same reviewed bookingId) - the order
+        // itself isn't lost, so recover it via Booking-Details instead of
+        // just failing.
+        if (rawMessage.includes('2581') || rawMessage.includes('Already order exist')) {
+          const details = await fetchBookingDetails(bookingId);
+          setBooking(details);
+          setPhase('confirmed');
+          syncTripSafeBooking(token, {
+            bookingId,
+            planName,
+            destinationSummary,
+            amount: details?.order?.amount ?? fare,
+            status: details?.order?.status || 'SUCCESS',
+          });
+          return;
+        }
+        throw new Error(rawMessage || 'Unable to complete this booking right now.');
       }
       const confirmedBookingId = bookData?.bid || bookingId;
       const details = await fetchBookingDetails(confirmedBookingId);
