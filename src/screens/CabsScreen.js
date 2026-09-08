@@ -27,19 +27,46 @@ const JOURNEY_TYPES = [
   { value: 'local', label: 'Local' },
 ];
 
-// 30-min increments, 00:00-23:30 - simpler and more reliable on native than
-// a full scrolling hour/minute wheel for a field that's really just "pick a
-// rough time of day".
-const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
-  const hours = String(Math.floor(i / 2)).padStart(2, '0');
-  const minutes = i % 2 === 0 ? '00' : '30';
-  return `${hours}:${minutes}`;
-});
-
 const formatDisplayDate = (isoDate) => {
   if (!isoDate) return '';
   const date = new Date(`${isoDate}T00:00:00`);
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+// The API wants 24h "HH:MM"; the picker works in 12h + AM/PM like TripJack's
+// own booking site, so any minute is reachable rather than just :00 and :30.
+const to24Hour = (hour12, minute, meridiem) => {
+  let hour = Number(hour12) % 12;
+  if (meridiem === 'PM') hour += 12;
+  return `${String(hour).padStart(2, '0')}:${String(Number(minute)).padStart(2, '0')}`;
+};
+
+const from24Hour = (value) => {
+  const [rawHour, rawMinute] = String(value || '').split(':');
+  const hour = Number(rawHour);
+  if (!Number.isFinite(hour)) return { hour12: '12', minute: '00', meridiem: 'PM' };
+  return {
+    hour12: String(hour % 12 === 0 ? 12 : hour % 12),
+    minute: String(Number(rawMinute) || 0).padStart(2, '0'),
+    meridiem: hour >= 12 ? 'PM' : 'AM',
+  };
+};
+
+const formatDisplayTime = (value) => {
+  if (!value) return '';
+  const { hour12, minute, meridiem } = from24Hour(value);
+  return `${hour12}:${minute} ${meridiem}`;
+};
+
+// Vehicle groups carry their own paxCapacity/luggageCapacity and those are
+// accurate. TripJack's quoteFilter is NOT: asking for 4 bags drops both the
+// 3-seat and the 10-seat vehicles, asking for 5 returns capacity-4 ones, and
+// asking for 10 returns nothing at all even though a capacity-10 vehicle is
+// on offer. So the party size is filtered here instead of being sent up.
+const fitsParty = (group, passengers, bags) => {
+  const seats = Number(group?.paxCapacity) || 0;
+  const boot = Number(group?.luggageCapacity) || 0;
+  return seats >= passengers && boot >= bags;
 };
 
 const CabsScreen = ({ route, navigation }) => {
@@ -61,7 +88,9 @@ const CabsScreen = ({ route, navigation }) => {
   const [returnDate, setReturnDate] = useState('');
   const [returnTime, setReturnTime] = useState('');
   const [passengers, setPassengers] = useState('1');
+  const [bags, setBags] = useState('1');
   const [searching, setSearching] = useState(false);
+  const [partyPicker, setPartyPicker] = useState(false);
 
   const [locationPicker, setLocationPicker] = useState({ visible: false, target: null, query: '', results: [], loading: false });
   const [datePicker, setDatePicker] = useState({ visible: false, target: null });
@@ -130,11 +159,31 @@ const CabsScreen = ({ route, navigation }) => {
     setDatePicker({ visible: false, target: null });
   };
 
-  const openTimePicker = (target) => setTimePicker({ visible: true, target });
-  const chooseTime = (time) => {
-    if (timePicker.target === 'pickup') setPickupTime(time);
-    else setReturnTime(time);
+  const openTimePicker = (target) => {
+    const current = target === 'pickup' ? pickupTime : returnTime;
+    setTimePicker({ visible: true, target, ...from24Hour(current || '12:00') });
+  };
+  const applyTime = () => {
+    const value = to24Hour(timePicker.hour12, timePicker.minute, timePicker.meridiem);
+    if (timePicker.target === 'pickup') setPickupTime(value);
+    else setReturnTime(value);
     setTimePicker({ visible: false, target: null });
+  };
+
+  const swapLocations = () => {
+    setOrigin(destination);
+    setDestination(origin);
+  };
+
+  const passengerCountLabel = Math.min(10, Math.max(1, parseInt(passengers, 10) || 1));
+  const bagCountLabel = Math.min(20, Math.max(0, parseInt(bags, 10) || 0));
+  const partySummary =
+    `${passengerCountLabel} Passenger${passengerCountLabel > 1 ? 's' : ''}, ` +
+    `${bagCountLabel} Bag${bagCountLabel === 1 ? '' : 's'}`;
+
+  const stepParty = (setter, current, delta, min, max) => {
+    const next = Math.min(max, Math.max(min, (parseInt(current, 10) || min) + delta));
+    setter(String(next));
   };
 
   const runSearch = async () => {
@@ -169,7 +218,15 @@ const CabsScreen = ({ route, navigation }) => {
     }
 
     const passengersCount = Math.min(10, Math.max(1, parseInt(passengers, 10) || 1));
+    const bagsCount = Math.min(20, Math.max(0, parseInt(bags, 10) || 0));
 
+    // quoteFilter is deliberately NOT sent. The doc's sample includes it, but
+    // live it filters incorrectly: {paxCount:1, luggageCount:4} drops both the
+    // 3-seat and the 10-seat vehicles, luggageCount 5 returns capacity-4 ones,
+    // and luggageCount 10 returns zero results while a capacity-10 vehicle is
+    // plainly on offer. Sending it would hide cabs that genuinely fit. The
+    // per-vehicle paxCapacity/luggageCapacity in the response are correct, so
+    // the party filter is applied here instead (see fitsParty).
     const payload = {
       pickupDate: `${pickupDate} ${pickupTime}`,
       ...(returnDateTimeString ? { returnDate: returnDateTimeString } : {}),
@@ -178,12 +235,6 @@ const CabsScreen = ({ route, navigation }) => {
       journeyType,
       tripType,
       passengers: passengersCount,
-      // The doc's sample search sends this alongside "passengers". Tested
-      // live 2026-09-08: it does NOT actually narrow the results (a
-      // 2-passenger search still returns 10-seat Minibuses either way), so
-      // capacity filtering is ours to do at display time if we ever want it.
-      // Sent anyway to match the documented request shape.
-      quoteFilter: { paxCount: passengersCount },
     };
 
     try {
@@ -202,13 +253,25 @@ const CabsScreen = ({ route, navigation }) => {
         Alert.alert('No Cabs Available', 'No cabs were found for this route and time. Try a different time or location.');
         return;
       }
+      // Keep only vehicles that actually seat the party and take the bags. If
+      // that leaves nothing, fall back to the full list rather than showing an
+      // empty screen - better to show a too-small cab clearly labelled than to
+      // claim there are none.
+      const fitting = quotesInfo.filter((group) => fitsParty(group, passengersCount, bagsCount));
+      if (fitting.length === 0) {
+        Alert.alert(
+          'No exact match',
+          `No cab fits ${passengersCount} passenger${passengersCount > 1 ? 's' : ''} and ${bagsCount} bag${bagsCount === 1 ? '' : 's'}. Showing everything available for this route instead.`
+        );
+      }
       navigation.navigate('CabResults', {
-        quotesInfo,
+        quotesInfo: fitting.length > 0 ? fitting : quotesInfo,
         journeyInfo: data?.data?.journeyInfo,
         routeDetails: data?.data?.routeDetails,
         journeyType,
         tripType,
         passengers: passengersCount,
+        bags: bagsCount,
         sourceBookingId,
       });
     } catch (error) {
@@ -266,6 +329,18 @@ const CabsScreen = ({ route, navigation }) => {
           <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
         </TouchableOpacity>
 
+        <View style={styles.swapRow}>
+          <View style={styles.swapLine} />
+          <TouchableOpacity
+            style={styles.swapButton}
+            onPress={swapLocations}
+            disabled={!origin && !destination}
+            accessibilityLabel="Swap pickup and drop-off"
+          >
+            <Ionicons name="swap-vertical" size={16} color={Colors.primary} />
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.fieldLabel}>Drop-off Location</Text>
         <TouchableOpacity style={styles.inputWithIcon} onPress={() => openLocationPicker('destination')}>
           <Ionicons name="location-outline" size={17} color={Colors.primary} />
@@ -286,7 +361,7 @@ const CabsScreen = ({ route, navigation }) => {
           <TouchableOpacity style={[styles.inputWithIcon, styles.inputFlex]} onPress={() => openTimePicker('pickup')}>
             <Ionicons name="time-outline" size={17} color={Colors.primary} />
             <Text style={[styles.inputIconText, pickupTime ? styles.pickerText : styles.pickerPlaceholder]}>
-              {pickupTime || 'Time'}
+              {pickupTime ? formatDisplayTime(pickupTime) : 'Time'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -304,26 +379,21 @@ const CabsScreen = ({ route, navigation }) => {
               <TouchableOpacity style={[styles.inputWithIcon, styles.inputFlex]} onPress={() => openTimePicker('return')}>
                 <Ionicons name="time-outline" size={17} color={Colors.primary} />
                 <Text style={[styles.inputIconText, returnTime ? styles.pickerText : styles.pickerPlaceholder]}>
-                  {returnTime || 'Time'}
+                  {returnTime ? formatDisplayTime(returnTime) : 'Time'}
                 </Text>
               </TouchableOpacity>
             </View>
           </>
         ) : null}
 
-        <Text style={styles.fieldLabel}>Passengers</Text>
-        <View style={styles.inputWithIcon}>
-          <Ionicons name="people-outline" size={17} color={Colors.primary} />
-          <TextInput
-            style={styles.inputIconTextField}
-            placeholder="1"
-            placeholderTextColor={Colors.textMuted}
-            value={passengers}
-            onChangeText={(value) => setPassengers(digitsOnly(value))}
-            keyboardType="number-pad"
-            maxLength={2}
-          />
-        </View>
+        <Text style={styles.fieldLabel}>Passengers & Bags</Text>
+        <TouchableOpacity style={styles.inputWithIcon} onPress={() => setPartyPicker(true)}>
+          <Ionicons name="person-outline" size={17} color={Colors.primary} />
+          <Text style={[styles.inputIconText, styles.pickerText]}>
+            {partySummary}
+          </Text>
+          <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.searchButton} onPress={runSearch} disabled={searching}>
           {searching ? (
@@ -345,23 +415,104 @@ const CabsScreen = ({ route, navigation }) => {
       <Modal visible={timePicker.visible} transparent animationType="fade" onRequestClose={() => setTimePicker({ visible: false, target: null })}>
         <Pressable style={styles.modalOverlay} onPress={() => setTimePicker({ visible: false, target: null })}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{timePicker.target === 'pickup' ? 'Pickup Time' : 'Return Time'}</Text>
-              <TouchableOpacity onPress={() => setTimePicker({ visible: false, target: null })}>
-                <Ionicons name="close" size={20} color={Colors.text} />
+            <Text style={styles.modalTitle}>Select Time</Text>
+            <Text style={styles.modalSubtitle}>
+              {timePicker.target === 'pickup' ? 'Pickup' : 'Return'}
+              {(timePicker.target === 'pickup' ? pickupDate : returnDate)
+                ? ` · ${formatDisplayDate(timePicker.target === 'pickup' ? pickupDate : returnDate)}`
+                : ''}
+            </Text>
+
+            <View style={styles.timeEntryRow}>
+              <TextInput
+                style={styles.timeBox}
+                value={timePicker.hour12}
+                onChangeText={(value) => setTimePicker((prev) => ({ ...prev, hour12: digitsOnly(value).slice(0, 2) }))}
+                onEndEditing={() => setTimePicker((prev) => {
+                  const hour = Math.min(12, Math.max(1, parseInt(prev.hour12, 10) || 12));
+                  return { ...prev, hour12: String(hour) };
+                })}
+                keyboardType="number-pad"
+                maxLength={2}
+                selectTextOnFocus
+              />
+              <Text style={styles.timeColon}>:</Text>
+              <TextInput
+                style={styles.timeBox}
+                value={timePicker.minute}
+                onChangeText={(value) => setTimePicker((prev) => ({ ...prev, minute: digitsOnly(value).slice(0, 2) }))}
+                onEndEditing={() => setTimePicker((prev) => {
+                  const minute = Math.min(59, Math.max(0, parseInt(prev.minute, 10) || 0));
+                  return { ...prev, minute: String(minute).padStart(2, '0') };
+                })}
+                keyboardType="number-pad"
+                maxLength={2}
+                selectTextOnFocus
+              />
+              <View style={styles.meridiemGroup}>
+                {['AM', 'PM'].map((m) => (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.meridiemBox, timePicker.meridiem === m && styles.meridiemBoxActive]}
+                    onPress={() => setTimePicker((prev) => ({ ...prev, meridiem: m }))}
+                  >
+                    <Text style={[styles.meridiemText, timePicker.meridiem === m && styles.meridiemTextActive]}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setTimePicker({ visible: false, target: null })}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalApply} onPress={applyTime}>
+                <Text style={styles.modalApplyText}>Apply</Text>
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={TIME_SLOTS}
-              keyExtractor={(item) => item}
-              numColumns={4}
-              style={styles.modalList}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.timeSlot} onPress={() => chooseTime(item)}>
-                  <Text style={styles.timeSlotText}>{item}</Text>
-                </TouchableOpacity>
-              )}
-            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal visible={partyPicker} transparent animationType="fade" onRequestClose={() => setPartyPicker(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setPartyPicker(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Passengers & Bags</Text>
+
+            {[
+              { label: 'Passengers', hint: 'Travelling in the cab', value: passengers, setter: setPassengers, min: 1, max: 10 },
+              { label: 'Bags', hint: 'Checked-in size luggage', value: bags, setter: setBags, min: 0, max: 20 },
+            ].map((row) => (
+              <View key={row.label} style={styles.stepperRow}>
+                <View style={styles.stepperLabels}>
+                  <Text style={styles.stepperLabel}>{row.label}</Text>
+                  <Text style={styles.stepperHint}>{row.hint}</Text>
+                </View>
+                <View style={styles.stepperControls}>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={() => stepParty(row.setter, row.value, -1, row.min, row.max)}
+                  >
+                    <Ionicons name="remove" size={18} color={Colors.primary} />
+                  </TouchableOpacity>
+                  <Text style={styles.stepperValue}>
+                    {Math.min(row.max, Math.max(row.min, parseInt(row.value, 10) || row.min))}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.stepperButton}
+                    onPress={() => stepParty(row.setter, row.value, 1, row.min, row.max)}
+                  >
+                    <Ionicons name="add" size={18} color={Colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalApplyFull} onPress={() => setPartyPicker(false)}>
+                <Text style={styles.modalApplyText}>Done</Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -480,11 +631,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
-  inputIconTextField: {
-    flex: 1,
-    fontSize: 14,
-    color: Colors.text,
-  },
   inputIconText: {
     flex: 1,
     fontSize: 14,
@@ -566,18 +712,153 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
   },
-  timeSlot: {
+  swapRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: -4,
+  },
+  swapLine: {
     flex: 1,
-    margin: 4,
-    paddingVertical: 10,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  swapButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  timeEntryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  timeBox: {
+    width: 64,
+    paddingVertical: 12,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    textAlign: 'center',
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  timeColon: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.text,
+    marginHorizontal: 8,
+  },
+  meridiemGroup: {
+    flexDirection: 'row',
+    marginLeft: 'auto',
+  },
+  meridiemBox: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
     borderWidth: 1,
     borderColor: Colors.border,
     alignItems: 'center',
   },
-  timeSlotText: {
-    fontSize: 13,
+  meridiemBoxActive: {
+    borderColor: Colors.primary,
+    backgroundColor: `${Colors.primary}12`,
+  },
+  meridiemText: {
+    fontSize: 15,
     fontWeight: '600',
+    color: Colors.textMuted,
+  },
+  meridiemTextActive: {
+    color: Colors.primary,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  modalApply: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  modalApplyFull: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  modalApplyText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.secondary,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  stepperLabels: {
+    flex: 1,
+  },
+  stepperLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  stepperHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  stepperControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepperButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValue: {
+    minWidth: 40,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '700',
     color: Colors.text,
   },
 });
