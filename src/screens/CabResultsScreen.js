@@ -21,7 +21,7 @@ const grandTotalOf = (quote) => Number(quote?.fareBreakup?.totalFare || 0) + Num
 // quote (quotes[0]) per every sample in the docs, so this flattens the two
 // levels into one list item rather than nesting a second FlatList.
 const CabResultsScreen = ({ route, navigation }) => {
-  const { quotesInfo, journeyInfo, routeDetails, journeyType, tripType, passengers } = route.params || {};
+  const { quotesInfo, journeyInfo, routeDetails, journeyType, tripType, passengers, sourceBookingId } = route.params || {};
   const [sortBy, setSortBy] = useState('price');
 
   // TripJack always returns every vehicle type available on the route,
@@ -111,6 +111,7 @@ const CabResultsScreen = ({ route, navigation }) => {
                 journeyType,
                 tripType,
                 passengers,
+                sourceBookingId,
               })
             }
           >

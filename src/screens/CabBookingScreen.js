@@ -45,7 +45,13 @@ const syncCabBooking = async (token, entry) => {
 
 const CabBookingScreen = ({ route, navigation }) => {
   const { token, user } = useAuth();
-  const { quote, group, journeyInfo, routeDetails, journeyType } = route.params || {};
+  // sourceBookingId is set when this cab is being added as an add-on to an
+  // already-successful FLIGHT booking (see FlightBookingScreen's "Add an
+  // Airport Transfer" prompt, and cabs-api/cab-api-doc.txt's Embedded API
+  // section) - routes Book through /cabs/embedded-book instead of the
+  // plain /cabs/book.
+  const { quote, group, journeyInfo, routeDetails, journeyType, sourceBookingId } = route.params || {};
+  const isEmbedded = Boolean(sourceBookingId);
 
   const [firstName, setFirstName] = useState(user?.name?.split(' ')[0] || '');
   const [lastName, setLastName] = useState(user?.name?.split(' ').slice(1).join(' ') || '');
@@ -172,30 +178,92 @@ const CabBookingScreen = ({ route, navigation }) => {
     setBusy(true);
     setPhase('booking');
     try {
-      const bookResponse = await fetch(`${API_CONFIG.BASE_URL}/cabs/book`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(buildBookingPayload()),
-      });
-      const bookData = await bookResponse.json();
-      if (!bookResponse.ok || bookData?.success === false) {
-        throw new Error(bookData?.error?.message || bookData?.message || 'Unable to create this booking right now.');
+      let bookingId;
+      let status;
+      let totalPrice;
+      let payUserId;
+
+      if (isEmbedded) {
+        // Embedded Book wraps the same per-booking fields inside
+        // bookingRequestList[] alongside sourceBookingId/productType - the
+        // backend injects agentId into that entry itself (see
+        // CabsService.withAgentIdInEmbeddedList), so the client payload is
+        // otherwise identical to a plain booking's.
+        const bookResponse = await fetch(`${API_CONFIG.BASE_URL}/cabs/embedded-book`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            sourceBookingId,
+            productType: 'AIR',
+            bookingRequestList: [buildBookingPayload()],
+          }),
+        });
+        const bookData = await bookResponse.json();
+        if (!bookResponse.ok || bookData?.success === false) {
+          throw new Error(bookData?.error?.message || bookData?.message || 'Unable to create this booking right now.');
+        }
+        // Doc's Embedded Book response shape is different from plain
+        // Book's - just {success, message, data:{pickupBookingId}} - no
+        // totalPrice/agentId/status shown in the doc's own sample, so
+        // those are read from Booking-Details below instead, once fetched.
+        bookingId = bookData?.data?.pickupBookingId;
+      } else {
+        const bookResponse = await fetch(`${API_CONFIG.BASE_URL}/cabs/book`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(buildBookingPayload()),
+        });
+        const bookData = await bookResponse.json();
+        if (!bookResponse.ok || bookData?.success === false) {
+          throw new Error(bookData?.error?.message || bookData?.message || 'Unable to create this booking right now.');
+        }
+        bookingId = bookData?.data?.id;
+        totalPrice = bookData?.data?.totalPrice;
+        payUserId = bookData?.data?.agentId;
+        status = bookData?.data?.status;
       }
-      const bookingId = bookData?.data?.id;
-      const totalPrice = bookData?.data?.totalPrice;
-      const payUserId = bookData?.data?.agentId;
-      const status = bookData?.data?.status;
 
       // Doc's separate Payment API debits the TripJack wallet (WALLET/DEBIT)
       // - only needed while the booking is still PAYMENT_PENDING; a status
       // that's already SUCCESS (e.g. a vendor that auto-confirms) shouldn't
-      // be paid for twice.
-      if (status === 'PAYMENT_PENDING' && bookingId && totalPrice != null) {
+      // be paid for twice. For Embedded, status/amount/payUserId aren't in
+      // the Book response itself (see above), so check Booking-Details
+      // first and use whatever it reports instead.
+      let details = await fetchBookingDetails(bookingId);
+      if (isEmbedded) {
+        status = details?.order?.status;
+        totalPrice = details?.order?.amount;
+        payUserId = details?.order?.agentId;
+      }
+      // A ROUNDTRIP creates TWO bookings on TripJack's side (confirmed
+      // live: payment-summary returns both onwardBookingId and
+      // returnBookingId), and the Book response's own "totalPrice" reports
+      // only ONE leg - paying that is rejected with "Net Payable Amount is
+      // <full amount>". The payment-summary endpoint is the authoritative
+      // source for what to actually pay, correct for both one-way
+      // (returnBookingId null) and roundtrip. It's in TripJack's Postman
+      // collection but not the PDF, which is why it was missed at first.
+      // Falls back to our own computed gross, then the Book response.
+      let paymentAmount = payableTotal || totalPrice;
+      try {
+        const summaryResponse = await fetch(
+          `${API_CONFIG.BASE_URL}/cabs/payment-summary?bookingId=${encodeURIComponent(bookingId)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const summaryData = await summaryResponse.json();
+        const payable = summaryData?.data?.amountPayable;
+        if (summaryResponse.ok && payable != null) {
+          paymentAmount = Number(payable);
+        }
+      } catch (summaryError) {
+        // Non-fatal - fall back to the computed gross above.
+      }
+      if (status === 'PAYMENT_PENDING' && bookingId && paymentAmount != null) {
         const paymentResponse = await fetch(`${API_CONFIG.BASE_URL}/cabs/payment`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
-            amount: totalPrice,
+            amount: paymentAmount,
             payUserId,
             paymentMedium: 'WALLET',
             bookingId,
@@ -208,9 +276,9 @@ const CabBookingScreen = ({ route, navigation }) => {
         if (!paymentResponse.ok || paymentData?.success === false) {
           throw new Error(paymentData?.error?.message || paymentData?.message || 'Payment could not be completed for this booking.');
         }
+        details = await fetchBookingDetails(bookingId);
       }
 
-      const details = await fetchBookingDetails(bookingId);
       setBooking(details || { order: { bookingId, status } });
       setPhase('confirmed');
       syncCabBooking(token, {

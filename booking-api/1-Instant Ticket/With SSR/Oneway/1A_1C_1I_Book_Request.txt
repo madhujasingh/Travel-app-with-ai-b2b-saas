@@ -1,0 +1,84 @@
+{
+  "travellerInfo": [
+    {
+      "ssrBaggageInfos": [
+        {
+          "key": "270",
+          "code": "30KgTotalin2PieceFree"
+        }
+      ],
+      "ssrMealInfos": [
+        {
+          "key": "270",
+          "code": "CTAMSW"
+        }
+      ],
+      "ssrSeatInfos": [
+        {
+          "key": "270",
+          "code": "21D"
+        }
+      ],
+      "ti": "Mrs",
+      "pt": "ADULT",
+      "fN": "ALVAHIDA",
+      "lN": "MUHAMMEDALI",
+      "dob": "1998-05-06"
+    },
+    {
+      "ssrBaggageInfos": [
+        {
+          "key": "270",
+          "code": "30KgTotalin2PieceFree"
+        }
+      ],
+      "ssrMealInfos": [
+        {
+          "key": "270",
+          "code": "CMAYO"
+        }
+      ],
+      "ssrSeatInfos": [
+        {
+          "key": "270",
+          "code": "21E"
+        }
+      ],
+      "ti": "Master",
+      "pt": "CHILD",
+      "fN": "RAYAN",
+      "lN": "AHMED",
+      "dob": "2020-09-09"
+    },
+    {
+      "ti": "Master",
+      "pt": "INFANT",
+      "fN": "ISHAN",
+      "lN": "ADAM",
+      "dob": "2024-06-13"
+    }
+  ],
+  "bookingId": "TJ1128124158546",
+  "deliveryInfo": {
+    "emails": [
+      "apitest@tripjack.com"
+    ],
+    "contacts": [
+      "+918353243430"
+    ]
+  },
+  "paymentInfos": [
+    {
+      "amount": 31003.47
+    }
+  ],
+  "contactInfo": {
+    "ecn": "EmergencyContactDetails",
+    "emails": [
+      "apitest@tripjack.com"
+    ],
+    "contacts": [
+      "+918353243430"
+    ]
+  }
+}

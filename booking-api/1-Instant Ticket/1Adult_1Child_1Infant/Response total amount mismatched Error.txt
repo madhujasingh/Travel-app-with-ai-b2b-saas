@@ -1,0 +1,13 @@
+{
+    "status": {
+        "success": false,
+        "httpStatus": 400
+    },
+    "errors": [
+        {
+            "errCode": "1015",
+            "message": "Total amount passed in payment doesn't match with total order Amount",
+            "details": "Total amount passed in payment doesn't match with total order Amount"
+        }
+    ]
+}

@@ -7,12 +7,9 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 
-// The doc's own diagrams disagree on exactly where the fare total (Ifc.TF)
-// sits relative to "pi" (see tripsafe-api/13-open-questions-to-verify.txt,
-// item 4) - tries every shape actually seen across the doc's samples rather
-// than trusting one, and falls back to null (UI shows "View price on next
-// step") instead of crashing if none match. Confirm the real shape once a
-// live Search response comes back and simplify this to one path.
+// REVIEW responses carry the authoritative total directly at tfd.ifc.TF.
+// (The doc's diagrams disagree on where it sits, so the other shapes are
+// kept as fallbacks - see tripsafe-api/13-open-questions-to-verify.txt.)
 const extractFare = (planOrProduct) => {
   const candidates = [
     planOrProduct?.Pfd?.Ifc,
@@ -27,14 +24,66 @@ const extractFare = (planOrProduct) => {
   return null;
 };
 
-const extractPlanFare = (plan) => {
+// Inclusive day count between two YYYY-MM-DD strings.
+const inclusiveTripDays = (sd, ed) => {
+  if (!sd || !ed) return null;
+  const diff = Math.round(
+    (new Date(`${ed}T00:00:00`) - new Date(`${sd}T00:00:00`)) / 86400000
+  );
+  return Number.isFinite(diff) && diff >= 0 ? diff + 1 : null;
+};
+
+// SEARCH responses carry no tfd at all - every plan prices through
+// pfd.ppd.ppdf, a day-by-day table keyed "1".."N" of per-age fares.
+// Read at the key matching the coverage duration it reproduces Review's
+// TF exactly (verified live 2026-09-08 against Standalone 11d and 90d,
+// Student cd=365 and AMT adr=60 - all four matched to the rupee).
+//
+// Which key that is depends on the journey type: AMT prices by its annual
+// trip-duration cap (adr), Student by course duration (cd), and Standalone
+// by the trip's own inclusive length. Note the search echoes cd/adr back as
+// 0 rather than omitting them, hence the > 0 guards.
+//
+// Do NOT use "ptf" for this - it is not the bookable total and overstated
+// one plan by 5.6x.
+const coverageDayKey = (searchQuery, startDate, endDate) => {
+  const adr = Number(searchQuery?.adr) || 0;
+  if (adr > 0) return String(adr);
+  const cd = Number(searchQuery?.cd) || 0;
+  if (cd > 0) return String(cd);
+  const days = inclusiveTripDays(startDate, searchQuery?.ed || endDate);
+  return days ? String(days) : null;
+};
+
+const extractSearchFare = (product, dayKey, ages) => {
+  const entries = product?.pfd?.ppd?.ppdf?.[dayKey];
+  if (!Array.isArray(entries) || entries.length === 0 || !ages?.length) return null;
+
+  let total = 0;
+  for (const age of ages) {
+    // Exact age band where TripJack priced one, else the first entry rather
+    // than silently dropping a traveller from the total.
+    const match = entries.find((e) => Number(e?.age) === Number(age)) || entries[0];
+    const tf = match?.ifc?.TF ?? match?.ifc?.tf;
+    if (tf == null) return null;
+    total += Number(tf);
+  }
+  return total > 0 ? total : null;
+};
+
+const extractPlanFare = (plan, dayKey, ages) => {
   const product = plan?.pi?.[0];
-  return extractFare(plan) ?? extractFare(product);
+  return (
+    extractFare(plan) ??
+    extractFare(product) ??
+    extractSearchFare(product, dayKey, ages)
+  );
 };
 
 const TripSafeResultsScreen = ({ route, navigation }) => {
   const { token } = useAuth();
-  const { plans, journeyType, startDate, endDate, travellerAges, regionLabel } = route.params || {};
+  const { plans, journeyType, startDate, endDate, travellerAges, regionLabel, searchQuery } = route.params || {};
+  const dayKey = coverageDayKey(searchQuery, startDate, endDate);
   const [reviewingPlid, setReviewingPlid] = useState(null);
 
   const selectPlan = async (plan) => {
@@ -65,7 +114,9 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
       // that ever changes, but the un-wrapped shape is what's real today.
       const reviewedPlan = data?.isr?.iinfo?.pli?.[0] ?? data?.iinfo?.pli?.[0] ?? plan;
       const reviewedProduct = reviewedPlan?.pi?.[0] || product;
-      const fare = extractPlanFare(reviewedPlan) ?? extractPlanFare(plan);
+      const fare =
+        extractPlanFare(reviewedPlan, dayKey, travellerAges) ??
+        extractPlanFare(plan, dayKey, travellerAges);
       navigation.navigate('TripSafeBooking', {
         bookingId: data?.bid,
         plan: reviewedPlan,
@@ -88,7 +139,7 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
     const planName = product.pi || product.pn || 'Travel Insurance Plan';
     const provider = product.lp || product.Ip || product.ip || '';
     const benefits = (product.pbft || []).slice(0, 3);
-    const fare = extractPlanFare(plan);
+    const fare = extractPlanFare(plan, dayKey, travellerAges);
     const busy = reviewingPlid === plan.plid;
 
     return (

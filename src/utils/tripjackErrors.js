@@ -39,11 +39,34 @@ export const TRIPJACK_ERROR_MESSAGES = {
   // a matched onward+return pair - picking that fare for one leg while the
   // other leg uses an unrelated fare (e.g. Corporate) is rejected outright.
   1080: 'This fare needs to be booked as a matching pair - a "Special Return" fare on one leg requires the same fare family on the other leg. Try picking a different fare for one of your legs so both match.',
+  // TripSafe Embedded (flight-linked travel insurance) references this
+  // flight's own bookingId from a separate TripJack account/key context
+  // (Flights runs on the production key, TripSafe on a test/UAT-only key -
+  // see tripsafe-api docs) - confirmed live that TripJack's test-key system
+  // never recognizes a production-key flight's bookingId at all, regardless
+  // of how fresh it is, so this isn't something retrying fixes.
+  2503: 'Travel insurance isn\'t available for this flight yet - you can still book your flight without it.',
+  // Agency-side TripJack wallet is out of funds - NOT the customer's own
+  // payment failing. Worded so a customer isn't told their card/payment was
+  // declined when the real fix is topping up our TripJack account.
+  2001: 'We couldn\'t complete this booking right now due to a temporary issue on our side. Nothing has been charged - please try again shortly or contact support.',
 };
 
 // Codes where the underlying fare/hold/booking is dead - there's nothing to
 // retry on this screen, the user needs to go back and search again.
 export const SESSION_DEAD_ERROR_CODES = new Set([1000, 1057, 1059, 1071]);
+
+// A handful of TripJack errors (e.g. expired priceId/bookingId "keys" on a
+// stale search result - see fare-rule-api.txt's documented Case 1) come
+// back with no errCode at all, just raw text - matched by content instead
+// of by code. Each entry's `test` runs against the extracted raw message.
+const TEXT_MATCHED_ERRORS = [
+  {
+    test: (msg) => /already expired.*valid keys|keys.*already expired/i.test(msg),
+    message: 'This fare has expired. Please search again to get the latest price.',
+    sessionDead: true,
+  },
+];
 
 // TripJack errors sometimes come back as a direct passthrough
 // ({status, errors:[{errCode, message}]}) and sometimes wrapped by our own
@@ -62,10 +85,11 @@ export const parseTripJackError = (data, fallback) => {
 
   const code = errCode ? Number(errCode) : null;
   const friendly = code && TRIPJACK_ERROR_MESSAGES[code];
+  const textMatch = !friendly && typeof message === 'string' ? TEXT_MATCHED_ERRORS.find((entry) => entry.test(message)) : null;
 
   return {
     code,
-    message: friendly || message || fallback,
-    sessionDead: code ? SESSION_DEAD_ERROR_CODES.has(code) : false,
+    message: friendly || textMatch?.message || message || fallback,
+    sessionDead: (code ? SESSION_DEAD_ERROR_CODES.has(code) : false) || Boolean(textMatch?.sessionDead),
   };
 };

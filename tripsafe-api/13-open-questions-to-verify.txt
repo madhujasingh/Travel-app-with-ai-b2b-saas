@@ -51,13 +51,31 @@ internal inconsistencies already spotted):
      "ic" is correct everywhere and "ie" was a one-off doc typo/OCR
      error - confirm live, don't assume the field name differs by
      endpoint without proof.
-  7. Raise-Amendments request uses "type": "CANCELLATION"; the
-     Cancellation (confirm) request uses "type": "INSURANCE_CANCELLATION"
-     - two different constants for what might be conceptually "the same
-     amendment type" at two steps of one flow. Confirmed as written
-     (not a transcription error on my part - both page renderings were
-     unambiguous), but still worth double-checking live since sending
-     the wrong constant to the wrong endpoint would be an easy mistake.
+  7. [RESOLVED live, 2026-09-07 - THE SUSPICION WAS RIGHT, AND THIS WAS
+      THE SINGLE MOST EXPENSIVE DOC ERROR] The PDF says Raise-Amendments
+      uses "type": "CANCELLATION" while Confirm-Cancellation uses
+      "type": "INSURANCE_CANCELLATION". The flagged worry - "sending the
+      wrong constant to the wrong endpoint would be an easy mistake" -
+      was correct, but the mistake is in the PDF itself.
+      **"INSURANCE_CANCELLATION" is wrong.** Using it makes every confirm
+      return amendmentItems[0].status "REJECTED" with no refund, while
+      still showing a misleading nested per-traveller "CANCELLED". Using
+      "CANCELLATION" on BOTH steps - the value TripJack's own Postman
+      collection uses - makes the identical request return SUCCESS and
+      refunds the wallet. Verified by cancelling a real booking and
+      watching the balance rise.
+      SECOND, UNDOCUMENTED REQUIREMENT found at the same time: travellers
+      must be cancelled ONE AT A TIME. Passing all ids of a
+      multi-traveller booking in one travellerKeys array returns REJECTED;
+      the same request repeated per-traveller returns SUCCESS each time
+      (recovered a 4-traveller Rs 25,000 booking this way after the
+      all-at-once call had failed).
+      Lesson: an earlier investigation concluded from three reproductions
+      that cancellation was "definitively broken on TripJack's side". It
+      was not - it was two client-side mistakes, one of which came
+      straight from following the PDF. Reproducing a failure many times
+      proves it is consistent, NOT that its cause has been identified.
+
   8. "bid" means TWO DIFFERENT THINGS in this document depending on
      section: (a) everywhere in Search/Review/Booking-Details =
      the INSURANCE booking id (Review response's own bid field), (b) in
@@ -137,14 +155,19 @@ internal inconsistencies already spotted):
       to 180 days, Student allows up to 735 days. Treat the p.89 matrix
       as authoritative per journey type; the p.87 rule is likely
       outdated, mistitled, or AMT-specific despite its generic heading.
-  17. UAT Test Case TC04 (p.91) pairs journey type "Embedded" with a
-      Popular Region payload ("rkey":"MDE") - but nothing in the entire
-      Embedded API Integration section (Part 4, Section A/B) describes
-      a destination-region field in the embedded search/review/book
-      request; embedded coverage is tied to the flight itinerary
-      instead. Possibly a copy/paste artifact in this test-case table -
-      confirm live whether embedded search even accepts an "isc.iri"
-      block.
+  17. [RESOLVED live, 2026-09-06 - the suspicion was CORRECT] UAT Test
+      Case TC04 pairs journey type "Embedded" with a Popular Region
+      payload ({"rkey":"MDE","rt":"POPULARREGION"}), which looked like a
+      copy/paste artifact. Confirmed by direct testing: Embedded search
+      ONLY accepts rt:"COUNTRY". Controlled comparison on one identical
+      flight bid - COUNTRY "IN"+"AE" with 3 pax (ages 35/40/60) ->
+      SUCCESS ("Classic Super"); COUNTRY "AE" alone -> SUCCESS;
+      POPULARREGION "MDE" -> errCode 8067 no results; POPULARREGION
+      "ASI" -> errCode 8067 no results. So TC04 is executable, but its
+      documented Destination payload format must be substituted with a
+      COUNTRY-type entry (e.g. {"rkey":"AE","rt":"COUNTRY"} for a
+      Middle East flight). Worth raising with TripJack at certification.
+
   18. Support & Incident Management table (p.88) lost its actual
       priority-tier labels during PDF extraction - all four rows show
       a bare "P" where a label like P0/P1/P2/P3 should be. Severity

@@ -1,0 +1,29 @@
+{
+    "bookingId": "TJS105700027964",
+   
+	"travellerInfo": [{
+			"ti": "Mr",
+			"pt": "ADULT",
+			"fN": "AB",
+			"lN": "GUPTA3",
+			"dob": "2000-09-13",
+            "pNat":"IN",
+            "pid":"2020-01-01",
+      "pNum":"87UYITB",
+      "eD":"2030-09-08"
+		}
+	],
+   "gstInfo": {
+		"gstNumber": "22AAAAA0000A1Z5",
+"registeredName": "test company",
+"address": "test address",
+"mobile": "1223334444",
+"email": "testgst@test.co.in"
+  },
+	
+	"deliveryInfo": {
+		"emails": ["abhi.gupta@technogramsolutions.com"],
+		"contacts": ["+919223334444"]
+	}
+	
+}

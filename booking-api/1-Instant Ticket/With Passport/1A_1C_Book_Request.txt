@@ -1,0 +1,38 @@
+{
+  "bookingId": "TJS109200003500",
+  "paymentInfos": [
+    {
+      "amount": 202360.80
+    }
+  ],
+  "travellerInfo": [
+    {
+      "ti": "Mr",
+      "fN": "Test",
+      "lN": "Parent",
+      "pt": "ADULT",
+      "dob":"1995-11-12",
+      "pNum":"987654TR",
+      "eD":"2023-11-12",
+      "pid":"2016-11-12"
+    },
+     {
+      "ti": "Master",
+      "fN": "Test",
+      "lN": "FightChild",
+      "pt": "CHILD",
+      "dob":"2010-11-12",
+      "pNum":"983454TR",
+      "eD":"2025-11-12",
+      "pid":"2018-11-12"
+    }
+  ],
+  "deliveryInfo": {
+    "emails": [
+      "prabhu@technogramsolutions.com"
+    ],
+    "contacts": [
+      "9538500324"
+    ]
+  }
+} 

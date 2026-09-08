@@ -1,6 +1,7 @@
 package com.itinera.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.itinera.config.TripJackConfig;
 import org.springframework.http.HttpStatus;
@@ -60,12 +61,28 @@ public class CabsService {
 
     // Books a cab tied to an existing successful flight booking
     // (sourceBookingId) in a single request - same booking endpoint
-    // semantics, different path. Not yet used by any frontend flow; if it
-    // is, this needs the same agentId fix as book() above, but nested inside
-    // each bookingRequestList[] item instead of at the top level (see the
-    // doc's Embedded API sample) - not done here since nothing exercises it.
+    // semantics, different path.
     public JsonNode embeddedBook(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v2/embedded/booking", payload);
+        return tripJackClient.postCabs("/cabs/v2/embedded/booking", withAgentIdInEmbeddedList(payload));
+    }
+
+    // Embedded Book nests each individual booking request inside
+    // bookingRequestList[] (unlike plain Book, which is a single flat
+    // object) - agentId goes on each entry there, per the doc's own sample
+    // payload, not at the top level like plain book()'s withAgentId() above.
+    private JsonNode withAgentIdInEmbeddedList(JsonNode payload) {
+        if (!StringUtils.hasText(tripJackConfig.getCabsAgentId())) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "TripJack Cabs agent id is not configured");
+        }
+        if (payload instanceof ObjectNode objectNode && objectNode.get("bookingRequestList") instanceof ArrayNode list) {
+            long agentId = Long.parseLong(tripJackConfig.getCabsAgentId());
+            list.forEach(node -> {
+                if (node instanceof ObjectNode entry) {
+                    entry.put("agentId", agentId);
+                }
+            });
+        }
+        return payload;
     }
 
     // bookingIds is a query param per the doc
@@ -79,6 +96,31 @@ public class CabsService {
 
     public JsonNode payment(JsonNode payload) {
         return tripJackClient.postCabs("/cabs/v1/payment/create", payload);
+    }
+
+    // Authoritative "how much do I actually pay" for a booking. Confirmed
+    // live: a ROUNDTRIP creates TWO bookings (the response carries both
+    // onwardBookingId and returnBookingId) and the Book response's own
+    // "totalPrice" only reports ONE leg - paying that is rejected with
+    // "Net Payable Amount is <full>". This endpoint returns the correct
+    // combined amountPayable for both one-way (returnBookingId null) and
+    // roundtrip. Present in TripJack's own Postman collection but absent
+    // from the PDF, which is why it was missed initially.
+    // Returns the payment modes available for a booking, each carrying the
+    // wallet's own userId and current balance. Two uses: (1) the wallet
+    // userId is the authoritative value for Create Payment's "payUserId"
+    // (the doc's own comment says "userId from Payment Modes API"), and
+    // (2) it surfaces the Cabs wallet balance, which no other endpoint in
+    // the Cabs API exposes. Also absent from the PDF, found in TripJack's
+    // Postman collection.
+    public JsonNode paymentModes(JsonNode payload) {
+        return tripJackClient.postCabs("/cabs/v1/payment/payment-modes", payload);
+    }
+
+    public JsonNode paymentSummary(String bookingId) {
+        return tripJackClient.getCabs(uriBuilder -> uriBuilder
+                .path("/cabs/v1/payment/summary/{bookingId}")
+                .build(bookingId));
     }
 
     // GET despite "charges" in the name - previews the refund/charge amounts

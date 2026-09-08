@@ -1,0 +1,1 @@
+{"status":{"success":false,"httpStatus":400},"errors":[{"errCode":"1071","message":"Fare is no longer available for this booking","details":"Fare is no longer available for this booking"}]}

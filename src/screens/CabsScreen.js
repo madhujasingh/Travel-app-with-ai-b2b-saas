@@ -42,15 +42,22 @@ const formatDisplayDate = (isoDate) => {
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
-const CabsScreen = ({ navigation }) => {
+const CabsScreen = ({ route, navigation }) => {
   const { token } = useAuth();
+  // Set when arriving from FlightBookingScreen's "Add an Airport Transfer"
+  // prompt after a successful flight booking (see cabs-api/cab-api-doc.txt's
+  // Embedded API) - carried through to CabResults/CabBooking unchanged, and
+  // the pickup date/time default to the flight's own arrival, matching the
+  // doc's own Book Scenario ("Start date as same as the Flight arrival
+  // date") while staying fully editable like any other search.
+  const { sourceBookingId, prefillPickupDate, prefillPickupTime } = route?.params || {};
 
   const [journeyType, setJourneyType] = useState('airport_transfer');
   const [tripType, setTripType] = useState('oneway');
   const [origin, setOrigin] = useState(null);
   const [destination, setDestination] = useState(null);
-  const [pickupDate, setPickupDate] = useState('');
-  const [pickupTime, setPickupTime] = useState('');
+  const [pickupDate, setPickupDate] = useState(prefillPickupDate || '');
+  const [pickupTime, setPickupTime] = useState(prefillPickupTime || '');
   const [returnDate, setReturnDate] = useState('');
   const [returnTime, setReturnTime] = useState('');
   const [passengers, setPassengers] = useState('1');
@@ -171,6 +178,12 @@ const CabsScreen = ({ navigation }) => {
       journeyType,
       tripType,
       passengers: passengersCount,
+      // The doc's sample search sends this alongside "passengers". Tested
+      // live 2026-09-08: it does NOT actually narrow the results (a
+      // 2-passenger search still returns 10-seat Minibuses either way), so
+      // capacity filtering is ours to do at display time if we ever want it.
+      // Sent anyway to match the documented request shape.
+      quoteFilter: { paxCount: passengersCount },
     };
 
     try {
@@ -196,6 +209,7 @@ const CabsScreen = ({ navigation }) => {
         journeyType,
         tripType,
         passengers: passengersCount,
+        sourceBookingId,
       });
     } catch (error) {
       Alert.alert('Cab Search', error.message || 'Unable to fetch cab quotes right now.');
@@ -211,7 +225,7 @@ const CabsScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cabs</Text>
+        <Text style={styles.headerTitle}>{sourceBookingId ? 'Add Airport Transfer' : 'Cabs'}</Text>
         <View style={{ width: 30 }} />
       </View>
 

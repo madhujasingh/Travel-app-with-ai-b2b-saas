@@ -1,0 +1,7 @@
+{
+    "bookingId": "TJS119300003501",
+    "status": {
+        "success": true,
+        "httpStatus": 200
+    }
+}

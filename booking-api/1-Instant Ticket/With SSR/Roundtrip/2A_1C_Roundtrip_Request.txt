@@ -1,0 +1,97 @@
+{
+  "travellerInfo": [
+    {
+      "ssrMealInfos": [
+        {
+          "key": "55",
+          "code": "PPOH"
+        },
+        {
+          "key": "707",
+          "code": "PTSW"
+        }
+      ],
+      "ssrSeatInfos": [
+        {
+          "key": "55",
+          "code": "31F"
+        },
+        {
+          "key": "707",
+          "code": "36E"
+        }
+      ],
+      "ti": "Ms",
+      "pt": "ADULT",
+      "fN": "Anita",
+      "lN": "Tiwari"
+    },
+    {
+      "ssrMealInfos": [
+        {
+          "key": "55",
+          "code": "PPOH"
+        },
+        {
+          "key": "707",
+          "code": "PTSW"
+        }
+      ],
+      "ssrSeatInfos": [
+        {
+          "key": "55",
+          "code": "31E"
+        },
+        {
+          "key": "707",
+          "code": "36D"
+        }
+      ],
+      "ti": "Mrs",
+      "pt": "ADULT",
+      "fN": "Apurna",
+      "lN": "Tiwari"
+    },
+    {
+      "ssrMealInfos": [
+        {
+          "key": "55",
+          "code": "PPOP"
+        },
+        {
+          "key": "707",
+          "code": "PTSW"
+        }
+      ],
+      "ssrSeatInfos": [
+        {
+          "key": "55",
+          "code": "31D"
+        },
+        {
+          "key": "707",
+          "code": "36F"
+        }
+      ],
+      "ti": "Ms",
+      "pt": "CHILD",
+      "fN": "Shivanshi",
+      "lN": "Kr",
+      "dob": "2019-03-11"
+    }
+  ],
+  "bookingId": "TJ1076126022534",
+  "deliveryInfo": {
+    "emails": [
+      "tripjack.apitest@tripjack.com"
+    ],
+    "contacts": [
+      "916201890498"
+    ]
+  },
+  "paymentInfos": [
+    {
+      "amount": 31711
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+    "status": {
+        "success": false,
+        "httpStatus": 400
+    },
+    "errors": [
+        {
+            "errCode": "1090",
+            "message": "travellerInfo[0].passportNationality : Please, enter passport nationality."
+        }
+    ]
+}

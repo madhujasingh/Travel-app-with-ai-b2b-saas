@@ -1,0 +1,6 @@
+{
+    "status": {
+        "success": true,
+        "httpStatus": 200
+    }
+}

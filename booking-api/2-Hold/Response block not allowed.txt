@@ -1,0 +1,13 @@
+{
+    "status": {
+        "success": false,
+        "httpStatus": 400
+    },
+    "errors": [
+        {
+            "errCode": "1087",
+            "message": "Blocking is not allowed for this Booking",
+            "details": "Blocking is not allowed for this Booking"
+        }
+    ]
+}

@@ -1,0 +1,43 @@
+{
+  "bookingId": "TJS119300003501",
+  "travellerInfo": [
+    {
+      "ti": "Mr",
+      "fN": "Test",
+      "lN": "ParentAdult",
+      "pt": "ADULT",
+      "dob":"1995-11-12",
+      "pNum":"987654TR",
+      "eD":"2023-11-12",
+      "pid":"2016-11-12"
+    },
+     {
+      "ti": "Master",
+      "fN": "Test",
+      "lN": "FightChildA",
+      "pt": "CHILD",
+      "dob":"2010-11-12",
+      "pNum":"983454TR",
+      "eD":"2025-11-12",
+      "pid":"2018-11-12"
+    },
+    {
+      "ti": "Ms",
+      "fN": "Test",
+      "lN": "FightInfant",
+      "pt": "INFANT",
+      "dob":"2018-11-12",
+      "pNum":"983451TA",
+      "eD":"2025-11-12",
+      "pid":"2018-11-12"
+    }
+  ],
+  "deliveryInfo": {
+    "emails": [
+      "cxxssd@rrty.com"
+    ],
+    "contacts": [
+      "+9195385112224"
+    ]
+  }
+} 

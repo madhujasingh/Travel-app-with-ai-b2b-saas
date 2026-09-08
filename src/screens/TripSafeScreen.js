@@ -45,11 +45,16 @@ const POPULAR_REGIONS = [
 // own sample comment lists 3 more values - 30/60/90/360 - but flags those
 // as possibly belonging to a different channel type reusing the same "cd"
 // field; only these 4 are confirmed for Student).
+//
+// "3 Years" (cd 1095) is deliberately NOT offered: TripJack rejects it on
+// every attempt, with an error that lists 1095 among the valid values while
+// refusing it ("...must be less than or equal to 180 or 365 or 730 or 1095
+// days"). 180/365/730 all work. Re-add the option once TripJack confirms a
+// fix - raised with them in certification-logs/TRIPJACK-SUPPORT-EMAIL.txt.
 const STUDENT_DURATIONS = [
   { cd: '180', label: '6 Months' },
   { cd: '365', label: '1 Year' },
   { cd: '730', label: '2 Years' },
-  { cd: '1095', label: '3 Years' },
 ];
 
 // tripsafe-api/09-amt-api-integration.txt - AMT's region choice is
@@ -184,6 +189,23 @@ const TripSafeScreen = ({ navigation }) => {
       return;
     }
 
+    // Standalone trips cap at 180 days INCLUSIVE. TripJack's error says the
+    // ed-sd difference "must be less than or equal to 180 days", but sd+180
+    // is rejected and sd+179 accepted (verified live 2026-09-08). Caught here
+    // so a long trip reads as a clear limit rather than a raw API error.
+    if (journeyType === 'STANDALONE' && startDate && endDate) {
+      const nights = Math.round(
+        (new Date(`${endDate}T00:00:00`) - new Date(`${startDate}T00:00:00`)) / 86400000
+      );
+      if (nights >= 180) {
+        Alert.alert(
+          'Trip too long',
+          'Travel insurance covers trips of up to 180 days. Please shorten the dates, or choose Annual Multi-Trip for longer cover.'
+        );
+        return;
+      }
+    }
+
     let isq;
     let regionLabel;
     if (journeyType === 'STANDALONE') {
@@ -259,6 +281,10 @@ const TripSafeScreen = ({ navigation }) => {
         endDate: data?.isq?.ed || endDate,
         travellerAges: parsedAges,
         regionLabel,
+        // Raw isq back from TripJack - carries the computed ed plus the cd/adr
+        // that decide which ppdf day-key prices the plan (see
+        // TripSafeResultsScreen.coverageDayKey).
+        searchQuery: data?.isq,
       });
     } catch (error) {
       Alert.alert('Travel Insurance Search', error.message || 'Unable to fetch insurance plans right now.');

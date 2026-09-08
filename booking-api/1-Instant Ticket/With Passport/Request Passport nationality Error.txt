@@ -1,0 +1,37 @@
+
+
+
+{
+    "bookingId": "TJ119390020362",
+    "paymentInfos": [{
+			"amount": 14143.00
+			}
+	],
+	"travellerInfo": [{
+			"ti": "Mr",
+			"pt": "ADULT",
+			"fN": "AB",
+			"lN": "GUPTA3",
+			"dob": "2000-09-13",
+            "pNum":"987654TR",
+      "eD":"2023-11-12",
+      "pid":"2016-11-12"
+		}
+	],
+   "gstInfo": {
+		"gstNumber": "22AAAAA0000A1Z5",
+"registeredName": "test agent",
+"address": "test address",
+"mobile": "1223334444",
+"email": "testgst@testgst.com"
+  },
+	
+	"deliveryInfo": {
+		"emails": ["abhishek1.gupta@technogramsolutions.com"],
+		"contacts": ["+911223334444"]
+	}
+	
+}
+
+
+

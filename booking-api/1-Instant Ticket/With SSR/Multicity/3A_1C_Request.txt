@@ -1,0 +1,86 @@
+{
+  "travellerInfo": [
+    {
+      "ssrSeatInfos": [
+        {
+          "key": "407",
+          "code": "29B"
+        },
+        {
+          "key": "408",
+          "code": "31B"
+        }
+      ],
+      "ti": "Mrs",
+      "pt": "ADULT",
+      "fN": "Uma",
+      "lN": "Gunashekar",
+      "dob": "1985-07-02"
+    },
+    {
+      "ssrSeatInfos": [
+        {
+          "key": "407",
+          "code": "30B"
+        },
+        {
+          "key": "408",
+          "code": "30B"
+        }
+      ],
+      "ti": "Mrs",
+      "pt": "ADULT",
+      "fN": "Akshitha",
+      "lN": "Anthony",
+      "dob": "1992-04-01"
+    },
+    {
+      "ssrSeatInfos": [
+        {
+          "key": "407",
+          "code": "31B"
+        },
+        {
+          "key": "408",
+          "code": "31E"
+        }
+      ],
+      "ti": "Mr",
+      "pt": "ADULT",
+      "fN": "Vincent",
+      "lN": "Denny",
+      "dob": "1990-12-31"
+    },
+    {
+      "ssrSeatInfos": [
+        {
+          "key": "407",
+          "code": "30A"
+        },
+        {
+          "key": "408",
+          "code": "30A"
+        }
+      ],
+      "ti": "Master",
+      "pt": "CHILD",
+      "fN": "AidenChristiano",
+      "lN": "Vincent",
+      "dob": "2022-12-07"
+    }
+  ],
+  "bookingId": "TJ1075124535607",
+  "deliveryInfo": {
+    "emails": [
+      "tripjack.apitest@tripjack.com"
+    ],
+    "contacts": [
+      "+919980200583"
+    ]
+  },
+  "paymentInfos": [
+    {
+      "amount": 20988
+    }
+  ]
+}

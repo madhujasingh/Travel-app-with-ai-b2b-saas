@@ -1,0 +1,56 @@
+{
+  "bookingId": "TJS109400003498",
+  "paymentInfos": [
+    {
+      "amount": 15593.70
+    }
+  ],
+  "travellerInfo": [
+    {
+      "ti": "Mr",
+      "fN": "Test",
+      "lN": "AdultA",
+      "pt": "ADULT"
+    },
+    {
+      "ti": "Mr",
+      "fN": "Test",
+      "lN": "AdultB",
+      "pt": "ADULT"
+    },
+    {
+      "ti": "Master",
+      "fN": "Test",
+      "lN": "ChildA",
+      "pt": "CHILD"
+    },
+     {
+      "ti": "Ms",
+      "fN": "Test",
+      "lN": "ChildB",
+      "pt": "CHILD"
+    },
+    {
+      "ti": "Ms",
+      "fN": "Test",
+      "lN": "InfantA",
+      "pt": "INFANT",
+      "dob":"2019-08-09"
+    }
+  ],
+  "gstInfo": {
+    "gstNumber": "07AAGCT7126A1ZA",
+    "email": "xxxxx@xxxxxx.com ",
+    "registeredName": "TGS Pvt Ltd",
+    "mobile": "+919538511321",
+    "address": "gurugram"
+  },
+  "deliveryInfo": {
+    "emails": [
+      "xxxx@yyyyyy.com"
+    ],
+    "contacts": [
+      "+919538511321"
+    ]
+  }
+} 

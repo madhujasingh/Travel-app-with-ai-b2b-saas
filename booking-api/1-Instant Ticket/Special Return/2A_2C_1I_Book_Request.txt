@@ -1,0 +1,49 @@
+{
+  "bookingId": "TJS109500003499",
+  "paymentInfos": [
+    {
+      "amount": 77880.70
+    }
+  ],
+  "travellerInfo": [
+    {
+      "ti": "Mr",
+      "fN": "Test",
+      "lN": "AdultC",
+      "pt": "ADULT"
+    },
+    {
+      "ti": "Mr",
+      "fN": "Test",
+      "lN": "AdultD",
+      "pt": "ADULT"
+    },
+    {
+      "ti": "Ms",
+      "fN": "Test",
+      "lN": "ChildE",
+      "pt": "CHILD"
+    },
+     {
+      "ti": "Master",
+      "fN": "Test",
+      "lN": "ChildF",
+      "pt": "CHILD"
+    },
+    {
+      "ti": "Master",
+      "fN": "Test",
+      "lN": "InfantH",
+      "pt": "INFANT",
+      "dob":"2019-08-09"
+    }
+  ],
+  "deliveryInfo": {
+    "emails": [
+      "xxxxx@yyyyy.com"
+    ],
+    "contacts": [
+      "+919511222224"
+    ]
+  }
+} 

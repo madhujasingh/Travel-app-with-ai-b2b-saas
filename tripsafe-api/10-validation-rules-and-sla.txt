@@ -9,6 +9,10 @@ Please ensure the following validations are in place:
     not permitted.
   - Restricted Countries: Searches involving the following blacklisted
     countries are disallowed: Myanmar(MM), Iran(IR), North Korea(NK).
+    [CORRECTED, 2026-09-06: "NK" is not a real ISO 3166-1 code - the
+    real code, confirmed via the actual "Country Mapping WW" catalog
+    (see 14-country-mapping-ww.txt), is "KP". Use KP, not NK, if this
+    blacklist is ever enforced in code.]
   - Date Range Limit: Coverage duration must not exceed 90 days.
   - Traveller Limit: A maximum of 10 travellers is allowed per search
     request.

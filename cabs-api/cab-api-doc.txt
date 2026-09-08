@@ -1,0 +1,1381 @@
+
+2. Service Definition
+
+Below are the available service URL & definition:-
+UAT Environment - Domain: https://apitest-cabs.tripjack.com
+Production Environment -  Domain: https://tripjack.com   
+  APIs -
+API Name
+Method
+API EndPoint
+Purpose
+Quotes API
+POST
+/cabs/v2/quotes
+Fetch available cabs plans
+Booking API
+POST
+/cabs/v2/booking
+Create Booking API
+Booking Details API
+GET
+/cabs/v1/booking/details
+Get Booking Details API
+Raise Amendment API
+GET
+/cabs/v1/amendment
+Get Amendment Charges
+Cancellation API
+POST
+/cabs/v1/amendment
+Amendment API
+
+
+
+Postman Documentation :
+  Cabs APIs Postman Collection - Try it out
+
+
+
+
+
+
+
+
+
+
+
+3. API Documentation - 
+
+Location Search APIs - 
+
+Method - POST
+API -  /cabs/v1/google-places
+Request Body (LocationSearchRequest)
+origin (input, required): 
+
+          input: "igi"
+
+
+
+Response Body (LocationSearchResponse)
+success: boolean
+message: string (e.g., "Successfully fetched Google Places") 
+data: 
+places : [{displayLabel, id, name, order, value }] 
+
+Sample Response - 
+
+
+{ "success": true,    
+"message": "Successfully fetched Google Places",    
+"data": {        
+"places": [{                
+"id": "ChIJ30iik5kbDTkRZ_0X9stU-Sg",                
+"displayLabel": "IGI Airport Terminal 3 Metro Station, Delhi",                
+"name": "IGI Airport Terminal 3 Metro Station, Delhi",               
+ "value": "ChIJ30iik5kbDTkRZ_0X9stU-Sg",               
+ "order": 1 }]
+}}
+
+
+
+
+
+
+
+
+Get Lat Long APIs - 
+
+Method - POST
+API -  /cabs/v1/get-lat-long
+Request Body (LatLongSearchRequest)
+origin (placeId, required): 
+
+placeId: "ChIJ30iik5kbDTkRZ_0X9stU-Sg"
+
+
+
+Response Body (LatLongSearchResponse) - 
+success: boolean
+message: string (e.g., "Successfully fetched Google Places") 
+data: 
+places : [{location:{lat,lng}, address :{city,country,postalCode}}] 
+
+Sample Response -
+
+
+{ "success": true,    
+"message": "Successfully fetched Google Places",    
+"data": {        
+   "location": {             
+     "lat": 28.5550838,             
+     "lng": 77.0844015         
+   },        
+   "address": {            
+     "city": "New Delhi",             
+     "country": "India",             
+    "postalCode": "110037" } }
+}}
+
+
+
+
+
+
+
+
+3.1 Quotes API - AIRPORT TRANSFERS
+
+Method - POST
+API -  /cabs/v2/quotes
+Request Body (QuoteRequest)
+origin (LocationDto, required): { displayAddress, lat, long, type, address: { … } }
+destination (LocationDto, required): same shape as origin.
+tripType (required): oneway or return (TripType enum).
+journeyType (required): one of airport_transfer | outstations | local | rental | (JourneyType enum).
+pickupDate (required): string yyyy-MM-dd HH:mm; must be ≥2 hours in future.
+returnDate (optional): yyyy-MM-dd HH:mm; required/validated only when tripType=return and must be ≥30 minutes after pickup.
+durationInMinutes (optional)
+distanceInKm (optional)
+passengers (required): int 1–10.
+quoteFilter (internal use, ignored on serialization).
+
+
+Request Payload - 
+{
+  "pickupDate": "2026-01-23 09:00",
+  "destination": {
+    "type": "location",
+    "displayAddress": "CP, New Delhi, Delhi, India",
+    "lat": "28.6304203",
+    "long": "77.21772159999999",
+    "address": {
+      "subLocality": "Connaught Place",
+      "city": "New Delhi",
+      "country": "India",
+      "postalCode": "110001"
+    }
+  },
+  "origin": {
+    "type": "location",
+    "displayAddress": "IGI Airport Terminal 3 Metro Station, Delhi",
+    "lat": "28.5550838",
+    "long": "77.0844015",
+    "address": {
+      "city": "Delhi Division",
+      "country": "India",
+      "postalCode": "110037"
+    }
+  },
+  "journeyType": "airport_transfer",
+  "tripType": "oneway",
+  "passengers": 1,
+  "quoteFilter": { "paxCount": 1 }
+}
+
+
+
+
+
+QUOTES API Response Body  - 
+
+Response Body (QuoteRequest)
+success: boolean
+message: string (e.g., "Successfully fetched quotes") 
+data: 
+journeyInfo: { journeyType, tripType, pickupDateTime, returnDateTime, journeyLeg, distance, duration, flightDetails }
+routeDetails: { isDomestic, origin: LocationDto, destination: LocationDto } 
+quotesInfo: array of vehicle groups; each item: 
+vehicleType, vehicleCategory, label, modelName, paxCapacity, luggageCapacity, vehicleImages, similarType 
+quotes: array of CommonQuoteDto: 
+vendorId, vehicleCategoryId, vehicleTypeId, quotationId, quoteChildId 
+fareBreakup (onwardFare, backwardFare, totalFare, onwardTax, backwardTax, totalTax)
+benefits (list), policies (amendmentPolicy, cancellationPolicy[], inclusions[], exclusions[], baggagePolicy[], waitingTime, termsAndPolicies[], meetAndGreet[]) 
+sku, paxCount, luggageCount, model, and optional vehicleCategory/vendorVehicleMapping details.
+
+
+QUOTES API Sample Response -
+
+{
+    "success": true,
+    "message": "Successfully fetched quotes",
+    "data": {
+        "journeyInfo": {
+            "journeyType": "AIRPORT_TRANSFER",
+            "tripType": "ONEWAY",
+            "pickupDateTime": "2026-01-23T09:00:00",
+            "distance": "19 Km",
+            "duration": 38
+        },
+        "routeDetails": {
+            "isDomestic": true,
+            "origin": {
+                "displayAddress": "IGI Airport Terminal 3 Metro Station, Delhi",
+                "lat": "28.5550838",
+                "type": "location",
+                "long": "77.0844015",
+                "address": {
+                    "city": "Delhi Division",
+                    "country": "India",
+                    "postalCode": "110037"
+                }
+            },
+            "destination": {
+                "displayAddress": "CP, New Delhi, Delhi, India",
+                "lat": "28.6304203",
+                "type": "location",
+                "long": "77.21772159999999",
+                "address": {
+                    "city": "New Delhi",
+                    "country": "India",
+                    "postalCode": "110001"
+                }
+            }
+        },
+        "quotesInfo": [
+            {
+                "vehicleType": "Sedan",
+                "vehicleCategory": "Standard",
+                "label": "Standard Sedan",
+                "modelName": null,
+                "paxCapacity": "3",
+                "luggageCapacity": "3",
+                "vehicleImages": [
+                    "https://s3.ap-south-1.amazonaws.com/static.tripjack.com/cabs/Standard_Sedan_Toyota_Camry.png"
+                ],
+                "similarType": "Toyota Etios or similar",
+                "quotes": [
+                    {
+                        "vendorId": 1,
+                        "quotationId": "9e5f80a0-f5da-11f0-9379-2b35a8ad0edf",
+                        "quoteChildId": "361642",
+                        "fareBreakup": {
+                            "totalFare": 1463,
+                            "totalTax": 33
+                        },
+                        "benefits": [],
+                        "policies": {
+                            "amendmentPolicy": "Please contact us at +91 79692 88007 or cabs@tripjack.com for any amendments or modifications to the booking. Extra charges may apply.",
+                            "cancellationPolicy": [
+                                {
+                                    "minHours": 24,
+                                    "refundPercentage": 100,
+                                    "description": "Upto 24 hours before departure"
+                                },
+                                {
+                                    "minHours": 0,
+                                    "refundPercentage": 0,
+                                    "description": "Within 24 hours before departure"
+                                }
+                            ],
+                            "inclusions": [
+                                "90 minutes of free waiting time for airport pickups",
+                                "Complimentary Meet and Greet for airport pickups",
+                                "All inclusive pricing"
+                            ],
+                            "exclusions": [
+                                "Charges for changes or extra stops",
+                                "Meals or refreshments",
+                                "Any paid add-ons"
+                            ],
+                            "baggagePolicy": [
+                                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance."
+                            ],
+                            "waitingTime": "60 Min Free Waiting",
+                            "termsAndPolicies": [
+                                "Complimentary Meet and Greet for airport pickups.",
+                                "Please contact your travel agent for any amendments or modifications to the booking. Extra charges may apply.",
+                                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance.",
+                                "Cross-border bookings may incur extra fees, communicated in advance, and payable separately.",
+                                "Any extra stops or changes to the route once the trip starts may incur extra charges, payable separately."
+                            ],
+                            "meetAndGreet": [
+                                "Included. Driver meets with placard at Arrivals Gate"
+                            ]
+                        },
+                        "paxCount": 3,
+                        "luggageCount": 3
+                    }
+                ]
+            }
+        ]
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Booking API -
+Method - POST
+API -  cabs/v2/booking
+Sample Request Payload - 
+{
+  "journeyInfo": {
+    "journeyType": "AIRPORT_TRANSFER",
+    "tripType": "ONEWAY",
+    "pickupDateTime": "2026-01-23T09:00:00",
+    "distance": "19 Km",
+    "duration": 38
+  },
+  "routeDetail": {
+    "isDomestic": true,
+    "origin": {
+      "displayAddress": "IGI Airport Terminal 3 Metro Station, Delhi",
+      "lat": "28.5550838",
+      "type": "location",
+      "long": "77.0844015",
+      "address": {
+        "city": "Delhi Division",
+        "country": "India",
+        "postalCode": "110037"
+      }
+    },
+    "destination": {
+      "displayAddress": "CP, New Delhi, Delhi, India",
+      "lat": "28.6304203",
+      "type": "location",
+      "long": "77.21772159999999",
+      "address": {
+        "city": "New Delhi",
+        "country": "India",
+        "postalCode": "110001"
+      }
+    }
+  },
+  "addons": [],
+  "quotationInfo": {
+    "vehicleType": "Sedan",
+    "vehicleCategory": "Standard",
+    "quoteId": "1065856994",
+    "childQuoteId": "1065856994",
+    "paxCount": 3,
+    "luggageCount": 3,
+    "vendorId": 3
+  },
+  "pricingInfo": {
+    "netAmount": "1393.72",
+    "addonsPrice": "0.00",
+    "agentMarkup": 0,
+    "agentMarkupSplitup": {
+      "onwardJourneyMarkup": 0,
+      "returnJourneyMarkup": 0
+    },
+    "grossAmount": "1460.05",
+  },
+  "passengerDetail": {
+    "firstName": "Jack",
+    "lastName": "Jerry",
+    "email": "mh@tj.com",
+    "phone": "+91XXXXXXXXXXX",
+    "flightDetails": {
+      "number": "BA142XXX"
+    }
+  },
+  "serviceRequest": "AC mandatory in car",
+  "consent": "yes",
+  "agentEmail": "customer@xxx.com",
+  "agentPhone": "+91XXXXXXXX",
+  "agentId": xxxxx,
+  "vendorId": 2
+}
+
+
+
+
+Booking API Response Payload - 
+{
+    "success": true,
+    "message": "Successfully created booking",
+    "data": {
+        "id": "TJS8084864058222",
+        "invoiceId": null,
+        "agentId": "617306",
+        "quoteId": "b10db910-f5f3-11f0-9130-fb6eee73e6aa",
+        "childQuoteId": "431056",
+        "partnerBookingId": null,
+        "comments": null,
+        "passengerCount": 3,
+        "luggageCount": 2,
+        "status": "PAYMENT_PENDING",
+        "totalPrice": 8357,
+        "currency": "INR",
+        "paymentRefId": null,
+        "paymentStatus": "PENDING",
+        "paymentTime": null,
+        "linkedBookingId": null,
+        "passenger": {
+            "id": 1511,
+            "firstName": "Jack",
+            "lastName": "Jerry",
+            "email": "mh@tj.com",
+            "phone": "+919890809809",
+            "fullName": "Jack Jerry"
+        },
+        "bookingVehicle": {
+            "id": 1525,
+            "clazz": "Executive Limo",
+            "maxCapacity": "3",
+            "luggageCapacity": "2",
+            "similarTypes": "Toyota Etios or similar",
+            "images": "https://copy-leamigo-cms-bucket.s3.ap-south-1.amazonaws.com/sedan_etios_b5ebc16a18.png"
+        },
+        "journey": {
+            "id": 1518,
+            "journeyType": "OUTSTATION",
+            "source": "Gurgaon, Haryana, India",
+            "destination": "CP, New Delhi, Delhi, India",
+            "pickupDate": "2026-01-23T09:00:00",
+            "tripEndDate": "2026-01-23T09:51:00",
+            "returnDate": null,
+            "duration": 51,
+            "distance": "32 Km",
+            "flightDetails": null,
+            "journeyLeg": "ONWARD",
+            "routeDetail": {
+                "isDomestic": true,
+                "origin": {
+                    "displayAddress": "Gurgaon, Haryana, India",
+                    "lat": "28.4594965",
+                    "type": "location",
+                    "long": "77.0266383",
+                    "address": {
+                        "city": "Gurugram",
+                        "country": "India"
+                    }
+                },
+                "destination": {
+                    "displayAddress": "CP, New Delhi, Delhi, India",
+                    "lat": "28.6304203",
+                    "type": "location",
+                    "long": "77.21772159999999",
+                    "address": {
+                        "city": "New Delhi",
+                        "country": "India",
+                        "postalCode": "110001"
+                    }
+                }
+            },
+            "domesticJourney": true
+        },
+        "priceBreakup": {
+            "id": 1513,
+            "bookingId": "TJS8084864058222",
+            "agentPrice": null,
+            "agentNetPayable": 8357,
+        },
+        "addons": null,
+        "vendorId": 1,
+        "amendmentAllowed": true,
+        "channelType": "DESKTOP",
+        "tripType": "ONEWAY",
+        "rideStatus": "NOT_STARTED",
+        "trackingLink": "https://tripassist.in/cabs/track?bookingId=aKRX51wy5RVwlYvwLYrpogUBh6DN5amHLLqwkatz5VM",
+        "consent": "yes",
+        "serviceRequest": "Need Water bottle",
+        "agentEmail": "xxxx@xxx.com",
+        "agentMobile": "+91xxxxxxx",
+        "isPushedToErp": false,
+        "loggedInUserId": "217328",
+        "funnelType": "STANDALONE",
+        "panCardNumber": null
+    }
+}
+
+
+
+
+
+
+
+
+
+Get Booking Details API -
+
+Method - GET
+API - cabs/v1/booking/details?bookingIds=TJS8022978710371
+Query Params - bookingIds
+
+GET Booking Details API Response -
+
+
+{
+    "success": true,
+    "message": "Successfully fetched booking details list",
+    "data": [
+        {
+            "order": {
+                "bookingId": "TJS8083964163571",
+                "bookingUserId": "617306",
+                "tripType": "ONEWAY",
+                "vendorId": "1",
+                "amount": 8357,
+                "taxes": 143.00,
+                "agentMarkup": 0.00,
+                "orderType": "CAB",
+                "loggedInUserId": "217328",
+                "deliveryInfo": {
+                    "emails": [
+                        "mh@tj.com"
+                    ],
+                    "contacts": [
+                        "+919890809809"
+                    ]
+                },
+                "status": "PAYMENT_SUCCESS",
+                "paymentStatus": "SUCCESS",
+                "createdOn": "2026-01-20T17:03:20.583702",
+                "processedOn": "2026-01-20T17:10:34.847614",
+                "additionalInfo": {
+                    "flowType": "ONLINE",
+                    "paymentStatus": "PENDING"
+                },
+                "channelType": "DESKTOP",
+                "pax": 3,
+                "luggage": 2,
+                "serviceRequest": "Need Water bottle",
+                "rideStatus": "NOT_STARTED",
+                "trackingLink": "https://tripassist.in/cabs/track?bookingId=T9FzQJpnVz6pObnSFaVYJQUBh6DN5amHLLqwkatz5VM",
+                "paymentDate": "2026-01-20T17:10:34.847614",
+                "funnelType": "STANDALONE",
+                "policies": {
+                    "amendmentPolicy": "Please contact us at +91 79692 88007 or cabs@tripjack.com for any amendments or modifications to the booking. Extra charges may apply.",
+                    "cancellationPolicy": [
+                        {
+                            "minHours": 0,
+                            "refundPercentage": 0.00,
+                            "description": "Within 24 hours before departure"
+                        },
+                        {
+                            "minHours": 24,
+                            "refundPercentage": 100.00,
+                            "description": "Upto 24 hours before departure"
+                        }
+                    ],
+                    "inclusions": [
+                        "30 minutes of free waiting time",
+                        "All inclusive pricing"
+                    ],
+                    "exclusions": [
+                        "Charges for changes or extra stops",
+                        "Meals or refreshments",
+                        "Any paid add-ons"
+                    ],
+                    "baggagePolicy": [
+                        "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance."
+                    ],
+                    "waitingTime": "30 mins free waiting time",
+                    "termsAndPolicies": [
+                        "Complimentary Meet and Greet for airport pickups.",
+                        "Please contact your travel agent for any amendments or modifications to the booking. Extra charges may apply.",
+                        "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance.",
+                        "Cross-border bookings may incur extra fees, communicated in advance, and payable separately.",
+                        "Any extra stops or changes to the route once the trip starts may incur extra charges, payable separately."
+                    ],
+                    "meetAndGreet": [
+                        "Included. Driver meets with placard at Arrivals Gate"
+                    ]
+                },
+                "helpline": "For any urgent matters, you can also call our 24/7 helpline number at:  +91 7506066246 "
+            },
+            "bookingUser": {
+                "id": 17307,
+                "name": "Manish staging agent",
+                "email": "xxxx@xxxx.com",
+                "mobile": "xxxxxxxx",
+                "role": "AGENT",
+                "userId": "617306",
+                "partnerId": "0",
+                "status": "ENABLED",
+                "addressInfo": {
+                    "address": "Saket Statios",
+                    "pincode": "110030",
+                    "cityInfo": {
+                        "name": "Delhi",
+                        "state": "Delhi",
+                        "country": "India"
+                    },
+                    "addressInfoString": "Saket Statios, Delhi, Delhi, 110030"
+                },
+                "additionalInfo": {
+                    "agentLogoUrl": "https://static.tripjack.com/logo/883542b7-0c44-43f9-a31b-9fe8ffb219c3.jpeg"
+                }
+            },
+            "loggedInUser": {
+                "name": "",
+                "userId": "217328"
+            },
+            "itemInfos": {
+                "CAB": {
+                    "paxDetails": {
+                        "id": 1510,
+                        "firstName": "Jack",
+                        "lastName": "Jerry",
+                        "email": "mh@tj.com",
+                        "phone": "+91xxxxxxxx",
+                        "fullName": "Jack Jerry"
+                    },
+                    "vehicleDetail": {
+                        "id": 1524,
+                        "clazz": "Executive Limo",
+                        "maxCapacity": "3",
+                        "luggageCapacity": "2",
+                        "similarTypes": "Toyota Etios or similar",
+                        "images": "https://copy-leamigo-cms-bucket.s3.ap-south-1.amazonaws.com/sedan_etios_b5ebc16a18.png"
+                    },
+                    "journeyInfo": {
+                        "id": 1517,
+                        "journeyType": "OUTSTATION",
+                        "source": "Gurgaon, Haryana, India",
+                        "destination": "CP, New Delhi, Delhi, India",
+                        "pickupDate": "2026-01-23T09:00:00",
+                        "tripEndDate": "2026-01-23T09:51:00",
+                        "returnDate": null,
+                        "duration": 51,
+                        "distance": "32 Km",
+                        "flightDetails": null,
+                        "journeyLeg": "ONWARD",
+                        "routeDetail": {
+                            "isDomestic": true,
+                            "origin": {
+                                "displayAddress": "Gurgaon, Haryana, India",
+                                "lat": "28.4594965",
+                                "type": "location",
+                                "long": "77.0266383",
+                                "address": {
+                                    "city": "Gurugram",
+                                    "country": "India"
+                                }
+                            },
+                            "destination": {
+                                "displayAddress": "CP, New Delhi, Delhi, India",
+                                "lat": "28.6304203",
+                                "type": "location",
+                                "long": "77.21772159999999",
+                                "address": {
+                                    "city": "New Delhi",
+                                    "country": "India",
+                                    "postalCode": "110001"
+                                }
+                            }
+                        },
+                        "domesticJourney": true
+                    },
+                    "quotationId": "b10db910-f5f3-11f0-9130-fb6eee73e6aa",
+                    "quoteId": "431056",
+                    "vendorId": "1",
+                    "addons": [],
+                    "pricing": {
+                        "agentMarkup": 0.00,
+                        "agentNetPayable": 8357,
+                        }
+                }
+            }
+        }
+    ]}
+
+Payment API  :
+Method - POST
+API - cabs/v1/payment/create
+
+{
+    "amount": 8357,
+    "payUserId": "617306",
+    "paymentMedium": "WALLET",
+    "bookingId": "TJS8083964163571",
+    "opType": "DEBIT",
+    "product": "CAB",
+    "transactionType": "PAID_FOR_ORDER"
+}
+
+
+
+
+3.2  Quotes Airport Transfer Round Trip API
+ "tripType": "roundtrip". // for roundtrip journeys.
+ Add this to your search ,to make it a roundtrip journey 
+       "tripType": "roundtrip",
+
+
+   Method - POST
+API -  /cabs/v2/quotes
+Request Body (QuoteRequest)
+origin (LocationDto, required): { displayAddress, lat, long, type, address: { … } }
+destination (LocationDto, required): same shape as origin.
+tripType (required): roundtrip (TripType enum).
+journeyType (required): one of airport_transfer |(JourneyType enum).
+pickupDate (required): string yyyy-MM-dd HH:mm; must be ≥2 hours in future.
+returnDate (optional): yyyy-MM-dd HH:mm; required/validated only when tripType=return and must be ≥30 minutes after pickup.
+durationInMinutes (optional)
+distanceInKm (optional)
+passengers (required): int 1–10.
+quoteFilter (internal use, ignored on serialization).
+Request Payload - 
+{
+    "pickupDate": "2026-01-23 09:00",
+    "returnDate": "2026-01-28 18:00",
+    "destination": {
+        "type": "location",
+        "displayAddress": "CP, New Delhi, Delhi, India",
+        "lat": "28.6304203",
+        "long": "77.21772159999999",
+        "address": {
+            "subLocality": "Connaught Place",
+            "city": "New Delhi",
+            "country": "India",
+            "postalCode": "110001"
+        }
+    },
+    "origin": {
+        "type": "location",
+        "displayAddress": "IGI Airport Terminal 3 Metro Station, Delhi",
+        "lat": "28.5550838",
+        "long": "77.0844015",
+        "address": {
+            "city": "Delhi Division",
+            "country": "India",
+            "postalCode": "110037"
+        }
+    },
+    "journeyType": "airport_transfer",
+    "tripType": "roundtrip", //roundtrip key 
+    "passengers": 1,
+    "quoteFilter": {
+        "paxCount": 1
+    }
+}
+
+
+
+
+
+
+
+ Response Payload
+
+
+{
+  "success": true,
+  "message": "Successfully fetched quotes",
+  "data": {
+    "journeyInfo": {
+      "journeyType": "AIRPORT_TRANSFER",
+      "tripType": "ROUNDTRIP",
+      "pickupDateTime": "2026-01-23T09:00:00",
+      "returnDateTime": "2026-01-28T18:00:00",
+      "distance": "19 Km",
+      "duration": 38
+    },
+    "routeDetails": {
+      "isDomestic": true,
+      "origin": {
+        "displayAddress": "IGI Airport Terminal 3 Metro Station, Delhi",
+        "lat": "28.5550838",
+        "type": "location",
+        "long": "77.0844015",
+        "address": {
+          "city": "Delhi Division",
+          "country": "India",
+          "postalCode": "110037"
+        }
+      },
+      "destination": {
+        "displayAddress": "CP, New Delhi, Delhi, India",
+        "lat": "28.6304203",
+        "type": "location",
+        "long": "77.21772159999999",
+        "address": {
+          "city": "New Delhi",
+          "country": "India",
+          "postalCode": "110001"
+        }
+      }
+    },
+    "quotesInfo": [
+      {
+        "vehicleType": "Sedan",
+        "vehicleCategory": "Standard",
+        "label": "Standard Sedan",
+        "modelName": null,
+        "paxCapacity": "3",
+        "luggageCapacity": "3",
+        "vehicleImages": [
+          "https://s3.ap-south-1.amazonaws.com/static.tripjack.com/cabs/Standard_Sedan_Toyota_Camry.png"
+        ],
+        "similarType": "Toyota Etios or similar",
+        "quotes": [
+          {
+            "vendorId": 1,
+            "quotationId": "b8e489b0-f5e0-11f0-9379-2b35a8ad0edf",
+            "quoteChildId": "428669",
+            "fareBreakup": {
+              "onwardFare": 1463,
+              "backwardFare": 1463,
+              "totalFare": 2926,
+              "onwardTax": 33,
+              "backwardTax": 33,
+              "totalTax": 66
+            },
+            "benefits": [],
+            "policies": {
+              "amendmentPolicy": "Please contact us at +91 79692 88007 or cabs@tripjack.com for any amendments or modifications to the booking. Extra charges may apply.",
+              "cancellationPolicy": [
+                {
+                  "minHours": 24,
+                  "refundPercentage": 100,
+                  "description": "Upto 24 hours before departure"
+                },
+                {
+                  "minHours": 0,
+                  "refundPercentage": 0,
+                  "description": "Within 24 hours before departure"
+                }
+              ],
+              "inclusions": [
+                "90 minutes of free waiting time for airport pickups",
+                "Complimentary Meet and Greet for airport pickups",
+                "All inclusive pricing"
+              ],
+              "exclusions": [
+                "Charges for changes or extra stops",
+                "Meals or refreshments",
+                "Any paid add-ons"
+              ],
+              "baggagePolicy": [
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance."
+              ],
+              "waitingTime": "60 Min Free Waiting",
+              "termsAndPolicies": [
+                "Complimentary Meet and Greet for airport pickups.",
+                "Please contact your travel agent for any amendments or modifications to the booking. Extra charges may apply.",
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance.",
+                "Cross-border bookings may incur extra fees, communicated in advance, and payable separately.",
+                "Any extra stops or changes to the route once the trip starts may incur extra charges, payable separately."
+              ],
+              "meetAndGreet": [
+                "Included. Driver meets with placard at Arrivals Gate"
+              ]
+            },
+            "paxCount": 3,
+            "luggageCount": 3
+          }
+        ]
+      },
+      {
+        "vehicleType": "Minivan",
+        "vehicleCategory": "Standard",
+        "label": "Standard Minivan",
+        "modelName": null,
+        "paxCapacity": "8",
+        "luggageCapacity": "8",
+        "vehicleImages": [
+          "https://s3.ap-south-1.amazonaws.com/static.tripjack.com/cabs/Standard_Minivan_Toyota_Sienna.png"
+        ],
+        "similarType": "Ertiga or similar",
+        "quotes": [
+          {
+            "vendorId": 1,
+            "quotationId": "b8e489b0-f5e0-11f0-9379-2b35a8ad0edf",
+            "quoteChildId": "814845",
+            "fareBreakup": {
+              "onwardFare": 1672,
+              "backwardFare": 1672,
+              "totalFare": 3344,
+              "onwardTax": 36,
+              "backwardTax": 36,
+              "totalTax": 72
+            },
+            "benefits": [],
+            "policies": {
+              "amendmentPolicy": "Please contact us at +91 79692 88007 or cabs@tripjack.com for any amendments or modifications to the booking. Extra charges may apply.",
+              "cancellationPolicy": [
+                {
+                  "minHours": 24,
+                  "refundPercentage": 100,
+                  "description": "Upto 24 hours before departure"
+                },
+                {
+                  "minHours": 0,
+                  "refundPercentage": 0,
+                  "description": "Within 24 hours before departure"
+                }
+              ],
+              "inclusions": [
+                "90 minutes of free waiting time for airport pickups",
+                "Complimentary Meet and Greet for airport pickups",
+                "All inclusive pricing"
+              ],
+              "exclusions": [
+                "Charges for changes or extra stops",
+                "Meals or refreshments",
+                "Any paid add-ons"
+              ],
+              "baggagePolicy": [
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance."
+              ],
+              "waitingTime": "60 Min Free Waiting",
+              "termsAndPolicies": [
+                "Complimentary Meet and Greet for airport pickups.",
+                "Please contact your travel agent for any amendments or modifications to the booking. Extra charges may apply.",
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance.",
+                "Cross-border bookings may incur extra fees, communicated in advance, and payable separately.",
+                "Any extra stops or changes to the route once the trip starts may incur extra charges, payable separately."
+              ],
+              "meetAndGreet": [
+                "Included. Driver meets with placard at Arrivals Gate"
+              ]
+            },
+            "paxCount": 5,
+            "luggageCount": 5
+          }
+        ]
+      },
+      {
+        "vehicleType": "Minivan",
+        "vehicleCategory": "Executive",
+        "label": "Executive Minivan",
+        "modelName": null,
+        "paxCapacity": "8",
+        "luggageCapacity": "8",
+        "vehicleImages": [
+          "https://s3.ap-south-1.amazonaws.com/static.tripjack.com/cabs/Executive_Minivan_Mercedes_V-class.png"
+        ],
+        "similarType": "Innova Crysta or similar",
+        "quotes": [
+          {
+            "vendorId": 1,
+            "quotationId": "b8e489b0-f5e0-11f0-9379-2b35a8ad0edf",
+            "quoteChildId": "486443",
+            "fareBreakup": {
+              "onwardFare": 2508,
+              "backwardFare": 2508,
+              "totalFare": 5016,
+              "onwardTax": 50,
+              "backwardTax": 50,
+              "totalTax": 100
+            },
+            "benefits": [],
+            "policies": {
+              "amendmentPolicy": "Please contact us at +91 79692 88007 or cabs@tripjack.com for any amendments or modifications to the booking. Extra charges may apply.",
+              "cancellationPolicy": [
+                {
+                  "minHours": 24,
+                  "refundPercentage": 100,
+                  "description": "Upto 24 hours before departure"
+                },
+                {
+                  "minHours": 0,
+                  "refundPercentage": 0,
+                  "description": "Within 24 hours before departure"
+                }
+              ],
+              "inclusions": [
+                "90 minutes of free waiting time for airport pickups",
+                "Complimentary Meet and Greet for airport pickups",
+                "All inclusive pricing"
+              ],
+              "exclusions": [
+                "Charges for changes or extra stops",
+                "Meals or refreshments",
+                "Any paid add-ons"
+              ],
+              "baggagePolicy": [
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance."
+              ],
+              "waitingTime": "60 Min Free Waiting",
+              "termsAndPolicies": [
+                "Complimentary Meet and Greet for airport pickups.",
+                "Please contact your travel agent for any amendments or modifications to the booking. Extra charges may apply.",
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance.",
+                "Cross-border bookings may incur extra fees, communicated in advance, and payable separately.",
+                "Any extra stops or changes to the route once the trip starts may incur extra charges, payable separately."
+              ],
+              "meetAndGreet": [
+                "Included. Driver meets with placard at Arrivals Gate"
+              ]
+            },
+            "paxCount": 5,
+            "luggageCount": 5
+          }
+        ]
+      },
+      {
+        "vehicleType": "Sedan",
+        "vehicleCategory": "Luxury",
+        "label": "Luxury Sedan",
+        "modelName": null,
+        "paxCapacity": "3",
+        "luggageCapacity": "3",
+        "vehicleImages": [
+          "https://s3.ap-south-1.amazonaws.com/static.tripjack.com/cabs/Luxury_Sedan_Mercedes_S-class.png"
+        ],
+        "similarType": "Merc E class or similar",
+        "quotes": [
+          {
+            "vendorId": 1,
+            "quotationId": "b8e489b0-f5e0-11f0-9379-2b35a8ad0edf",
+            "quoteChildId": "128658",
+            "fareBreakup": {
+              "onwardFare": 4703,
+              "backwardFare": 4703,
+              "totalFare": 9406,
+              "onwardTax": 86,
+              "backwardTax": 86,
+              "totalTax": 172
+            },
+            "benefits": [],
+            "policies": {
+              "amendmentPolicy": "Please contact us at +91 79692 88007 or cabs@tripjack.com for any amendments or modifications to the booking. Extra charges may apply.",
+              "cancellationPolicy": [
+                {
+                  "minHours": 24,
+                  "refundPercentage": 100,
+                  "description": "Upto 24 hours before departure"
+                },
+                {
+                  "minHours": 0,
+                  "refundPercentage": 0,
+                  "description": "Within 24 hours before departure"
+                }
+              ],
+              "inclusions": [
+                "90 minutes of free waiting time for airport pickups",
+                "Complimentary Meet and Greet for airport pickups",
+                "All inclusive pricing"
+              ],
+              "exclusions": [
+                "Charges for changes or extra stops",
+                "Meals or refreshments",
+                "Any paid add-ons"
+              ],
+              "baggagePolicy": [
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance."
+              ],
+              "waitingTime": "60 Min Free Waiting",
+              "termsAndPolicies": [
+                "Complimentary Meet and Greet for airport pickups.",
+                "Please contact your travel agent for any amendments or modifications to the booking. Extra charges may apply.",
+                "Excess luggage requires guests to either arrange a separate vehicle or upgrade the vehicle in advance.",
+                "Cross-border bookings may incur extra fees, communicated in advance, and payable separately.",
+                "Any extra stops or changes to the route once the trip starts may incur extra charges, payable separately."
+              ],
+              "meetAndGreet": [
+                "Included. Driver meets with placard at Arrivals Gate"
+              ]
+            },
+            "paxCount": 3,
+            "luggageCount": 2
+          }
+        ]
+      }
+    ]
+  }
+}
+
+
+3.3 Quote API:-  OUTSTATION 
+The Outstation Cabs API enables  to search, price, book, and manage intercity (outstation) cab journeys.
+
+Method - POST
+API -  /cabs/v2/quotes
+Request Body (QuoteRequest)
+ "journeyType": "outstation". // for outstation transfers.
+Book  API – Same as existing implementation; no changes required
+ Add this to your search ,to make it an Outstation Search
+        "journeyType": "outstation"
+
+
+
+3.4 Quote API:-  LOCAL 
+The Local  Cabs API enables to search, price, book, and manage intra-city (local) cab journeys.
+
+Method - POST
+API -  /cabs/v2/quotes
+Request Body (QuoteRequest)
+ "journeyType": "local". // for within city searches .
+Book  API – Same as existing implementation; no changes required
+ Add this to your search ,to make it a Local  Search
+        "journeyType": "Local"
+
+
+
+
+Embedded API 
+    
+The embedded API enables booking cab journeys with Flights Bookings .
+
+
+ Add this to your search req to make ot an embedded booking 
+  "sourceBookingId": "TJS11160000739866" // Successful AIR Booking Id
+
+Note:-         
+      Book  API – Same as existing implementation; no changes required
+Method - POST
+API -  /cabs/v2/embedded/booking
+            Embedded API Request Payload - 
+{
+    "sourceBookingId": "TJS11160000739866",
+    "productType": "AIR",
+    "bookingRequestList": [
+        {
+            "journeyInfo": {
+                "journeyType": "AIRPORT_TRANSFER",
+                "tripType": "ROUNDTRIP",
+                "pickupDateTime": "2026-02-25T14:02:00",
+                "returnDateTime": "2026-02-28T14:02:00",
+                "distance": "15 Km",
+                "duration": 16
+            },
+            "routeDetail": {
+                "isDomestic": false,
+                "origin": {
+                    "displayAddress": "Airport Terminal 3 - Dubai - United Arab Emirates",
+                    "lat": "25.2455213",
+                    "type": "location",
+                    "long": "55.3599031",
+                    "address": {
+                        "city": "Dubai",
+                        "country": "United Arab Emirates"
+                    }
+                },
+                "destination": {
+                    "displayAddress": "Museum of The Future - Sheikh Zayed Road - Dubai - United Arab Emirates",
+                    "lat": "25.2192034",
+                    "type": "location",
+                    "long": "55.2819328",
+                    "address": {
+                        "city": "Dubai",
+                        "country": "United Arab Emirates"
+                    }
+                }
+            },
+            "addons": [],
+            "quotationInfo": {
+                "vehicleType": "Sedan",
+                "vehicleCategory": "Standard",
+                "quoteId": "1b0e3088ca7f47f782a7501dffc33c3c",
+                "childQuoteId": "403c423e026a1f7b6242bfe95de55a19",
+                "paxCount": 4,
+                "luggageCount": 3,
+                "vendorId": 4
+            },
+            "pricingInfo": {
+                "netAmount": "1633.00",
+                "addonsPrice": "0.00",
+                "tjTaxAmount": "27.00",
+                "agentMarkup": 0,
+                "agentMarkupSplitup": {
+                    "onwardJourneyMarkup": 0,
+                    "returnJourneyMarkup": 0
+                },
+                "grossAmount": "1660.00",
+                "tjManagementFee": "0.00"
+            },
+            "passengerDetail": {
+                "firstName": "Manish",
+                "lastName": "Kumar",
+                "email": "manish.test@mailinator.com",
+                "phone": "+911234567890",
+                "flightDetails": {
+                    "number": "6E1234"
+                }
+            },
+            "serviceRequest": "",
+            "consent": "yes",
+            "agentEmail": "manish.kumar@tripjack.com",
+            "agentPhone": "+919876543212",
+            "agentId": 617306,
+            "vendorId": 4
+        }
+    ]
+}
+
+
+
+
+            Embedded API Response Payload - 
+{
+  "success": true,
+  "message": "Successfully create embedded booking",
+  "data": {
+    "pickupBookingId": "TJS8017807185796"
+  }
+}
+
+
+            Embedded API Response Body  - 
+success: boolean
+message: string (e.g., "Successfully created embedded booking") 
+data:  
+             "pickupBookingId" :- Cabs Booking Id.
+
+
+Get Amendment charges API
+
+Method - GET
+API - /cabs/v1/amendment?bookingId=TJS8086652803208&type=CANCELLATION
+QueryParams: bookingId, type
+Get Amendments Charges Response Payload - 
+{
+    "success": true,
+    "message": "SuccessFully created amendment!",
+    "data": {
+        "amendment": {
+            "bookingId": "TJS8048786214555",
+            "amendType": "CANCELLATION",
+            "description": "100% refund till 4 hours before departure",
+            "tjAmendmentCharge": 0,
+            "tjManagementFee": 0,
+            "refundAmount": 8736,
+            "amountPayable": 0,
+            "loggedInUserId": "417298",
+            "bookingUserId": "617306",
+            "amountPaid": 8736,
+            "appliedAmendmentConfig": {
+                "minHours": 4,
+                "refundPercentage": 100,
+                "description": "100% refund till 4 hours before departure"
+            }
+        }
+    }
+}
+
+
+
+
+
+Amendment Cancellation API -
+In Amendments, only Cancellation Allowed
+
+Method - POST
+API - /cabs/v1/amendment
+Amendments Charges Response Payload - 
+{
+   "bookingId": "TJS8086652803208",
+   "amendmentType": "CANCELLATION"
+}
+
+
+
+Get Amendments Charges Response Payload -
+{
+    "success": true,
+    "message": "Success fully processed amendment",
+    "data": {
+        "id": "TJSA8077310260468",
+        "bookingId": "TJS8048786214555",
+        "amendType": "CANCELLATION",
+        "amendStatus": "SUCCESS",
+        "description": "100% refund till 4 hours before departure",
+        "tjAmendmentCharge": 0,
+        "tjManagementFee": 0,
+        "refundAmount": 8736,
+        "amountPayable": 0,
+        "refundRefId": "3656486697",
+        "loggedInUserId": "417298",
+        "bookingUserId": "617306",
+        "processedOn": "2026-01-20T18:05:55.008249",
+        "amountPaid": 8736,
+        "appliedAmendmentConfig": {
+            "minHours": 4,
+            "refundPercentage": 100,
+            "description": "100% refund till 4 hours before departure"
+        },
+        "updatedAt": "2026-01-20T18:05:55.011719"
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+4. API Error Responses 
+HTTP Code
+Message 
+Reason
+Response
+400
+Bad Request
+Missing required field
+{ "success": false,
+  "error": {
+    "code": "404 NOT_FOUND",
+    "message": "Booking not Found for bookingId TJS8048786214555"
+  }}
+401
+Unauthorized
+Invalid API Key
+"status": 401,
+"error": "Unauthorized",
+"errorCode": "JWT_INVALID",
+"message": "Invalid or malformed JWT token.",
+ "details": "JWT signature does not match locally computed signature. JWT validity cannot be asserted and should not be trusted."
+500
+Internal Server Error
+System Issue
+{"success": false,
+"error": {
+"code":"INTERNAL_SERVER_ERROR",
+"message": "Something went wrong."}}
+
+UAT Test Cases –
+4.1 Airport Transfer  – Book Scenarios
+01 Perform an One Way  Airport Transfer booking covering 3 travellers , with Start date +2days from current date.
+02. Perform a Roundtrip Airport Transfer booking scenario covering 2 travellers with Start Date & end Date with a difference of 2days/1day respectively .
+
+4.2 .Outstation  – Book Scenarios
+01 Perform an One Way Outstation booking covering 3 travellers , with Start date +2days from current date.
+02. Perform a Roundtrip Outstationbooking scenario covering 2 travellers with Start Date & End Date with a difference of 2days/1day respectively .
+4.3 Local– Book Scenarios
+01 Perform an One Way  Local; booking covering 3 travellers , with Start date +2days from current date.
+02. Perform a Roundtrip local  booking scenario covering 2 travellers with Start Date & end Date with a difference of 2days/1day respectively .
+
+4.5 Embedded –  Book Scenarios(Optional)
+01. Perform an One Way Airport Transfer ; booking covering 1 travellers , with Start date as same as the Flight arrival date. 
+
+
+ Final Validation & Compliance
+
+1. Test Cases Verification - will verify the test cases using JSON Request/ Response and suggest, if there is any change required. The turnaround time for the test case verification is around 1-2 working days.
+2. Sign off and Live access - On successful completion of all the above steps, Tripjack.com will give sign off and provide Live access details to the client. It is strongly recommended that the API Partner also completes their UAT before making the services live at their end. 
+
+
+4..6  Going Live Steps :
+Certification Process 
+                Clients must provide all the test cases mentioned in the document.
+              ● Logs should be in json format. 
+              ● No modification in logs should be there. 
+              ● API Key also needs to be attached along with the logs.
+              ● There should be different files for each request and response.
+              ● Passenger Name should be proper. (TBA, Test cannot be passed for certification)
+
+5. Security & Usage Guidelines:
+Keep API keys secure.
+Response payload can have more keys, Consume keys which are mentioned above in API response.
+If keys are exposed, regenerate your keys.
+Do not hardcode credentials in code.

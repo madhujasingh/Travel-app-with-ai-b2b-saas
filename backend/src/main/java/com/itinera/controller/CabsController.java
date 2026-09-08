@@ -59,6 +59,16 @@ public class CabsController {
         return ResponseEntity.ok(cabsService.payment(payload));
     }
 
+    @GetMapping("/payment-summary")
+    public ResponseEntity<JsonNode> paymentSummary(@RequestParam String bookingId) {
+        return ResponseEntity.ok(cabsService.paymentSummary(bookingId));
+    }
+
+    @PostMapping("/payment-modes")
+    public ResponseEntity<JsonNode> paymentModes(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(cabsService.paymentModes(payload));
+    }
+
     @GetMapping("/amendment-charges")
     public ResponseEntity<JsonNode> amendmentCharges(@RequestParam String bookingId, @RequestParam String type) {
         return ResponseEntity.ok(cabsService.amendmentCharges(bookingId, type));

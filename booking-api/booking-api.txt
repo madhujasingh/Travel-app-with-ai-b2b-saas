@@ -1,0 +1,387 @@
+              iecr          conditions     Boolean        Is             Optional
+                                                          Emergency
+                                                          Contact
+                                                          Required
+              status        root           Object         Status of the Mandatory
+                                                          API call
+              dc            conditions     Object         Conditions   Mandatory
+                                                          for document
+                                                          Id
+              ida           dc             Boolean        Is         Optional
+                                                          documentID
+                                                          applicable
+              idm           dc             Boolean        Is         Optional
+                                                          documentID
+                                                          mandatory
+
+
+
+
+BOOKING API
+
+The following section describes the availability methods exposed via the API to Book.
+
+
+
+
+1. INSTANT BOOK
+2. HOLD
+3. CONFIRM FARE BEFORE TICKET
+4. CONFIRM-BOOK (TICKETING AFTER HOLD)
+
+
+
+
+Book method is to hold the Booking or Direct Ticketing. After Submitting the passenger & contact
+details for the selected itinerary ,BookingResponse will be given with bookingId and status of
+submitted request.
+1. While submitting BookingRequest it will be validated then taking forward to booking, in case of any
+   validation failure, Error Message will be given in response.
+2. After validation,Booking will be created in the Tripjack System by deducting Payment ,and the
+   Supplier Side will be done. (BookingDetails Api has to be used to GET PNR and TicketNumber if
+   any and Order Status must be Success).
+3. In case of any fare jump , PNR and Ticket Number will be not generated, and can directly
+   coordinate with Tripjack Customer Support.
+
+
+
+1: INSTANT BOOK (With Payment Info)
+
+This method is used to book the reviewed/selected flight confirming instantly with Airline and
+Tripjack by passing Payment Information,Travellers and Contact Details , If Any GST also can be
+passed.
+
+
+
+
+URL: https://apitest.tripjack.com/oms/v1/air/book
+
+
+
+Request Method : POST
+The amount sent in the Book Request should be Gross Fare (TF from AirReviewResponse).
+Sample : Click to here to take examples Cases to verify before integration :
+  With GST & Passport
+  With SSR
+Notes on Booking Request :
+
+
+Case :1 : SSR - List of Meal, Baggage - In Request code which is selected by customer Vs on
+segment key (AirReviewResponse -> “tripInfos” under segment will be having unique key called id
+which is key)
+
+
+Case :2 : In Case of GST (all fields of GST has to be passed) with Valid and as IATA Standard have to
+be used.
+
+
+Case 3 : In case of SME fares , GST will be mandatory , in that case have to verify
+AirReviewResponse Conditions (igm and gstappl need to be true) & have to pass GST Info in
+booking.
+
+
+Case 4 : In case of iecr is mandatory in Review Response , in book request contactInfo (Emergency
+contact name,contact email and contact number) are mandatory to be passed in request. (Note :
+Email, Contact Number which is sent in contact info where ticket copy is not delivered to mentioned
+norms).
+
+
+Case 5 : In case document Id is mandatory in review response, in book request traveller info
+document id is mandatory to be passed.
+Sample Request View (Without SSR) :
+
+
+
+
+Description :
+
+
+bookingId : Booking Id from AirReviewResponse
+
+
+  paymentInfos - Payment for the booking to Tripjack (List<PaymentInofs>)
+    amount - total payable amount to Tripjack for the booking (TF from AirReviewResponse)
+
+
+  deliveryInfo - Delivery Details Related to Booking (which need to be passed to supplier)
+    emails - Booking Email Id (It should be valid email id)
+    contacts - Valid Contact Number (Followed with country code and valid mobile number)
+- Example (+919500112233)
+
+
+  contactInfo - Emergency Contact Details Related to Booking (which need to be passed to
+  supplier).
+    emails - Emergency Email Id (It should be valid email id) - which is used by airline
+    contacts - Valid Contact Number (Followed with country code and valid mobile number)
+- Example (+919500112233) - which is used by airline
+ecn - Emergency Contact Name - which is used by airline
+  travellerInfo - List of Traveller which flight to be booked
+     ti - Title of the Traveller
+        Adult: Mr,Mrs,Ms
+        Child: Ms, Master
+        Infant : Ms, Master
+  pt - PaxType - ADULT,CHILD, INFANT (Values should be Caps)
+  fN - First Name of the Traveller
+  lN - Last Name of the Traveller (Key : lowercase “L”N)
+  dob - Traveller Date Of Birth (YYYY-MM-DD Format)
+  pNum - Passport Number
+  eD - Expiry Date of the passport (YYYY-MM-DD Format)
+  pNat - Passport Nationality (Passport Issued Country) - IATA Country Code(2-Letter)
+  pid - Passport Issue Date (YYYY-MM-DD Format)
+  pan - Pan card of the Traveller
+  ssrBaggageInfos (List of baggage on segment selected)
+     key : Segment Key from AirReviewResponse
+     code : Customer Selected SSR Code on Corresponding Segment
+
+
+
+ssrMealInfos
+  key : Segment Key from AirReviewResponse
+  code : Customer Selected SSR Code on Corresponding Segment
+
+
+
+ssrSeatInfos
+  key : Segment Key from AirReviewResponse
+  code : Customer Selected SSR Code on Corresponding Segment
+
+
+
+ssrExtraServiceInfos
+  key : Segment Key from AirReviewResponse
+  code : Customer Selected SSR Code on Corresponding Segment
+di - Document ID when required
+  gstInfo - GST Which needs to be passed for billing and supplier - all fields under gst are
+  mandatory.
+    gstNumber - Valid 15 digit GST Number (mandatory)
+    registeredName - GST Registered Name (maximum 35 characters as IATA standard)
+    (mandatory)
+    Email - GST Email
+    Mobile - GST Mobile
+    Address - GST Registered Address (maximum 70 characters as IATA standard)
+
+
+
+
+Request Payload:
+
+
+
+             Key             Parent        Type           Description     Mandatory/
+                                                                          Optional
+             bookingId       root          String         Booking id   Mandatory
+                                                          which is
+                                                          generated at
+                                                          Review.
+             paymentInfo root              Array of       Object       Mandatory
+             s                             Objects        containing
+                                                          the payment
+                                                          details of
+                                                          Booking. Do
+                                                          not send
+                                                          paymentInfo
+                                                          s in case of
+                                                          Hold
+                                                          booking.
+             amount          paymentInfo number           Total cost for Mandatory
+                             s                            the Booking
+             travellerInfo   root          Array of       List of        Mandatory
+                                           Objects        traveller
+                                                          details object
+            gstInfo        root      Object   Object        Mandatory
+                                              containing
+                                              GST info
+            gstNumber      gstInfo   String   GST number Mandatory
+            registeredNa gstInfo     String   GST name      Mandatory
+            me
+            deliveryInfo   root      Object   Object         Mandatory
+                                              containing
+                                              the details of
+                                              delivery
+                                              emails and
+                                              mobile
+                                              numbers
+            contactInfo    root      Object   Object      Optional
+                                              containing
+                                              the
+                                              emergency
+                                              contact
+                                              details
+                                              (emails,
+                                              mobile
+                                              numbers and
+                                              contact
+                                              name)
+
+
+
+Response:
+
+
+
+            Key            Parent    Type     Description   Mandatory/
+                                                            Optional
+            bookingId      root      String   Booking id   Mandatory
+                                              which is
+                                              generated at
+                                              Review.
+              status         root           Object         Status of the Mandatory
+                                                           APi call
+
+
+
+
+2: HOLD ( WithOut PaymentInfo)
+
+Book method is to hold the Booking . After Submitting passenger & contact details for the selected
+itinerary, BookingResponse will be given with bookingId and status of submitted request.
+1. While submitting BookingRequest will be validated then taking forward to booking, in case of any
+   validation failure, Error Message will be given in response.
+2. After validation , Booking will be done and Supplier Booking is Success in BookingDetails API Call
+   will get PNR and TicketNumber if any.
+3. In case of any fare jump, PNR and Ticket Number will be not generated. And can directly
+   coordinate with Customer Support.
+Which is the same as INSTANT BOOK (request should not have paymentInfo). Flow For Hold &
+Hold Confirm Ticket :
+
+
+
+
+Sample Payloads : Click to here to take examples
+Sample Request View :
+
+
+
+
+CONFIRM-FARE BEFORE TICKETING (BEFORE CONFIRM TICKETING)
+This method is used to Validate the fare for PNR is available or not , if the fare is not available it will
+give “Fare No Longer available or if time limit of hold booking is expired”.
+
+
+URL: https://apitest.tripjack.com/oms/v1/air/fare-validate
+Method: POST
+Sample Payloads : Click to here to take examples
+
+
+
+
+Sample Request View :
+Sample Response View :
+
+
+Case : 1 : If Successful , Fare & Booking class still valid to confirm on Supplier before ticketing.
+
+
+
+
+Case : 2: If fare or booking class is not available on the Supplier side for Hold PNR.
+
+
+
+
+Case : 3 : If the Hold time limit is expired for the Hold PNR.
+
+
+
+
+Case : 4: In case of fare alert from airline end.
+
+
+
+
+Request Payload:
+              Key           Parent         Type             Description   Mandatory/
+                                                                          Optional
+              bookingId     root           String           Id of the   Mandatory
+                                                            booking
+                                                            which needs
+                                                            to be
+                                                            released
+
+
+
+
+Response:
+
+              Key           Parent         Type             Description   Mandatory/
+                                                                          Optional
+              status        root           Object           Status of the Mandatory
+                                                            API call
+
+
+
+
+CONFIRM-BOOK (HOLD BOOKING TO CONFIRM)
+
+This method is used to confirm the hold(blocked) ticket by making payment to the booking and
+confirming the ticket (after the fare confirmation before ticketing api).
+
+
+URL: https://apitest.tripjack.com/oms/v1/air/confirm-book
+Method: POST
+
+
+Sample Payloads : Click to here to take example
+Sample Request View :
+
+
+
+
+Case : 1: If fare or booking class is not available on the Supplier side for Holded PNR.
+
+
+
+
+Case : 2 : If the Hold time limit is expired for the Holded PNR.
+
+
+
+
+Request Payload:
+
+
+
+              Key             Parent         Type           Description   Mandatory/
+                                                                          Optional
+              bookingId       root           String         Booking id   Mandatory
+                                                            which is
+                                                            generated at
+                                                            Review.
+              paymentInfo root               Array of       Object      Mandatory
+              s                              Objects        containing
+                                                            the payment
+                                                            details of
+                                                            Booking.
+              amount          paymentInfo number            Total cost for Mandatory
+                              s                             the Booking
+Response:
+
+              Key            Parent         Type          Description    Mandatory/
+                                                                         Optional
+              status         root           Object        Status of the Mandatory
+                                                          API call
+              bookingId      root           String        Booking id     Mandatory
+                                                          which is
+                                                          already
+                                                          generated.
+
+
+
+
+RETRIEVE BOOKING: (BookingDetail)
+
+The following section describes the Booking detail methods exposed via the API to Retrieve.
+
+
+1. Booking Detail
+2. Detailed Booking Information (Included from Version 1.5)
+
+
+
+
+Booking Detail
+
+This method is used to retrieve booking details and booking status of an existing booking
+using BookingId. It is typically used after a booking has been made to capture a current snapshot of
+the reservation to get sync of PNR,ticket number.
+

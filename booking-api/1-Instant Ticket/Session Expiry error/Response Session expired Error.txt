@@ -1,0 +1,15 @@
+{
+    "status": {
+        "success": false,
+        "httpStatus": 400
+    },
+    "errors": [
+        {
+            "errCode": "2024",
+            "message": "Session is already expired. Please try again with new session",
+            "details": "Session is already expired. Please try again with new session"
+        }
+    ]
+}
+
+

@@ -359,18 +359,42 @@ const FARE_RULE_SECTIONS = [
   { key: 'SEAT_CHARGEABLE', label: 'Seat Chargeable' },
 ];
 
+// TripJack's own rule engine expresses these windows in raw hours (e.g.
+// 8760 = exactly 365 days = 1 year) - accurate but unreadable as-is.
+// Converts to whichever unit reads most naturally: hours under a day,
+// otherwise days, rolling up to whole years at 365+ days.
+const formatFareRuleHours = (hrs) => {
+  const value = Number(hrs);
+  if (!Number.isFinite(value)) return String(hrs);
+  if (value === 0) return 'departure time';
+  if (value < 24) return `${value} hour${value === 1 ? '' : 's'}`;
+  const days = Math.round(value / 24);
+  if (days >= 365) {
+    const years = Math.round(days / 365);
+    return `${years} year${years === 1 ? '' : 's'}`;
+  }
+  return `${days} day${days === 1 ? '' : 's'}`;
+};
+
 const formatFareRulePolicyWindow = (policy) => {
   if (policy?.pp) {
     return policy.pp.replace(/_/g, ' ');
   }
   if (policy?.st != null && policy?.et != null) {
-    return `${policy.st}–${policy.et} hrs before departure`;
+    if (Number(policy.st) === 0) {
+      return `Up to ${formatFareRuleHours(policy.et)} before departure`;
+    }
+    return `${formatFareRuleHours(policy.st)} – ${formatFareRuleHours(policy.et)} before departure`;
   }
   return null;
 };
 
-// Cat 16 fare rules can come back as supplier free text wrapped in raw RTF -
-// strip control words/groups so the plain policy text is readable in the app.
+// Cat 16 fare rules can come back as supplier free text wrapped in raw RTF,
+// AND/OR with leftover unresolved template placeholder tokens (e.g.
+// "__nls_____bs__" gluing straight onto real text) - strip both so the
+// plain policy text is readable in the app. Used for both the miscInfo
+// free-text path and the structured tfr[].policyInfo path - TripJack's raw
+// supplier text can carry this junk in either place.
 const stripFareRuleRtf = (raw) => {
   if (!raw) return '';
   return raw
@@ -378,6 +402,7 @@ const stripFareRuleRtf = (raw) => {
     .replace(/\\[a-zA-Z]+-?\d*\s?/g, '')
     .replace(/[{}]/g, '')
     .replace(/\r/g, '')
+    .replace(/_{2,}(?:[a-zA-Z0-9]{1,8}_{2,})+/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 };
@@ -515,8 +540,14 @@ const mapFlightsFromResponse = (data) => {
       // Mumbai Intl - instead of BOM) - showing the bare code with no city
       // name made a perfectly correct connecting itinerary look broken.
       fromCityName: titleCaseCityName(firstSegment?.da?.city),
+      // TripJack's own segment data already carries the real ISO country
+      // code per airport - used by FlightBookingScreen to auto-detect the
+      // TripSafe Embedded insurance destination/eligibility without any
+      // separate airport->country lookup table.
+      fromCountryCode: firstSegment?.da?.countryCode || null,
       to: lastSegment?.aa?.code || lastSegment?.aa?.city || '--',
       toCityName: titleCaseCityName(lastSegment?.aa?.city),
+      toCountryCode: lastSegment?.aa?.countryCode || null,
       departure: formatTime(firstSegment?.dt),
       departureRaw: firstSegment?.dt || null,
       arrival: formatTime(lastSegment?.at),
@@ -899,7 +930,20 @@ const FlightsScreen = ({ navigation }) => {
         cartItem,
       });
     } catch (error) {
-      Alert.alert('Review Fare', error.message || 'Unable to review this fare right now.');
+      const message = error.message || 'Unable to review this fare right now.';
+      // Fares/priceIds returned by Search go stale after a while server-side
+      // (confirmed live: TripJack rejects a review made ~10 minutes after
+      // the original search with "Keys Passed... already expired" - see
+      // parseTripJackError's TEXT_MATCHED_ERRORS) - offer to search again
+      // right from here instead of just showing a dead end.
+      if (error.sessionDead) {
+        Alert.alert('Review Fare', message, [
+          { text: 'Search Again', onPress: () => searchFlights() },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      } else {
+        Alert.alert('Review Fare', message);
+      }
     } finally {
       setLoading(false);
     }
@@ -2146,7 +2190,7 @@ const FlightsScreen = ({ navigation }) => {
                                       </Text>
                                     ) : null}
                                     <Text style={styles.fareRulePolicyInfo}>
-                                      {policy.policyInfo || 'No details available'}
+                                      {stripFareRuleRtf(policy.policyInfo) || 'No details available'}
                                     </Text>
                                   </View>
                                 ))}

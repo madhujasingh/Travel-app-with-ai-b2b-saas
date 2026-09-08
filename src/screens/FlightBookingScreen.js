@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   Pressable,
   ScrollView,
@@ -22,6 +23,7 @@ import API_CONFIG from '../config/api';
 import DatePickerModal from '../components/DatePickerModal';
 import { useAuth } from '../context/AuthContext';
 import { parseTripJackError } from '../utils/tripjackErrors';
+import { digitsOnly } from '../utils/inputSanitizers';
 
 const TITLES_BY_PAX_TYPE = {
   ADULT: ['Mr', 'Mrs', 'Ms'],
@@ -228,6 +230,100 @@ const AMENDMENT_POLL_INTERVAL_MS = 10000;
 // network hiccup.
 const DEFAULT_CONVENIENCE_FEE = 300;
 
+// TripSafe Embedded flow (tripsafe-api/07-embedded-api-integration.txt,
+// Section B - TripJack Air Booking) - travel insurance riding on this same
+// flight booking, opt-in only. Destination country comes straight off
+// TripJack's own flight segment data (aa.countryCode - see
+// FlightsScreen.js's mapFlightsFromResponse) rather than a manually-picked
+// region, so the search is always scoped to where this specific flight
+// actually goes.
+
+const calculateAge = (dob) => {
+  if (!dob) return null;
+  const dobDate = new Date(`${dob}T00:00:00`);
+  const now = new Date();
+  let age = now.getFullYear() - dobDate.getFullYear();
+  const monthDiff = now.getMonth() - dobDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dobDate.getDate())) age -= 1;
+  return age;
+};
+
+// tfd.ifc.TF (total-for-product fare, sibling of iti[]) confirmed live as
+// the real TripSafe fare field - see tripsafe-api/13-open-questions-to-
+// verify.txt item 4 and TripSafeResultsScreen's own extractFare. Present on
+// the Embedded REVIEW response, but NOT on the Embedded SEARCH response
+// (confirmed live 2026-09-06) - see extractEmbeddedSearchFare below.
+const extractInsuranceFare = (planOrProduct) => {
+  const candidates = [planOrProduct?.tfd?.ifc, planOrProduct?.pfd?.ifc, planOrProduct?.fd?.ifc];
+  for (const ifc of candidates) {
+    const tf = ifc?.TF ?? ifc?.tf;
+    if (tf != null) return Number(tf);
+  }
+  return null;
+};
+
+// Inclusive day count between two YYYY-MM-DD strings - TripSafe's own
+// per-day fare table is keyed this way (confirmed live: a 2026-10-22 ->
+// 2026-11-05 trip, a 14-day difference, is priced under key "15", and that
+// entry's TF exactly matched the authoritative Review fare).
+const inclusiveTripDays = (sd, ed) => {
+  if (!sd || !ed) return null;
+  const start = new Date(`${sd}T00:00:00`);
+  const end = new Date(`${ed}T00:00:00`);
+  const diff = Math.round((end - start) / 86400000);
+  return Number.isFinite(diff) && diff >= 0 ? diff + 1 : null;
+};
+
+// The Embedded SEARCH response prices plans through pfd.ppd.ppdf - a map
+// keyed by inclusive trip length, each holding per-age fare entries - with
+// no tfd/iti/fd anywhere (unlike Standalone search, and unlike Embedded
+// REVIEW which does return tfd). Sums the matching per-age fare across all
+// travellers so the plan list can show a real total rather than "price
+// unavailable". Review remains the authoritative figure; this is the
+// pre-selection estimate only.
+const extractEmbeddedSearchFare = (product, sd, ed, ages) => {
+  const ppdf = product?.pfd?.ppd?.ppdf;
+  const days = inclusiveTripDays(sd, ed);
+  if (!ppdf || !days) return null;
+  const entries = ppdf[String(days)];
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+
+  let total = 0;
+  for (const age of ages || []) {
+    // Exact age match where TripJack priced that age band, else fall back
+    // to the first entry rather than dropping the traveller silently.
+    const match = entries.find((e) => Number(e?.age) === Number(age)) || entries[0];
+    const tf = match?.ifc?.TF ?? match?.ifc?.tf;
+    if (tf == null) return null;
+    total += Number(tf);
+  }
+  return total > 0 ? total : null;
+};
+
+// Cabs Embedded "Add an Airport Transfer" prompt (cabs-api/cab-api-doc.txt
+// Embedded API, Book Scenario: "Start date as same as the Flight arrival
+// date") - prefills CabsScreen's pickup date/time from the flight's own
+// arrival, rounded to the nearest 30-minute slot (CabsScreen's own time
+// picker only offers 30-minute increments). TripJack's segment datetimes
+// are naive local strings ("YYYY-MM-DDTHH:mm", no timezone) - parsed via
+// string matching rather than the Date object, same lesson as
+// TripSafeScreen's addDays bug: never round-trip one of these through
+// toISOString()/UTC conversion.
+const roundToHalfHourSlot = (isoDateTime) => {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(isoDateTime || '');
+  if (!match) return null;
+  const [, datePart, hh, mm] = match;
+  let hours = Number(hh);
+  let minutes = Number(mm);
+  if (minutes < 15) minutes = 0;
+  else if (minutes < 45) minutes = 30;
+  else {
+    minutes = 0;
+    hours = (hours + 1) % 24;
+  }
+  return { date: datePart, time: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}` };
+};
+
 const FlightBookingScreen = ({ route, navigation }) => {
   const { token, user } = useAuth();
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId, openCancel } = route.params || {};
@@ -268,6 +364,24 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // { [segmentId]: travellerIndex } - which traveller a tap on the seat
   // grid currently assigns a seat to, per segment.
   const [activeSeatTraveller, setActiveSeatTraveller] = useState({});
+  // Brief toast confirming a seat pick/removal and its price impact, so the
+  // customer doesn't have to scroll all the way down to Fare Summary to
+  // notice the total changed - the amount itself is still only ever added
+  // there (this is purely a notification, not a second source of truth).
+  const [seatToast, setSeatToast] = useState(null);
+  const seatToastOpacity = useRef(new Animated.Value(0)).current;
+  const seatToastTimeoutRef = useRef(null);
+  const showSeatToast = (message) => {
+    setSeatToast(message);
+    if (seatToastTimeoutRef.current) clearTimeout(seatToastTimeoutRef.current);
+    Animated.timing(seatToastOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+    seatToastTimeoutRef.current = setTimeout(() => {
+      Animated.timing(seatToastOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setSeatToast(null));
+    }, 1800);
+  };
+  useEffect(() => () => {
+    if (seatToastTimeoutRef.current) clearTimeout(seatToastTimeoutRef.current);
+  }, []);
   const [titlePicker, setTitlePicker] = useState({ visible: false, travellerIndex: null });
   const [datePicker, setDatePicker] = useState({ visible: false, travellerIndex: null, field: null });
   const [bookingDetails, setBookingDetails] = useState(null);
@@ -278,6 +392,15 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const [ancillarySelections, setAncillarySelections] = useState({});
   const [ancillaryBusy, setAncillaryBusy] = useState(false);
   const [convenienceFee, setConvenienceFee] = useState(DEFAULT_CONVENIENCE_FEE);
+  // TripSafe Embedded add-on (opt-in only). Deliberately independent of
+  // every other piece of booking state so that leaving this off changes
+  // nothing about the existing flight-only flow.
+  const [insuranceEnabled, setInsuranceEnabled] = useState(false);
+  const [insuranceSearching, setInsuranceSearching] = useState(false);
+  const [insurancePlans, setInsurancePlans] = useState([]);
+  const [insuranceModalVisible, setInsuranceModalVisible] = useState(false);
+  const [insuranceReviewing, setInsuranceReviewing] = useState(false);
+  const [selectedInsurance, setSelectedInsurance] = useState(null); // { plid, pid, planName, fare }
 
   useEffect(() => {
     (async () => {
@@ -412,6 +535,12 @@ const FlightBookingScreen = ({ route, navigation }) => {
         }
       }
       const next = { ...current, [travellerIndex]: alreadyMine ? undefined : seat.code };
+      const amount = Number(seat.amount || 0);
+      if (alreadyMine) {
+        showSeatToast(`Seat ${seat.seatNo} removed${amount > 0 ? ` — -₹${amount.toLocaleString()}` : ''}`);
+      } else {
+        showSeatToast(`Seat ${seat.seatNo} added${amount > 0 ? ` — +₹${amount.toLocaleString()}` : ''}`);
+      }
       return { ...prev, [segmentId]: next };
     });
   };
@@ -493,12 +622,230 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const computeSsrAmount = () => computeBaggageAmount() + computeMealAmount() + computeSeatAmount();
 
   const totalWithSsr = totalFare + computeSsrAmount();
+  // Insurance premium is kept OUT of totalWithSsr deliberately -
+  // totalWithSsr's whole purpose (per the comment below) is "exactly what
+  // TripJack expects for the flight+SSR alone"; handleInstantBook adds this
+  // on top of totalWithSsr only when insurance was actually reviewed, so
+  // every other totalWithSsr call site (Hold, cancellation, sync) is
+  // completely unaffected by whether insurance is opted into.
+  const insuranceAmount = insuranceEnabled && selectedInsurance ? Number(selectedInsurance.fare || 0) : 0;
   // Convenience fee is OUR platform's own fee, charged separately - never
   // added to totalWithSsr, which is exactly what gets sent to TripJack as
   // paymentInfos.amount for Instant Book / Confirm & Pay (it must equal the
   // reviewed fare + SSR exactly, or TripJack 400s with errCode 1015). It
   // only affects what's DISPLAYED to the customer as their total.
-  const customerTotal = totalWithSsr + convenienceFee;
+  const customerTotal = totalWithSsr + convenienceFee + insuranceAmount;
+
+  // Departure/arrival dates for the insurance search, derived straight from
+  // the flight legs already in hand - no separate date picker needed. Round
+  // trip: coverage spans the outbound departure to the return arrival
+  // (tripsafe-api/07-embedded-api-integration.txt Book Scenario 02). One
+  // way: no return date to anchor to, so default to departure+90 days (the
+  // same doc's Book Scenario 01 example, and within the Embedded One-Way
+  // Search Matrix's own 180-day max).
+  const insuranceDates = (() => {
+    if (!Array.isArray(flights) || flights.length === 0) return null;
+    const first = flights[0];
+    const last = flights[flights.length - 1];
+    const sd = (first?.departureRaw || '').slice(0, 10);
+    if (!sd) return null;
+    let ed;
+    if (flights.length > 1 && last?.arrivalRaw) {
+      ed = last.arrivalRaw.slice(0, 10);
+    } else {
+      const d = new Date(`${sd}T00:00:00`);
+      d.setDate(d.getDate() + 90);
+      ed = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return ed > sd ? { sd, ed } : null;
+  })();
+
+  // The outbound leg's arrival country - always flights[0], not the last
+  // leg, since a round trip's last leg flies back to the origin (e.g.
+  // Delhi->Bangkok->Delhi: flights[0].to is Bangkok/Thailand, the actual
+  // travel destination; flights[1].to would be Delhi/India again).
+  //
+  // NOTE (2026-09-06): this card used to be hidden entirely for domestic
+  // flights, on the assumption (from tripsafe-api/00-overview.txt's own
+  // Introduction: "TripSafe... covers travellers on INTERNATIONAL trips")
+  // that TripSafe was international-only. That assumption was wrong - a
+  // real screenshot of TripJack's own live agent booking portal, on an
+  // actual domestic flight, showed a "TripSafe - Domestic Gold Plus" plan
+  // offered in the exact same "Personalise your Trip" step. The doc's
+  // intro paragraph is either outdated or specific to Standalone/Student/
+  // AMT rather than a universal restriction Embedded search itself
+  // enforces - removed the gate and let the real Search API decide
+  // (Search naturally returns zero plans for an unsupported route, which
+  // is already handled gracefully below, rather than us guessing upfront).
+  const insuranceDestinationCountry = flights?.[0]?.toCountryCode || null;
+  const insuranceOriginCountry = flights?.[0]?.fromCountryCode || null;
+  // The doc's Embedded Search sample sends BOTH ends of the journey in
+  // isc.iri (its example is "IN" + "AE" for a India->UAE trip), not just the
+  // destination - deduped here so a domestic trip (IN->IN) sends "IN" once
+  // rather than twice.
+  const insuranceCountries = [...new Set([insuranceOriginCountry, insuranceDestinationCountry].filter(Boolean))];
+
+  // Insurance covers ADULT/CHILD travellers only (matches common travel-
+  // insurance practice; the doc doesn't specify infant handling for this
+  // flow at all). null entries mean that traveller's DOB isn't filled in
+  // yet - searchInsurancePlans blocks on this rather than guessing an age.
+  const insuranceTravellers = travellers.filter((t) => t.pt !== 'INFANT');
+  const insuranceTravellerAges = insuranceTravellers.map((t) => calculateAge(t.dob));
+
+  // Step 2 of the Embedded flow (tripsafe-api/07-embedded-api-
+  // integration.txt, Section B): Insurance Search, with "bid" (this
+  // flight's own Review-allocated bookingId) as a top-level sibling of
+  // "isq" - confirmed in the doc's own real sample request.
+  const searchInsurancePlans = async () => {
+    if (!insuranceDestinationCountry) {
+      Alert.alert('Travel Insurance', 'Could not determine this trip\'s destination country from the flight data.');
+      return;
+    }
+    if (!insuranceDates) {
+      Alert.alert('Travel Insurance', 'Flight dates are required to search for insurance.');
+      return;
+    }
+    if (insuranceTravellerAges.some((age) => age == null)) {
+      Alert.alert('Travel Insurance', 'Enter date of birth for every traveller before adding insurance.');
+      return;
+    }
+    setInsuranceSearching(true);
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          isq: {
+            sd: insuranceDates.sd,
+            ed: insuranceDates.ed,
+            // Real country codes straight from this flight's own TripJack
+            // segment data (rt: COUNTRY, not a manually-picked
+            // POPULARREGION guess) - both ends of the journey, per the
+            // doc's own Embedded Search sample.
+            isc: { iri: insuranceCountries.map((rkey) => ({ rkey, rt: 'COUNTRY' })) },
+            // The doc's Embedded Search sample sends the FULL traveller
+            // shape here (id/dob/isio plus ti/fn/ln/eid/cnum/pnum/pnan as
+            // empty strings), not just {age} like the Standalone flow - the
+            // name/contact fields get their real values at the Review step
+            // instead, so they're deliberately sent empty here to match the
+            // documented sample exactly.
+            iti: insuranceTravellers.map((t, index) => ({
+              id: index + 1,
+              age: insuranceTravellerAges[index],
+              dob: t.dob,
+              ti: '',
+              fn: '',
+              ln: '',
+              eid: '',
+              cnum: '',
+              pnum: '',
+              pnan: '',
+              isio: true,
+            })),
+            // Present in the doc's Embedded sample and absent from every
+            // other TripSafe flow's - meaning unexplained anywhere in the
+            // doc ("pht" is likely plan-holder-type), but sent verbatim
+            // since the Embedded endpoint is the one that expects it.
+            isp: { pht: 'REGULAR' },
+            isef: true,
+          },
+          bid: bookingId,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || data?.errors) {
+        throw parseTripJackError(data, 'Unable to fetch insurance plans right now.');
+      }
+      // Same isr-wrapper caveat as TripSafeScreen - Search itself does wrap
+      // in "isr" live, this fallback just costs nothing if that ever changes.
+      const plans = data?.isr?.iinfo?.pli ?? data?.iinfo?.pli ?? [];
+      if (plans.length === 0) {
+        Alert.alert('Travel Insurance', 'No insurance plans were found for this trip.');
+        return;
+      }
+      setInsurancePlans(plans);
+      setInsuranceModalVisible(true);
+    } catch (error) {
+      Alert.alert('Travel Insurance', error.message || 'Unable to fetch insurance plans right now.');
+    } finally {
+      setInsuranceSearching(false);
+    }
+  };
+
+  // Step 3 (Review): the doc's own sample here uses a FLAT request shape -
+  // top-level iid/pid/refid/sd/ed/iti - NOT the pli[]/pi[] nesting every
+  // other TripSafe flow uses. "refid" is this same flight's bookingId
+  // again (the doc calls it "Air Booking Review ID" in both steps, just
+  // under two different field names - "bid" here, "refid" there).
+  // The doc never shows a sample RESPONSE for this specific request shape,
+  // so the fare is read defensively, falling back to the Search step's own
+  // plan/product object (already confirmed reliable) if Review's response
+  // doesn't yield one.
+  const selectInsurancePlan = async (plan) => {
+    const product = plan?.pi?.[0];
+    if (!product?.pid) {
+      Alert.alert('Travel Insurance', 'This plan is missing product details and cannot be selected.');
+      return;
+    }
+    setInsuranceReviewing(true);
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          iid: plan.plid,
+          pid: product.pid,
+          refid: bookingId,
+          sd: insuranceDates.sd,
+          ed: insuranceDates.ed,
+          iti: insuranceTravellers.map((t, index) => ({
+            id: index + 1,
+            ti: t.ti,
+            fn: t.fN,
+            ln: t.lN,
+            age: insuranceTravellerAges[index],
+            dob: t.dob,
+            eid: deliveryEmail.trim(),
+            cnum: digitsOnly(deliveryPhone),
+            isio: true,
+          })),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || data?.errors) {
+        throw parseTripJackError(data, 'Unable to review this plan right now.');
+      }
+      const reviewedPlan = data?.isr?.iinfo?.pli?.[0] ?? data?.iinfo?.pli?.[0] ?? data?.pli?.[0];
+      const reviewedProduct = reviewedPlan?.pi?.[0];
+      const fare =
+        extractInsuranceFare(reviewedProduct) ??
+        extractInsuranceFare(reviewedPlan) ??
+        extractInsuranceFare(product) ??
+        extractInsuranceFare(plan) ??
+        extractEmbeddedSearchFare(product, insuranceDates?.sd, insuranceDates?.ed, insuranceTravellerAges);
+      if (fare == null) {
+        throw new Error('Could not determine this plan\'s premium - please try a different plan.');
+      }
+      setSelectedInsurance({
+        plid: plan.plid,
+        pid: product.pid,
+        planName: product.pi || product.pn || 'Travel Insurance',
+        fare,
+        // Confirmed live (2026-09-06): the Embedded Review response's own
+        // top-level "bid" IS the insurance booking id (distinct from the
+        // flight's bid passed in as refid). Capturing it here is far more
+        // reliable than digging for the undocumented "ipi" tag in the
+        // flight's booking-details afterwards - that hunt stays as a
+        // fallback only.
+        insBookingId: data?.bid || null,
+      });
+      setInsuranceModalVisible(false);
+    } catch (error) {
+      Alert.alert('Travel Insurance', error.message || 'Unable to review this plan right now.');
+    } finally {
+      setInsuranceReviewing(false);
+    }
+  };
 
   const fetchBookingDetails = async (id) => {
     const requestBody = { bookingId: id };
@@ -773,10 +1120,24 @@ const FlightBookingScreen = ({ route, navigation }) => {
       Alert.alert('Missing Information', validationError);
       return;
     }
+    // Insurance only ever applies to this Book & Pay path (Hold has no
+    // payment call to attach it to) - checked here rather than in the
+    // shared validateBookingForm() so Hold Fare is never blocked by it.
+    // Without this, toggling insurance on but never selecting a plan would
+    // silently book flight-only while the toggle still shows "on".
+    if (insuranceEnabled && !selectedInsurance) {
+      Alert.alert('Missing Information', 'Select a travel insurance plan to continue, or turn off travel insurance.');
+      return;
+    }
     setBusy(true);
     setPhase('confirming');
     try {
-      const body = { ...buildBookingBody(), paymentInfos: [{ amount: totalWithSsr }] };
+      // Insurance rides on this SAME Book call, per the Embedded doc's own
+      // Step 3 ("selected AIR PRICE + INS PRICE summed together into
+      // 'amount'") - insuranceAmount is 0 whenever insurance wasn't opted
+      // into or reviewed, making this byte-identical to the pre-insurance
+      // behavior in that case.
+      const body = { ...buildBookingBody(), paymentInfos: [{ amount: totalWithSsr + insuranceAmount }] };
 
       console.log('[book-instant] REQUEST', JSON.stringify(body));
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/book`, {
@@ -800,6 +1161,43 @@ const FlightBookingScreen = ({ route, navigation }) => {
         totalFare: details?.order?.amount ?? totalWithSsr,
         status: details?.order?.status || 'SUCCESS',
       });
+      if (insuranceAmount > 0 && selectedInsurance) {
+        // Prefer the insurance booking id the Embedded Review response
+        // already handed us (confirmed live) over the doc's "under the
+        // 'ipi' tag you get the INS BOOKING ID" in the flight's own
+        // booking-details, whose exact nesting the doc never shows - that
+        // stays as a defensive fallback. Best-effort either way: the
+        // flight itself already booked successfully independent of this,
+        // so a sync miss here just means it won't show in Profile >
+        // Bookings under Travel Insurance, nothing more.
+        // CONFIRMED LIVE (2026-09-06, booking TJS117602944482): the tag
+        // sits at itemInfos.AIR.ipi and is an OBJECT, not a bare id -
+        // {bid: "TJS705802944483", ifd: {ifc: {...}}, sd: ...}. The id is
+        // ipi.bid. Reading ipi directly would have stored "[object
+        // Object]" as the booking id.
+        const ipi = details?.itemInfos?.AIR?.ipi ?? details?.order?.additionalInfo?.ipi ?? details?.ipi;
+        const insBookingId =
+          selectedInsurance.insBookingId ||
+          (typeof ipi === 'string' ? ipi : ipi?.bid) ||
+          null;
+        if (insBookingId) {
+          try {
+            await fetch(`${API_CONFIG.BASE_URL}/tripsafe-bookings`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                tripjackBookingId: insBookingId,
+                planName: selectedInsurance.planName,
+                destinationSummary: routeSummary(flights),
+                amount: selectedInsurance.fare,
+                status: 'SUCCESS',
+              }),
+            });
+          } catch (syncError) {
+            // ignored - best-effort sync, see comment above
+          }
+        }
+      }
       setPhase('confirmed');
     } catch (error) {
       showTripJackErrorAlert('Book & Pay', error);
@@ -1627,6 +2025,14 @@ const FlightBookingScreen = ({ route, navigation }) => {
                 {segment.mealOptions.length ? (
                   <>
                     <Text style={styles.cardSubtitle}>Meal</Text>
+                    {/* Even on a "Free Meal" fare, the airline still serves a
+                        standard complimentary meal automatically - this menu
+                        is for pre-ordering a SPECIFIC dish instead, which is
+                        a separate, genuinely-priced TripJack add-on, not a
+                        replacement for what's already included. */}
+                    <Text style={styles.hintText}>
+                      Optional pre-order for a specific dish - separate from any meal already included with your fare.
+                    </Text>
                     <View style={styles.chipRow}>
                       {segment.mealOptions.map((option) => {
                         const selected = ssrSelections[segment.id]?.meal === option.code;
@@ -1765,6 +2171,51 @@ const FlightBookingScreen = ({ route, navigation }) => {
               );
             })}
 
+            {insuranceDestinationCountry ? (
+              <View style={styles.card}>
+                <View style={styles.cardTitleRow}>
+                  <Ionicons name="shield-checkmark-outline" size={15} color={Colors.primaryDark} />
+                  <Text style={styles.cardTitle}>Travel Insurance</Text>
+                </View>
+                <Text style={styles.cardSubtitle}>Coverage for {insuranceDestinationCountry}</Text>
+                <TouchableOpacity
+                  style={styles.insuranceToggleRow}
+                  onPress={() => {
+                    const next = !insuranceEnabled;
+                    setInsuranceEnabled(next);
+                    if (!next) setSelectedInsurance(null);
+                  }}
+                >
+                  <Ionicons name={insuranceEnabled ? 'checkbox' : 'square-outline'} size={20} color={Colors.primary} />
+                  <Text style={styles.cardSubtitle}>Add travel insurance for this trip</Text>
+                </TouchableOpacity>
+                {insuranceEnabled ? (
+                  selectedInsurance ? (
+                    <View style={styles.insuranceSelectedBox}>
+                      <View style={styles.insuranceSelectedText}>
+                        <Text style={styles.insurancePlanName}>{selectedInsurance.planName}</Text>
+                        <Text style={styles.insurancePlanFare}>₹{Math.round(selectedInsurance.fare).toLocaleString()}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => setSelectedInsurance(null)}>
+                        <Text style={styles.insuranceChangeText}>Change</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.secondaryButton} onPress={searchInsurancePlans} disabled={insuranceSearching}>
+                      {insuranceSearching ? (
+                        <ActivityIndicator color={Colors.primaryDark} />
+                      ) : (
+                        <>
+                          <Ionicons name="search-outline" size={15} color={Colors.primaryDark} />
+                          <Text style={styles.secondaryButtonText}>Search Insurance Plans</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )
+                ) : null}
+              </View>
+            ) : null}
+
             <View style={styles.card}>
               <View style={styles.cardTitleRow}>
                 <Ionicons name="receipt-outline" size={15} color={Colors.primaryDark} />
@@ -1790,6 +2241,12 @@ const FlightBookingScreen = ({ route, navigation }) => {
                 <View style={styles.metaRow}>
                   <Text style={styles.metaLabel}>Seat</Text>
                   <Text style={styles.metaValue}>₹{Math.round(computeSeatAmount()).toLocaleString()}</Text>
+                </View>
+              ) : null}
+              {insuranceAmount > 0 ? (
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaLabel}>Travel Insurance</Text>
+                  <Text style={styles.metaValue}>₹{Math.round(insuranceAmount).toLocaleString()}</Text>
                 </View>
               ) : null}
               <View style={styles.metaRow}>
@@ -1945,6 +2402,25 @@ const FlightBookingScreen = ({ route, navigation }) => {
             {phase === 'confirmed' && !isCancelled ? (
               <TouchableOpacity
                 style={styles.secondaryButton}
+                onPress={() => {
+                  const legs = bookingLegsFromDetails();
+                  const arrival = roundToHalfHourSlot(legs?.[0]?.arrivalTime);
+                  navigation.navigate('Cabs', {
+                    sourceBookingId: bookingId,
+                    prefillPickupDate: arrival?.date,
+                    prefillPickupTime: arrival?.time,
+                  });
+                }}
+                disabled={busy}
+              >
+                <Ionicons name="car-outline" size={15} color={Colors.primaryDark} />
+                <Text style={styles.secondaryButtonText}>Add an Airport Transfer</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {phase === 'confirmed' && !isCancelled ? (
+              <TouchableOpacity
+                style={styles.secondaryButton}
                 onPress={() => navigation.navigate('FlightReissue', { bookingId })}
                 disabled={busy}
               >
@@ -2051,6 +2527,9 @@ const FlightBookingScreen = ({ route, navigation }) => {
                           {mealOptions.length ? (
                             <>
                               <Text style={styles.ancillarySectionLabel}>Meal</Text>
+                              <Text style={styles.hintText}>
+                                Optional pre-order for a specific dish - separate from any meal already included with your fare.
+                              </Text>
                               <View style={styles.chipRow}>
                                 {mealOptions.map((option) => {
                                   const selected = ancillarySelections.meal?.[segment.id]?.[traveller.id] === option.code;
@@ -2111,6 +2590,66 @@ const FlightBookingScreen = ({ route, navigation }) => {
         </SafeAreaView>
       </Modal>
 
+      <Modal visible={insuranceModalVisible} animationType="slide" onRequestClose={() => setInsuranceModalVisible(false)}>
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setInsuranceModalVisible(false)}>
+              <Ionicons name="close" size={26} color={Colors.secondary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Choose a Plan</Text>
+            <View style={{ width: 26 }} />
+          </View>
+          <ScrollView contentContainerStyle={styles.content}>
+            {insurancePlans.map((plan, index) => {
+              const product = plan?.pi?.[0] || {};
+              const planName = product.pi || product.pn || 'Travel Insurance Plan';
+              const provider = product.lp || product.Ip || product.ip || '';
+              const benefits = (product.pbft || []).slice(0, 3);
+              // Embedded search has no tfd/fd - price comes from the
+              // day-keyed ppdf table instead (see extractEmbeddedSearchFare).
+              const fare =
+                extractInsuranceFare(product) ??
+                extractInsuranceFare(plan) ??
+                extractEmbeddedSearchFare(product, insuranceDates?.sd, insuranceDates?.ed, insuranceTravellerAges);
+              return (
+                <View key={plan.plid || index} style={styles.card}>
+                  <View style={styles.cardTitleRow}>
+                    <Ionicons name="shield-checkmark" size={18} color={Colors.primary} />
+                    <Text style={styles.cardTitle}>{planName}</Text>
+                  </View>
+                  {provider ? <Text style={styles.cardSubtitle}>by {provider}</Text> : null}
+                  {benefits.map((benefit, bIndex) => (
+                    <View key={bIndex} style={styles.metaRow}>
+                      <Ionicons name="checkmark-circle" size={13} color={Colors.success} />
+                      <Text style={styles.insuranceBenefitText} numberOfLines={1}>{benefit.name}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.ticketDivider} />
+                  <View style={styles.metaRow}>
+                    {fare != null ? (
+                      <Text style={styles.metaValueAccent}>₹{Math.round(fare).toLocaleString()}</Text>
+                    ) : (
+                      <Text style={styles.metaLabel}>Price unavailable</Text>
+                    )}
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={() => selectInsurancePlan(plan)}
+                      disabled={insuranceReviewing}
+                    >
+                      {insuranceReviewing ? (
+                        <ActivityIndicator color={Colors.primaryDark} size="small" />
+                      ) : (
+                        <Text style={styles.secondaryButtonText}>Select</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
       <DatePickerModal
         visible={datePicker.visible}
         title={
@@ -2124,6 +2663,12 @@ const FlightBookingScreen = ({ route, navigation }) => {
         onSelect={chooseDate}
         onClose={closeDatePicker}
       />
+
+      {seatToast ? (
+        <Animated.View pointerEvents="none" style={[styles.seatToast, { opacity: seatToastOpacity }]}>
+          <Text style={styles.seatToastText}>{seatToast}</Text>
+        </Animated.View>
+      ) : null}
     </SafeAreaView>
   );
 };
@@ -2132,6 +2677,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  seatToast: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    maxWidth: '86%',
+    backgroundColor: 'rgba(31,32,36,0.92)',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+  },
+  seatToastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -2148,13 +2714,20 @@ const styles = StyleSheet.create({
   },
   sectionTabBar: {
     flexDirection: 'row',
+    // A horizontal ScrollView with no explicit height can end up
+    // auto-measured a hair too short for its own text's real line box
+    // (especially the bold/active tab) and clip the top of the glyphs -
+    // fixing the height directly rather than relying on the ScrollView to
+    // size itself from content.
+    height: 50,
+    flexGrow: 0,
     backgroundColor: Colors.card,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   sectionTab: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    justifyContent: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
@@ -2361,6 +2934,46 @@ const styles = StyleSheet.create({
   ssrChipTextSelected: {
     color: Colors.primaryDark,
     fontWeight: '700',
+  },
+  insuranceToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  insuranceSelectedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+  },
+  insuranceSelectedText: {
+    flex: 1,
+  },
+  insurancePlanName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  insurancePlanFare: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.primaryDark,
+    marginTop: 2,
+  },
+  insuranceChangeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  insuranceBenefitText: {
+    fontSize: 12,
+    color: Colors.textLight,
+    flex: 1,
+    marginLeft: 6,
   },
   seatLegendRow: {
     flexDirection: 'row',

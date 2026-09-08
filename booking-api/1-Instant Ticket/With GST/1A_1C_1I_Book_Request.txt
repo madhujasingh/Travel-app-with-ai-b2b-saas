@@ -1,0 +1,44 @@
+{
+  "bookingId": "TJS106300003496",
+  "paymentInfos": [
+    {
+      "amount": 7403.00
+    }
+  ],
+  "travellerInfo": [
+    {
+      "ti": "Mr",
+      "fN": "Test",
+      "lN": "AdultA",
+      "pt": "ADULT"
+    },
+    {
+      "ti": "Master",
+      "fN": "Test",
+      "lN": "ChildA",
+      "pt": "CHILD"
+    },
+    {
+      "ti": "Ms",
+      "fN": "Test",
+      "lN": "InfantA",
+      "pt": "INFANT",
+      "dob":"2019-08-09"
+    }
+  ],
+  "gstInfo": {
+    "gstNumber": "07AAGCT7826A1ZF",
+    "email": "prabhu@technogramsolutions.com ",
+    "registeredName": "TGS Pvt Ltd",
+    "mobile": "9538500324",
+    "address": "gurugram"
+  },
+  "deliveryInfo": {
+    "emails": [
+      "prabhu@technogramsolutions.com"
+    ],
+    "contacts": [
+      "9538500324"
+    ]
+  }
+} 

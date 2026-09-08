@@ -1,0 +1,2583 @@
+{
+  "info": {
+    "_postman_id": "c665dc90-3b9a-4fb3-afb2-53d62c84f29c",
+    "name": "TJ API Integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "45562599"
+  },
+  "item": [
+    {
+      "name": "Air Search",
+      "item": [
+        {
+          "name": "Air Search - Domestic Oneway",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"searchQuery\": {\n        \"cabinClass\": \"ECONOMY\",\n        \"paxInfo\": {\n            \"ADULT\": \"1\",\n            \"CHILD\": \"0\",\n            \"INFANT\": \"0\"\n        },\n        \"routeInfos\": [\n            {\n                \"fromCityOrAirport\": {\n                    \"code\": \"DEL\"\n                },\n                \"toCityOrAirport\": {\n                    \"code\": \"BOM\"\n                },\n                \"travelDate\": \"2025-10-19\"\n            }\n        ],\n        \"preferredAirline\": [\n            {\n                \"code\": \" \"\n            }\n        ],\n        \"searchModifiers\": {\n            \"isDirectFlight\": true,\n            \"isConnectingFlight\": true,\n            \"pft\": \"REGULAR\"\n            //  \"pft\": \"SENIOR_CITIZEN/STUDENT\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/air-search-all",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "air-search-all"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Search  - International Oneway",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"searchQuery\": {\n        \"cabinClass\": \"ECONOMY\",\n        \"paxInfo\": {\n            \"ADULT\": \"1\",\n            \"CHILD\": \"0\",\n            \"INFANT\": \"0\"\n        },\n        \"routeInfos\": [\n            {\n                \"fromCityOrAirport\": {\n                    \"code\": \"DEL\"\n                },\n                \"toCityOrAirport\": {\n                    \"code\": \"SIN\"\n                },\n                \"travelDate\": \"2023-10-27\"\n            },\n              {\n                \"fromCityOrAirport\": {\n                    \"code\": \"SIN\"\n                },\n                \"toCityOrAirport\": {\n                    \"code\": \"DEL\"\n                },\n                \"travelDate\": \"2023-11-27\"\n            }\n        ],\n        \"preferredAirline\": [\n            {\n                \"code\": \"\"\n            }\n        ],\n        \"searchModifiers\": {\n            \"isDirectFlight\": true,\n            \"isConnectingFlight\": false\n\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/air-search-all",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "air-search-all"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Search - Domestic Return",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"searchQuery\": {\n        \"cabinClass\": \"ECONOMY\",\n        \"paxInfo\": {\n            \"ADULT\": \"1\",\n            \"CHILD\": \"1\",\n            \"INFANT\": \"0\"\n        },\n        \"routeInfos\": [\n            {\n                \"fromCityOrAirport\": {\n                    \"code\": \"DEL\"\n                },\n                \"toCityOrAirport\": {\n                    \"code\": \"MAA\"\n                },\n                \"travelDate\": \"2024-10-19\"\n            },\n            {\n                \"fromCityOrAirport\": {\n                    \"code\": \"MAA\"\n                },\n                \"toCityOrAirport\": {\n                    \"code\": \"DEL\"\n                },\n                \"travelDate\": \"2024-11-19\"\n            }\n        ],\n        \"preferredAirline\": [\n            {\n                \"code\": \"\"\n            }\n        ],\n        \"searchModifiers\": {\n            \"isDirectFlight\": true,\n            \"isConnectingFlight\": false\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/air-search-all",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "air-search-all"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Search - International Return",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"searchQuery\": {\n    \"cabinClass\": \"ECONOMY\",\n    \"paxInfo\": {\n      \"ADULT\": \"1\",\n      \"CHILD\": \"0\",\n      \"INFANT\": \"0\"\n    },\n    \"routeInfos\": [\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"DOH\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"COK\"\n        },\n        \"travelDate\": \"2023-06-30\"\n      },\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"COK\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"DOH\"\n        },\n        \"travelDate\": \"2023-08-03\"\n      }\n    ],\n    \"searchModifiers\": {\n    \t\"isDirectFlight\": true,\n        \"isConnectingFlight\": false\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/air-search-all",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "air-search-all"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Search - Domestic Multicity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"searchQuery\": {\n    \"cabinClass\": \"ECONOMY\",\n    \"paxInfo\": {\n      \"ADULT\": \"1\",\n      \"CHILD\": \"1\",\n      \"INFANT\": \"0\"\n    },\n    \"routeInfos\": [\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"DEL\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"MAA\"\n        },\n        \"travelDate\": \"2023-10-19\"\n      },\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"MAA\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"GAU\"\n        },\n        \"travelDate\": \"2023-11-19\"\n      },\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"GAU\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"CCU\"\n        },\n        \"travelDate\": \"2023-12-19\"\n      }\n    ],\n    \"searchModifiers\": {\n      \"isDirectFlight\": true,\n      \"isConnectingFlight\": false\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/air-search-all",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "air-search-all"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Search - International Multicity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"searchQuery\": {\n    \"cabinClass\": \"ECONOMY\",\n    \"paxInfo\": {\n      \"ADULT\": \"1\",\n      \"CHILD\": \"0\",\n      \"INFANT\": \"0\"\n    },\n    \"routeInfos\": [\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"DEL\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"SIN\"\n        },\n        \"travelDate\": \"2023-10-10\"\n      },\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"SIN\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"BKK\"\n        },\n        \"travelDate\": \"2023-10-20\"\n      },\n      {\n        \"fromCityOrAirport\": {\n          \"code\": \"BKK\"\n        },\n        \"toCityOrAirport\": {\n          \"code\": \"MAA\"\n        },\n        \"travelDate\": \"2023-10-30\"\n      }\n    ],\n    \"searchModifiers\": {\n      \"isDirectFlight\": false,\n      \"isConnectingFlight\": true\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/air-search-all",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "air-search-all"
+              ]
+            },
+            "description": "Search API for International Multicity"
+          },
+          "response": []
+        }
+      ],
+      "description": "Features :\n\n1. Review With Booking Id \n2. Review With Prive validation (True, False)\n3. Close Session "
+    },
+    {
+      "name": "Air Review/Revalidate",
+      "item": [
+        {
+          "name": "Air Review - Domestic Oneway",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"bookingId\", pm.response.json().bookingId);",
+                  "pm.environment.set(\"TF\", pm.response.json().totalPriceInfo.totalFareDetail.fC.TF);",
+                  "",
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  ""
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"priceIds\": [\n        \"2-7047687197_0DELCMBUL196CMBSINUL306~15892609193268949\"\n    ]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/review",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "review"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Review  - International Oneway",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"bookingId\", pm.response.json().bookingId);",
+                  "pm.environment.set(\"TF\", pm.response.json().totalPriceInfo.totalFareDetail.fC.TF);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceIds\" : [ \"12-5936970268_DELBOM9W313BOMBLR9W443_216104423654421\"]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/review",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "review"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Review - Domestic Return",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"bookingId\", pm.response.json().bookingId);",
+                  "pm.environment.set(\"TF\", pm.response.json().totalPriceInfo.totalFareDetail.fC.TF);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceIds\" : [ \"12-5936970268_DELBOM9W313BOMBLR9W443_216104423654421\",\"5-5936970268_BOMDELAI313BOMBLR9W443_216104423654421\"]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/review",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "review"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Review - International Return",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"bookingId\", pm.response.json().bookingId);",
+                  "pm.environment.set(\"TF\", pm.response.json().totalPriceInfo.totalFareDetail.fC.TF);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceIds\" : [ \"12-5936970268_DELBOM9W313BOMBLR9W443_216104423654421\"]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/review",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "review"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Review - Domestic Multicity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"bookingId\", pm.response.json().bookingId);",
+                  "pm.environment.set(\"TF\", pm.response.json().totalPriceInfo.totalFareDetail.fC.TF);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceIds\" : [ \"12-5936970268_DELBOM9W313BOMBLR9W443_216104423654421\",\"5-5936970268_BOMDELAI313BOMBLR9W443_216104423654421\",\"5-5936970268_DELCCUAI317BOMBLR9W443_216104423654421\"]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/review",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "review"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Air Review - International Multicity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"bookingId\", pm.response.json().bookingId);",
+                  "pm.environment.set(\"TF\", pm.response.json().totalPriceInfo.totalFareDetail.fC.TF);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceIds\" : [ \"12-5936970268_DELBOM9W313BOMBLR9W443_216104423654421\"]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/review",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "review"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Features :\n\n1. Review With Booking Id \n2. Review With Prive validation (True, False)\n3. Close Session "
+    },
+    {
+      "name": "Fare Rule",
+      "item": [
+        {
+          "name": "Get Trip Fare Rule V2 - Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\":\"15-2-12-10-6153798242_0DELALAKC964ALASCOKC663SCOLHRKC663LHRSCOKC664SCOALAKC664ALADELKC963_29028978592869\", \n  \"flowType\":\"SEARCH\"\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v2/farerule",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v2",
+                "farerule"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Trip Fare Rule V1 -  Search",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\":\"9-8798785004_HYDBLRI5514_2848021962542\",\n  \"flowType\":\"SEARCH\"\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/farerule",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "farerule"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Trip Fare Rule V2 -  Review/Revalidate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\":\"TJS116700526305\",\n  \"flowType\":\"REVIEW\"\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v2/farerule",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v2",
+                "farerule"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Trip Fare Rule V1 -  Review/Revalidate Copy",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\":\"TJS116700526305\",\n  \"flowType\":\"REVIEW\"\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/farerule",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "farerule"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Trip Fare Rule V2 -  After Booking [Booking Detail]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\":\"TJS118400755316\",\n  \"flowType\":\"BOOKING_DETAIL\"\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v2/farerule",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v2",
+                "farerule"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Seat Map",
+      "item": [
+        {
+          "name": "Air Seat  Map",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"bookingId\", pm.response.json().bookingId);"
+                ],
+                "type": "text/javascript",
+                "packages": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\" : {{bookingId}}\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/seat",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "seat"
+              ]
+            },
+            "description": "This Feature is used to get Seat Map Available after review to select seats."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Air Book",
+      "item": [
+        {
+          "name": "Confirm Booking - Immediate Ticket - Multi Pax With Passport",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": {{bookingId}},\n  \"paymentInfos\": [\n    {\n      \"amount\": {{TF}}\n      \n    }\n  ],\n  \"travellerInfo\": [\n    {\n      \"ti\": \"Mr\",\n      \"fN\": \"Test\",\n      \"lN\": \"AdultA\",\n      \"pt\": \"ADULT\",\n      \"dob\":\"1996-08-09\",\n      \"pNat\":\"IN\",\n      \"pNum\":\"87UYITB\",\n      \"eD\":\"2030-09-08\"\n    },\n    {\n      \"ti\": \"Mr\",\n      \"fN\": \"Test\",\n      \"lN\": \"AdultB\",\n      \"pt\": \"ADULT\",\n      \"dob\": \"2018-08-06\",\n       \"pNat\":\"IN\",\n      \"pNum\":\"87UYI89\",\n      \"eD\":\"2030-09-08\"\n    },\n    {\n      \"ti\": \"Master\",\n      \"fN\": \"Test\",\n      \"lN\": \"ChildA\",\n      \"pt\": \"CHILD\",\n      \"dob\": \"2014-08-06\",\n       \"pNat\":\"IN\",\n      \"pNum\":\"87UYI89\",\n      \"eD\":\"2030-09-08\"\n    },\n     {\n      \"ti\": \"Ms\",\n      \"fN\": \"Test\",\n      \"lN\": \"InfantA\",\n      \"pt\": \"INFANT\",\n      \"dob\": \"2019-02-06\",\n       \"pNat\":\"IN\",\n      \"pNum\":\"87UYI89\",\n      \"eD\":\"2030-09-08\"\n    }\n  ],\n  \"gstInfo\": {\n    \"gstNumber\": \"07ZZAS7YY6XXZF\",\n    \"email\": \"apitest@apitest.com \",\n    \"registeredName\": \"XYZ Pvt Ltd\",\n    \"mobile\": \"9728408906\",\n    \"address\": \"Delhi\"\n  },\n  \"deliveryInfo\": {\n    \"emails\": [\n      \"xyz@xyz.com\"\n    ],\n    \"contacts\": [\n      \"9489275524\"\n    ]\n  }\n} "
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/book",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "book"
+              ]
+            },
+            "description": "This Functionality will be confirming the Itinerary Immediately  - PNR Must Be Mandatory - Ticket Number Optional (Based on Supplier)\n\nI/P : AirBookingRequest\nO/P: BookingResponse"
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Booking - Immediate Ticket - Multi Pax",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": {{bookingId}},\n  \"paymentInfos\": [\n    {\n      \"amount\": {{TF}}\n      \n    }\n  ],\n  \"travellerInfo\": [\n    {\n      \"ti\": \"Mr\",\n      \"fN\": \"Test\",\n      \"lN\": \"AdultA\",\n      \"pt\": \"ADULT\"\n    },\n    {\n      \"ti\": \"Mr\",\n      \"fN\": \"Test\",\n      \"lN\": \"AdultB\",\n      \"pt\": \"ADULT\"\n    },\n    {\n      \"ti\": \"Master\",\n      \"fN\": \"Test\",\n      \"lN\": \"ChildA\",\n      \"pt\": \"CHILD\",\n      \"dob\": \"2014-08-06\"\n    },\n     {\n      \"ti\": \"Ms\",\n      \"fN\": \"Test\",\n      \"lN\": \"InfantA\",\n      \"pt\": \"INFANT\",\n      \"dob\": \"2019-02-06\"\n    }\n  ],\n  \n  \"gstInfo\": {\n    \"gstNumber\": \"07ZZAS7YY6XXZF\",\n    \"email\": \"apitest@apitest.com \",\n    \"registeredName\": \"XYZ Pvt Ltd\",\n    \"mobile\": \"9728408906\",\n    \"address\": \"Delhi\"\n  },\n  \"deliveryInfo\": {\n    \"emails\": [\n      \"xyz@xyz.com\"\n    ],\n    \"contacts\": [\n      \"9489275524\"\n    ]\n  }\n} "
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/book",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "book"
+              ]
+            },
+            "description": "This Functionality will be confirming the Itinerary Immediately  - PNR Must Be Mandatory - Ticket Number Optional (Based on Supplier)\n\nI/P : AirBookingRequest\nO/P: BookingResponse"
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Booking - Immediate Ticket - With GST",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"bookingId\": {{bookingId}},\n    \"paymentInfos\": [\n        {\n            \"amount\": {{TF}}\n        }\n    ],\n    \"travellerInfo\": [\n        {\n            \"ti\": \"Mr\",\n            \"fN\": \"Amit\",\n            \"lN\": \"Mehra\",\n            \"pt\": \"ADULT\",\n            \"dob\": \"1986-02-06\",\n            \"pNat\": \"IN\",\n            \"pid\": \"2020-09-08\",\n            \"pNum\": \"87UYITB\",\n            \"eD\": \"2030-09-08\",\n            \"di\": \"54266\",\n            \"ff\": {\n                \"UK\": \"8546\"\n            },\n            \"ssrBaggageInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"BAG01\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"BAG01\"\n                }\n            ],\n            \"ssrMealInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"ML01\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"ML04\"\n                }\n            ],\n            \"ssrSeatInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"15A\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"16B\"\n                }\n            ]\n        },\n        {\n            \"ti\": \"Mrs\",\n            \"fN\": \"Vanshika\",\n            \"lN\": \"Sharma\",\n            \"pt\": \"ADULT\",\n            \"dob\": \"1987-02-06\",\n            \"pNat\": \"IN\",\n            \"pid\": \"2020-09-08\",\n            \"pNum\": \"56DFSG\",\n            \"eD\": \"2030-09-08\",\n            \"ssrBaggageInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"BAG01\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"BAG01\"\n                }\n            ],\n            \"ssrMealInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"ML01\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"ML04\"\n                }\n            ],\n            \"ssrSeatInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"15A\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"16B\"\n                }\n            ]\n        },\n        {\n            \"ti\": \"Master\",\n            \"fN\": \"Anuj\",\n            \"lN\": \"Sharma\",\n            \"pt\": \"CHILD\",\n            \"dob\": \"2016-02-06\",\n            \"pNat\": \"IN\",\n            \"pid\": \"2020-09-08\",\n            \"pNum\": \"432DFDD\",\n            \"eD\": \"2030-09-08\",\n            \"ssrBaggageInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"BAG01\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"BAG01\"\n                }\n            ],\n            \"ssrMealInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"ML01\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"ML04\"\n                }\n            ],\n            \"ssrSeatInfos\": [\n                {\n                    \"key\": \"segmentkey1\",\n                    \"code\": \"15A\"\n                },\n                {\n                    \"key\": \"segmentkey2\",\n                    \"code\": \"16B\"\n                }\n            ]\n        },\n        {\n            \"ti\": \"Master\",\n            \"fN\": \"Amit\",\n            \"lN\": \"Kumar\",\n            \"pt\": \"INFANT\",\n            \"dob\": \"2024-01-06\",\n            \"pNat\": \"IN\",\n            \"pid\": \"2024-02-08\",\n            \"pNum\": \"345UBFSK\",\n            \"eD\": \"2034-02-08\"\n        }\n    ],\n    \"gstInfo\": {\n        \"gstNumber\": \"27AAUFM1756H1ZT\",\n        \"email\": \"shivam@apitest.com\",\n        \"registeredName\": \"Lalu Laal Pvt Ltd\",\n        \"mobile\": \"5874521365\",\n        \"address\": \"Delhi\"\n    },\n    \"deliveryInfo\": {\n        \"emails\": [\n            \"shivam@apitest.com\"\n        ],\n        \"contacts\": [\n            \"+91 5874521365\"\n        ]\n    },\n    \"contactInfo\": {\n        \"ecn\": \"Emergency Contact Details\",\n        \"emails\": [\n            \"lallulal@tripjack.com\"\n        ],\n        \"contacts\": [\n            \"+918657743447\"\n        ]\n    }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/book",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "book"
+              ]
+            },
+            "description": "This Functionality will be confirming the Itinerary Immediately  - PNR Must Be Mandatory - Ticket Number Optional (Based on Supplier)\n\nI/P : AirBookingRequest\nO/P: BookingResponse"
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Booking - Immediate Ticket - Multi Pax With SSR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": {{bookingId}},\n  \"paymentInfos\": [\n    {\n      \"amount\": {{TF}}\n      \n    }\n  ],\n  \"travellerInfo\": [\n    {\n      \"ti\": \"Mr\",\n      \"fN\": \"Test\",\n      \"lN\": \"AdultA\",\n      \"pt\": \"ADULT\",\n      \"dob\":\"1996-08-09\",\n      \"pNat\":\"IN\",\n      \"pNum\":\"87UYITB\",\n      \"eD\":\"2030-09-08\",\n      \"ssrBaggageInfos\":[\n      \t{\n      \t\t\"key\":\"segmentkey1\",\n      \t\t\"code\":\"BAG01\"\n      \t},\n      \t{\n      \t\t\"key\":\"segmentkey2\",\n      \t\t\"code\":\"BAG01\"\n      \t}\n      \t],\n      \"ssrMealInfos\":[\n      \t{\n      \t\t\"key\":\"segmentkey1\",\n      \t\t\"code\":\"ML01\"\n      \t},\n      \t{\n      \t\t\"key\":\"segmentkey2\",\n      \t\t\"code\":\"ML04\"\n      \t}\n      \t],\n      \t\"ssrSeatInfos\":[\n      \t\t{\n      \t\t\"key\":\"segmentkey1\",\n      \t\t\"code\":\"15A\"\n      \t},\n      \t{\n      \t\t\"key\":\"segmentkey2\",\n      \t\t\"code\":\"16B\"\n      \t}]\n    },\n    {\n      \"ti\": \"Mr\",\n      \"fN\": \"Test\",\n      \"lN\": \"AdultB\",\n      \"pt\": \"ADULT\",\n      \"dob\": \"2018-08-06\",\n       \"pNat\":\"IN\",\n      \"pNum\":\"87UYI89\",\n      \"eD\":\"2030-09-08\",\n      \"ssrBaggageInfos\":[\n      \t{\n      \t\t\"key\":\"segmentkey1\",\n      \t\t\"code\":\"BAG01\"\n      \t},\n      \t{\n      \t\t\"key\":\"segmentkey2\",\n      \t\t\"code\":\"BAG01\"\n      \t}\n      \t],\n      \"ssrMealInfos\":[\n      \t{\n      \t\t\"key\":\"segmentkey1\",\n      \t\t\"code\":\"ML01\"\n      \t},\n      \t{\n      \t\t\"key\":\"segmentkey2\",\n      \t\t\"code\":\"ML04\"\n      \t}\n      \t],\n      \t\"ssrSeatInfos\":[\n      \t\t{\n      \t\t\"key\":\"segmentkey1\",\n      \t\t\"code\":\"15B\"\n      \t},\n      \t{\n      \t\t\"key\":\"segmentkey2\",\n      \t\t\"code\":\"16A\"\n      \t}]\n    },\n    {\n      \"ti\": \"Master\",\n      \"fN\": \"Test\",\n      \"lN\": \"ChildA\",\n      \"pt\": \"CHILD\",\n      \"dob\": \"2014-08-06\",\n       \"pNat\":\"IN\",\n      \"pNum\":\"87UYI89\",\n      \"eD\":\"2030-09-08\"\n    },\n     {\n      \"ti\": \"Ms\",\n      \"fN\": \"Test\",\n      \"lN\": \"InfantA\",\n      \"pt\": \"INFANT\",\n      \"dob\": \"2019-02-06\",\n       \"pNat\":\"IN\",\n      \"pNum\":\"87UYI89\",\n      \"eD\":\"2030-09-08\"\n    }\n  ],\n  \"gstInfo\": {\n    \"gstNumber\": \"07ZZAS7YY6XXZF\",\n    \"email\": \"apitest@apitest.com \",\n    \"registeredName\": \"XYZ Pvt Ltd\",\n    \"mobile\": \"9728408906\",\n    \"address\": \"Delhi\"\n  },\n  \"deliveryInfo\": {\n    \"emails\": [\n      \"xyz@xyz.com\"\n    ],\n    \"contacts\": [\n      \"9489275524\"\n    ]\n  }\n} "
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/book",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "book"
+              ]
+            },
+            "description": "This Functionality will be confirming the Itinerary Immediately  - PNR Must Be Mandatory - Ticket Number Optional (Based on Supplier)\n\nI/P : AirBookingRequest\nO/P: BookingResponse"
+          },
+          "response": []
+        },
+        {
+          "name": "BLOCK (HOLD BOOKING)- BLOCK THE ITENARY",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"bookingId\": {{bookingId}},\n    \"travellerInfo\": [\n        {\n            \"ti\": \"Mr\",\n            \"fN\": \"Anuj\",\n            \"lN\": \"Malhotra\",\n            \"pt\": \"ADULT\",\n            \"dob\": \"1986-02-06\",\n            \"pNat\": \"IN\",\n            \"pid\": \"2020-09-08\",\n            \"pNum\": \"87UYITB\",\n            \"eD\": \"2030-09-08\",\n            \"di\": \"54266\",\n            \"ff\": {\n                \"UK\": \"8546\"\n            },\n            \"ssrSeatInfos\": [\n                {\n                    \"key\": \"56\",\n                    \"code\": \"1C\"\n                }\n            ],\n            \"ssrMealInfos\": [\n                {\n                    \"key\": \"56\",\n                    \"code\": \"UPMA\"\n                }\n            ],\n            \"ssrBaggageInfos\": [\n                {\n                    \"key\": \"56\",\n                    \"code\": \"XBPE\"\n                }\n            ]\n        }\n    ],\n    \"deliveryInfo\": {\n        \"emails\": [\n            \"xyz@xyz.com\"\n        ],\n        \"contacts\": [\n            \"9489275524\"\n        ]\n    }\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/book",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "book"
+              ]
+            },
+            "description": "This Functionality Just Block the Ticket (Only PNR will be created - time limit should be there)"
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm HOLD BOOK Fare Before Ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n\"bookingId\": {{bookingId}}\r\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/fare-validate",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "fare-validate"
+              ]
+            },
+            "description": "This Feature is Used ,after blocking the ticket & before confirming the ticket. [Validate - Fare & Time limit ]\n\nI/P : BookingRequest\nO/P: BookingResponse"
+          },
+          "response": []
+        },
+        {
+          "name": "HOLD CONFIRM BOOKING - AFTER BLOCK",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"bookingId\": {{bookingId}},\n \"paymentInfos\": [\n   {\n     \"amount\": 8558.7\n   }\n ]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/confirm-book",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "confirm-book"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "RELEASE PNR (UNHOLD BOOKING)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"bookingId\": {{bookingId}},\n    \"pnrs\": [\n        \"TESTPNR\"\n    ]\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/unhold",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "unhold"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Booking Details",
+      "item": [
+        {
+          "name": "Booking Retrieve [Booking-Details]",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": \"TJ100084289376\"\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/booking-details",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "booking-details"
+              ]
+            },
+            "description": "Add Commission Rule\n"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "API Amendments",
+      "item": [
+        {
+          "name": "Auto Cancellation",
+          "item": [
+            {
+              "name": "Get Cancellation Amendment Charges [Auto/Manual Cancellation Quotation]",
+              "item": [
+                {
+                  "name": "Amendment Charges-Oneway Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": {{bookingId}},\r\n    \"type\": \"CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BLR\",\r\n            \"departureDate\": \"2023-07-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"AMIT\",\r\n                    \"ln\": \"MEHRA\"\r\n                }\r\n              \r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-Oneway International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS103401076332\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2024-09-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-Return Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\":\"API Test CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DEL\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-Return International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\":\"API Test CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DXB\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DXB\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-MultiCity",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\": \"API Test CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-29\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"MAA\",\r\n            \"departureDate\": \"2023-11-02\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"MAA\",\r\n            \"dest\": \"GOI\",\r\n            \"departureDate\": \"2023-11-11\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Poll Amendment [Amendmend Satus]",
+              "item": [
+                {
+                  "name": "Poll Amendment [Amendment Status]",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "apikey",
+                        "value": "{{apikey}}",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"amendmentId\": \"2400603462\"\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-details",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-details"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Submit / Raise Cancellation Amendment",
+              "item": [
+                {
+                  "name": "Submit Assured Cancellation Amendment-Oneway Domestic Copy",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS10310000010844\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\":\"API TEST ASSURED CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BLR\",\r\n            \"departureDate\": \"2023-03-22\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"AMIT\",\r\n                    \"ln\": \"MEHRA\"\r\n                }\r\n            ]\r\n        }\r\n    ],\r\n    \"label\" : \"Assured Cancellation\"\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Cancellation Amendment-Oneway Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS10900000079866\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\": \"API Test CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BLR\",\r\n            \"dest\": \"AMD\",\r\n            \"departureDate\": \"2024-06-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                   {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Cancellation Amendment-Oneway International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": {{bookingId}},\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\": \"Full refund applicable as per DGCA cancellation guidelines\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"SIN\",\r\n            \"departureDate\": \"2024-11-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Cancellation Amendment-Return Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\":\"API Test CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DEL\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                 {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                   {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                 {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                   {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Cancellation Amendment-Return International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\":\"API Test CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DXB\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                   {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DXB\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                  {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                   {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Cancellation Amendment-MultiCity",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"CANCELLATION\",\r\n    \"remarks\": \"API Test CANCELLATION\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-29\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"MAA\",\r\n            \"departureDate\": \"2023-11-02\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"MAA\",\r\n            \"dest\": \"GOI\",\r\n            \"departureDate\": \"2023-11-11\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                },\r\n                {\r\n                    \"fn\": \"Anuj\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Auto Void",
+          "item": [
+            {
+              "name": "Get Void Amendment Charges [Auto/Manual VOID Quotation]",
+              "item": [
+                {
+                  "name": "Amendment Charges-Oneway Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": {{bookingId}},\r\n    \"type\": \"VOIDED\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BLR\",\r\n            \"departureDate\": \"2023-07-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"AMIT\",\r\n                    \"ln\": \"MEHRA\"\r\n                }\r\n              \r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-Oneway International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\":{{bookingId}},\r\n    \"type\": \"VOIDED\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"DXB\",\r\n            \"departureDate\": \"2023-09-23\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                {\r\n                    \"fn\": \"Vanshika\",\r\n                    \"ln\": \"Sharma\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-Return Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\":\"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DEL\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-Return International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\":\"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DXB\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DXB\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Amendment Charges-MultiCity",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\": \"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-29\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"MAA\",\r\n            \"departureDate\": \"2023-11-02\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"MAA\",\r\n            \"dest\": \"GOI\",\r\n            \"departureDate\": \"2023-11-11\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-charges",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-charges"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Poll Amendment [Amendmend Satus]",
+              "item": [
+                {
+                  "name": "Poll Amendment [Amendment Status]",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "apikey",
+                        "value": "{{apikey}}",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"amendmentId\": \"2400603462\"\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/amendment-details",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "amendment-details"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Submit / Raise Void Amendment",
+              "item": [
+                {
+                  "name": "Submit Assured Void Amendment-Oneway Domestic Copy",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS10310000010844\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\":\"API TEST ASSURED VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BLR\",\r\n            \"departureDate\": \"2023-03-22\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"AMIT\",\r\n                    \"ln\": \"MEHRA\"\r\n                }\r\n            ]\r\n        }\r\n    ],\r\n    \"label\" : \"Assured Cancellation\"\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Void Amendment-Oneway Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS10900000079866\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\": \"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BLR\",\r\n            \"dest\": \"AMD\",\r\n            \"departureDate\": \"2024-06-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Mehra\"\r\n                },\r\n                   {\r\n                    \"fn\": \"Amit\",\r\n                    \"ln\": \"Kumar\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Void Amendment-Oneway International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\": \"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DXB\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Void Amendment-Return Domestic",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\":\"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DEL\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Void Amendment-Return International",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\":\"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"DXB\",\r\n            \"departureDate\": \"2023-10-19\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTc\",\r\n                    \"ln\": \"TESTc\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"DXB\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-23\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTB\",\r\n                    \"ln\": \"TESTB\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTC\",\r\n                    \"ln\": \"TESTC\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Submit Void Amendment-MultiCity",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{token}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\r\n    \"bookingId\": \"TJS106600514370\",\r\n    \"type\": \"VOIDED\",\r\n    \"remarks\":\"API Test VOID\",\r\n    \"trips\": [\r\n        {\r\n            \"src\": \"DEL\",\r\n            \"dest\": \"BOM\",\r\n            \"departureDate\": \"2023-10-29\",\r\n            \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"BOM\",\r\n            \"dest\": \"MAA\",\r\n            \"departureDate\": \"2023-11-02\",\r\n             \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        },\r\n        {\r\n            \"src\": \"MAA\",\r\n            \"dest\": \"GOI\",\r\n            \"departureDate\": \"2023-11-11\",\r\n             \"travellers\": [\r\n                {\r\n                    \"fn\": \"TESTA\",\r\n                    \"ln\": \"TESTA\"\r\n                },\r\n                {\r\n                    \"fn\": \"TESTD\",\r\n                    \"ln\": \"TESTD\"\r\n                }\r\n            ]\r\n        }\r\n    ]\r\n}"
+                    },
+                    "url": {
+                      "raw": "https://{{host}}/oms/v1/air/amendment/submit-amendment",
+                      "protocol": "https",
+                      "host": [
+                        "{{host}}"
+                      ],
+                      "path": [
+                        "oms",
+                        "v1",
+                        "air",
+                        "amendment",
+                        "submit-amendment"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Auto Reissue",
+          "item": [
+            {
+              "name": "Reissue SearchQuery-list",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"paxInfo\": {\n        \"ADULT\": 1,\n        \"CHILD\": 0,\n        \"INFANT\": 0\n    },\n    \"routeInfos\": [\n        {\n            \"fromCityOrAirport\": {\n                \"code\": \"DEL\"\n            },\n            \"toCityOrAirport\": {\n                \"code\": \"SIN\"\n            },\n            \"travelDate\": \"2025-05-19\"\n        }\n    ],\n    \"oldBookingId\": {{bookingId}},\n    \"pnr\": \"XQ2L5F\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://{{host}}/fms/v1/reissue/poll/searchquery-list",
+                  "protocol": "https",
+                  "host": [
+                    "{{host}}"
+                  ],
+                  "path": [
+                    "fms",
+                    "v1",
+                    "reissue",
+                    "poll",
+                    "searchquery-list"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Reissue with request id",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"requestId\": \"4541051975\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://{{host}}/fms/v1/reissue/poll/search/",
+                  "protocol": "https",
+                  "host": [
+                    "{{host}}"
+                  ],
+                  "path": [
+                    "fms",
+                    "v1",
+                    "reissue",
+                    "poll",
+                    "search",
+                    ""
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Reissue Review",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"priceIds\": [\n    \"indigo-R-3336310286_17DELCCU6E6415CCUSIN6E1015~187462802732753\"\n    ],\n    \"oldBookingId\":{{bookingId}},\n    \"priceValidation\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://{{host}}/fms/v1/reissue/review",
+                  "protocol": "https",
+                  "host": [
+                    "{{host}}"
+                  ],
+                  "path": [
+                    "fms",
+                    "v1",
+                    "reissue",
+                    "review"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Reissue Book",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"bookingId\": \"TJS10970000089944\",\n    \"oldBookingId\": \"TJS10230000089938\",\n    \"paymentInfos\": [\n        {\n            \"bookingId\": \"TJS10970000089944\",\n            \"amount\": 456.50\n        }\n    ],\n    \"travellerInfo\": [\n        {\n            \"ti\": \"Mr\",\n            \"pt\": \"ADULT\",\n            \"fN\": \"Test\",\n            \"lN\": \"One\",\n            \"dob\": \"1996-08-06\"\n        }\n    ],\n    \"gstInfo\": {\n        \"isSave\": false\n    },\n    \"deliveryInfo\": {\n        \"emails\": [\n            \"xyxxqsbjd194@gmail.com\"\n        ],\n        \"contacts\": [\n            \"9667432838\"\n        ]\n    }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "https://{{host}}/oms/v1/air/amendment/auto-reissue",
+                  "protocol": "https",
+                  "host": [
+                    "{{host}}"
+                  ],
+                  "path": [
+                    "oms",
+                    "v1",
+                    "air",
+                    "amendment",
+                    "auto-reissue"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "User Wallet",
+      "item": [
+        {
+          "name": "Manage User [Wallet Balance]",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n\n}"
+            },
+            "url": {
+              "raw": "https://{{host}}/ums/v1/user-detail",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "ums",
+                "v1",
+                "user-detail"
+              ]
+            },
+            "description": "SignInRequest"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Post Booking Ancillary",
+      "item": [
+        {
+          "name": "Fetch Seat Map",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"bookingId\": \"TGS105680066976\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/ancillaries/fetch/seat",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "ancillaries",
+                "fetch",
+                "seat"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Meal/Baggage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"bookingId\": \"TGS105680066976\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{host}}/fms/v1/ancillaries/fetch/ssr",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "fms",
+                "v1",
+                "ancillaries",
+                "fetch",
+                "ssr"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Post Booking Ancillary SSR [1 Pax Single Journey]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"bookingId\": \"TJS105000601681\",\r\n    \"paymentInfos\": [\r\n        {\r\n            \"amount\": 3634\r\n        }\r\n    ],\r\n    \"sI\": [\r\n        {\r\n            \"id\": \"135899\",         // Segment ID\r\n            \"bI\": {\r\n                \"tI\": [\r\n                    {\r\n                        \"id\": 1,        // Pax ID\r\n                        \"sbi\": {\r\n                            \"code\": \"EB05\"\r\n                        },\r\n                        \"smi\": {\r\n                            \"code\": \"VGSW\"\r\n                        },\r\n                        \"ssi\": {\r\n                            \"code\": \"1A\"\r\n                        }\r\n                    }\r\n                ]\r\n            }\r\n        }\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/amendment/add/ssr",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "amendment",
+                "add",
+                "ssr"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Post Booking Ancillary SSR Copy [Multi Pax Multi Journey]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "apikey",
+                "value": "{{apikey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"bookingId\": \"TGS105680066976\",\r\n    \"paymentInfos\": [\r\n        {\r\n            \"amount\": 14917\r\n        }\r\n    ],\r\n    \"sI\": [\r\n        {\r\n            \"id\": \"115471\",\r\n            \"bI\": {\r\n                \"tI\": [\r\n                    {\r\n                        \"id\": 1,\r\n                        \"sbi\": {\r\n                            \"code\": \"EB05\"\r\n                        },\r\n                        \"smi\": {\r\n                            \"code\": \"VGSW\"\r\n                        },\r\n                        \"ssi\": {\r\n                            \"code\": \"1C\"\r\n                        }\r\n                    },\r\n                    {\r\n                        \"id\": 2,\r\n                        \"sbi\": {\r\n                            \"code\": \"EB10\"\r\n                        },\r\n                        \"smi\": {\r\n                            \"code\": \"VCC2\"\r\n                        },\r\n                        \"ssi\": {\r\n                            \"code\": \"1E\"\r\n                        }\r\n                    }\r\n                ]\r\n            }\r\n        },\r\n        {\r\n            \"id\": \"115472\",\r\n            \"bI\": {\r\n                \"tI\": [\r\n                    {\r\n                        \"id\": 1,\r\n                        \"sbi\": {\r\n                            \"code\": \"EB05\"\r\n                        },\r\n                        \"smi\": {\r\n                            \"code\": \"NCC6\"\r\n                        },\r\n                        \"ssi\": {\r\n                            \"code\": \"1A\"\r\n                        }\r\n                    },\r\n                    {\r\n                        \"id\": 2,\r\n                        \"sbi\": {\r\n                            \"code\": \"EB10\"\r\n                        },\r\n                        \"ssi\": {\r\n                            \"code\": \"1B\"\r\n                        }\r\n                    }\r\n                ]\r\n            }\r\n        }\r\n    ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{host}}/oms/v1/air/amendment/add/ssr",
+              "protocol": "https",
+              "host": [
+                "{{host}}"
+              ],
+              "path": [
+                "oms",
+                "v1",
+                "air",
+                "amendment",
+                "add",
+                "ssr"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+ "bookingId": "TJS119300003501",
+ "paymentInfos": [
+   {
+      "amount":"77063.20"
+   }
+ ]
+}

@@ -18,6 +18,7 @@ import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import DatePickerModal from '../components/DatePickerModal';
 import { digitsOnly } from '../utils/inputSanitizers';
+import { parseTripJackError } from '../utils/tripjackErrors';
 
 // tripsafe-api/03-booking-api.txt "List of Nominee Relations"
 const NOMINEE_RELATIONS = ['SPOUSE', 'CHILD', 'PARENT', 'SIBLING', 'FRIEND', 'GUARDIAN', 'OTHER'];
@@ -282,7 +283,11 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
           });
           return;
         }
-        throw new Error(rawMessage || 'Unable to complete this booking right now.');
+        // Route through the shared mapper so TripJack's raw codes/text
+        // (e.g. 2001 "Insufficient Balance", which is OUR agency wallet and
+        // would otherwise read to a customer as their own payment being
+        // declined) get customer-safe wording.
+        throw new Error(parseTripJackError(bookData, 'Unable to complete this booking right now.').message);
       }
       const confirmedBookingId = bookData?.bid || bookingId;
       const details = await fetchBookingDetails(confirmedBookingId);
@@ -373,7 +378,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
               `Refundable amount: ₹${refundAmount.toLocaleString()}`,
               [
                 { text: 'Back', style: 'cancel' },
-                { text: 'Proceed', style: 'destructive', onPress: () => submitCancellation(amendmentId, travellerKeys) },
+                { text: 'Proceed', style: 'destructive', onPress: () => submitCancellation() },
               ]
             );
           } catch (error) {
@@ -385,46 +390,58 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
     ]);
   };
 
-  const submitCancellation = async (amendmentId, travellerKeys) => {
+  // Cancels ONE traveller: raise -> confirm. Two hard-won details here,
+  // both proven live 2026-09-07 against TripJack's own Postman collection:
+  //  1. type is "CANCELLATION" on BOTH steps - the v6 PDF's
+  //     "INSURANCE_CANCELLATION" for the confirm step is simply wrong and
+  //     makes every confirm return REJECTED with no refund.
+  //  2. Travellers must be cancelled ONE AT A TIME. Sending all of a
+  //     multi-traveller booking's ids in a single travellerKeys array
+  //     returns REJECTED; the identical request per-traveller returns
+  //     SUCCESS and refunds correctly (verified recovering a 4-traveller
+  //     Rs 25,000 booking that had failed as a single call).
+  const cancelOneTraveller = async (id, plid, pid, travellerId) => {
+    const keys = { [plid]: { [pid]: [{ id: travellerId }] } };
+    const raiseResponse = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/amendment/raise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ amendmentId: '', bookingId: id, type: 'CANCELLATION', travellerKeys: keys }),
+    });
+    const raiseData = await raiseResponse.json();
+    if (!raiseResponse.ok || raiseData?.errors) {
+      throw new Error(raiseData?.errors?.[0]?.message || 'Could not start the cancellation.');
+    }
+    const amendmentId = raiseData?.amendmentItems?.[0]?.amendmentId;
+    if (!amendmentId) throw new Error('Could not start the cancellation.');
+
+    const response = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/amendment/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ amendmentId, bookingId: id, type: 'CANCELLATION', travellerKeys: keys }),
+    });
+    const data = await response.json();
+    if (!response.ok || data?.errors) {
+      throw new Error(data?.errors?.[0]?.message || data?.message || 'Unable to cancel this policy right now.');
+    }
+    if (data?.amendmentItems?.[0]?.status !== 'SUCCESS') {
+      throw new Error(`Cancellation was not accepted (status: ${data?.amendmentItems?.[0]?.status || 'unknown'}).`);
+    }
+    return Math.abs(Number(data?.insuranceCancellationResponse?.tmr || 0));
+  };
+
+  const submitCancellation = async () => {
     const id = booking?.order?.bookingId || bookingId;
-    if (!id || !amendmentId) return;
+    const bookedPlan = getBookedPlan(booking);
+    const bookedProduct = bookedPlan?.pi?.[0];
+    const iti = bookedProduct?.iti || [];
+    if (!id || !bookedPlan?.plid || !bookedProduct?.pid || iti.length === 0) return;
     setCancelling(true);
     try {
-      const cancelPayload = { amendmentId, bookingId: id, type: 'INSURANCE_CANCELLATION', travellerKeys };
-      const response = await fetch(`${API_CONFIG.BASE_URL}/tripsafe/amendment/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(cancelPayload),
-      });
-      const data = await response.json();
-      if (!response.ok || data?.errors) {
-        throw new Error(data?.errors?.[0]?.message || data?.message || 'Unable to cancel this policy right now.');
-      }
-      // amendmentItems[0].status is the one field the doc's FAQ explicitly
-      // documents as the confirmation signal (SUCCESS or REJECTED). A real
-      // REJECTED response (2026-09-05) also had a nested per-traveller
-      // "status": "CANCELLED" field that looked like a success signature -
-      // but Booking-Details doesn't expose any per-traveller status to
-      // cross-check against, so that nested field can't actually be
-      // verified as ground truth (an earlier fix here trusted it and was
-      // wrong to). For anything touching a refund, trust the documented
-      // field and report an honest failure rather than guess "success".
-      const status = data?.amendmentItems?.[0]?.status;
-      if (status !== 'SUCCESS') {
-        // Surface both signals so this is diagnosable without reopening
-        // debug logging - TripJack's REJECTED here may mean this new
-        // product's cancellation flow isn't fully functional yet on this
-        // UAT/test-key account (same class of issue as Cabs' vendor/wallet
-        // gaps), not necessarily a bug in this app.
-        const nestedStatus = data?.insuranceCancellationResponse?.iif?.pli?.[0]?.pi?.[0]?.iti?.[0]?.status;
-        throw new Error(
-          `TripJack did not confirm this cancellation (status: ${status || 'unknown'}` +
-            `${nestedStatus ? `, traveller record shows "${nestedStatus}"` : ''}). ` +
-            'This may mean cancellation isn\'t fully enabled yet for this account - check with TripJack if it persists.'
-        );
+      let refundAmount = 0;
+      for (const traveller of iti) {
+        refundAmount += await cancelOneTraveller(id, bookedPlan.plid, bookedProduct.pid, traveller.id);
       }
       setCancelled(true);
-      const refundAmount = Math.abs(Number(data?.insuranceCancellationResponse?.tmr || 0));
       syncTripSafeBooking(token, {
         bookingId: id,
         planName,
