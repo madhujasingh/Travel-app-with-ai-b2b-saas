@@ -64,3 +64,7 @@ venv/
 
 # TripJack support correspondence - can contain the live API key, never commit
 docu/
+
+# Local certification working notes (contain booking IDs / draft correspondence)
+certification-run-notes.local.md
+tripsafe-api/TRIPJACK-SUPPORT-EMAIL.draft.txt
