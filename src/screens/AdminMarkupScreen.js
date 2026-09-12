@@ -86,6 +86,7 @@ const AdminMarkupScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState(null);
   const [overrides, setOverrides] = useState([]);
+  const [ruleIds, setRuleIds] = useState({});
   // service -> { entityKey, entityLabel, value, unit }
   const [draftOverride, setDraftOverride] = useState({});
 
@@ -101,6 +102,7 @@ const AdminMarkupScreen = ({ navigation }) => {
       if (!response.ok) throw new Error('Unable to load markup settings.');
       const data = await response.json();
       const next = {};
+      const ids = {};
       const overrideList = [];
       (Array.isArray(data) ? data : []).forEach((rule) => {
         const entity = rule.entityKey || '';
@@ -109,9 +111,11 @@ const AdminMarkupScreen = ({ navigation }) => {
           unit: rule.markupUnit || 'FLAT_FULL',
           active: rule.active !== false,
         };
+        ids[ruleKey(rule.service, rule.category, entity)] = rule.id;
         if (entity) overrideList.push({ ...rule, entityKey: entity });
       });
       setRules(next);
+      setRuleIds(ids);
       setOverrides(overrideList);
     } catch (error) {
       appAlert('Markup', error.message);
@@ -133,6 +137,29 @@ const AdminMarkupScreen = ({ navigation }) => {
   const save = async (service, category, entityKey = '', override = null) => {
     const key = ruleKey(service, category, entityKey);
     const rule = override || rules[key] || {};
+
+    // An empty box means "no rule here", not "zero markup". Writing 0 would
+    // create a real rule that beats the service default, which is exactly how
+    // a configured markup silently stopped applying.
+    if (!override && String(rule.value ?? '').trim() === '') {
+      const existingId = ruleIds[key];
+      if (!existingId) return;
+      try {
+        setSavingKey(key);
+        await fetch(`${API_CONFIG.BASE_URL}/markup/admin/${existingId}`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        });
+        await load();
+        await refreshMarkup();
+      } catch (error) {
+        appAlert('Markup', 'Unable to clear this markup.');
+      } finally {
+        setSavingKey(null);
+      }
+      return;
+    }
+
     try {
       setSavingKey(key);
       const response = await fetch(`${API_CONFIG.BASE_URL}/markup/admin`, {
@@ -286,7 +313,16 @@ const AdminMarkupScreen = ({ navigation }) => {
 
     return (
       <View key={key} style={styles.ruleRow}>
-        <Text style={styles.ruleLabel}>{category.label}</Text>
+        <View style={styles.ruleLabelRow}>
+          <Text style={styles.ruleLabel}>{category.label}</Text>
+          {ruleIds[key] ? (
+            <Text style={styles.ruleActiveTag}>set</Text>
+          ) : (
+            <Text style={styles.ruleInheritTag}>
+              {category.key === 'DEFAULT' ? 'not set' : 'using default'}
+            </Text>
+          )}
+        </View>
 
         <View style={styles.ruleControls}>
           <TextInput
@@ -417,6 +453,22 @@ const styles = StyleSheet.create({
   serviceTitle: { fontSize: 16, fontWeight: '800', color: Colors.text },
 
   ruleRow: { gap: 8 },
+  ruleLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  ruleActiveTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.primaryDark,
+    backgroundColor: Colors.primarySoft,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  ruleInheritTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+
   ruleLabel: { fontSize: 13, fontWeight: '700', color: Colors.textLight },
   ruleControls: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
   valueInput: {
