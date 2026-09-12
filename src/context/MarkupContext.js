@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import API_CONFIG from '../config/api';
 
 // Markup is what we add on top of a supplier's fare and collect on our own
@@ -13,6 +14,7 @@ const MarkupContext = createContext({
   rules: {},
   markupFor: () => 0,
   sellingPrice: (base) => base,
+  refresh: () => {},
   ready: false,
 });
 
@@ -25,44 +27,50 @@ export const MarkupProvider = ({ token, children }) => {
   const [rules, setRules] = useState({});
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token) {
       setRules({});
       setReady(false);
-      return undefined;
+      return;
     }
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/markup`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return;
+      const data = await response.json();
 
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await fetch(`${API_CONFIG.BASE_URL}/markup`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) return;
-        const data = await response.json();
-        if (cancelled) return;
-
-        const next = {};
-        (Array.isArray(data) ? data : []).forEach((rule) => {
-          if (rule.active === false) return;
-          next[key(rule.service, rule.category, rule.entityKey)] = {
-            value: Number(rule.markupValue) || 0,
-            unit: rule.markupUnit || 'FLAT_FULL',
-          };
-        });
-        setRules(next);
-      } catch {
-        // Markup failing to load must never block browsing - prices simply
-        // show without it until the next load.
-      } finally {
-        if (!cancelled) setReady(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+      const next = {};
+      (Array.isArray(data) ? data : []).forEach((rule) => {
+        if (rule.active === false) return;
+        next[key(rule.service, rule.category, rule.entityKey)] = {
+          value: Number(rule.markupValue) || 0,
+          unit: rule.markupUnit || 'FLAT_FULL',
+        };
+      });
+      setRules(next);
+    } catch {
+      // Markup failing to load must never block browsing - prices simply
+      // show without it until the next load.
+    } finally {
+      setReady(true);
+    }
   }, [token]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Rules used to be fetched once per token, so saving a markup changed
+  // nothing on screen until the app was restarted - the admin screen calls
+  // refresh() after a save, and returning to the foreground re-reads them in
+  // case they were changed from another device or the web app.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') load();
+    });
+    return () => subscription?.remove?.();
+  }, [load]);
 
   const markupFor = useCallback(
     (service, category, baseAmount, paxCount = 1, entityKey = '') => {
@@ -101,8 +109,8 @@ export const MarkupProvider = ({ token, children }) => {
   );
 
   const value = useMemo(
-    () => ({ rules, markupFor, sellingPrice, ready }),
-    [rules, markupFor, sellingPrice, ready],
+    () => ({ rules, markupFor, sellingPrice, refresh: load, ready }),
+    [rules, markupFor, sellingPrice, load, ready],
   );
 
   return <MarkupContext.Provider value={value}>{children}</MarkupContext.Provider>;

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
+import { useMarkup } from '../context/MarkupContext';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,7 @@ const SERVICES = [
     label: 'Flights',
     icon: 'airplane-outline',
     categories: [
+      { key: 'DEFAULT', label: 'All flights (default)' },
       { key: 'DOMESTIC_ONEWAY', label: 'Domestic one way' },
       { key: 'DOMESTIC_ROUND', label: 'Domestic round trip' },
       { key: 'INTERNATIONAL_ONEWAY', label: 'International one way' },
@@ -51,6 +53,7 @@ const SERVICES = [
     label: 'Packages',
     icon: 'map-outline',
     categories: [
+      { key: 'DEFAULT', label: 'All packages (default)' },
       { key: 'DOMESTIC', label: 'Domestic packages' },
       { key: 'INTERNATIONAL', label: 'International packages' },
     ],
@@ -76,6 +79,8 @@ const OVERRIDE_ENTITIES = {
 const AdminMarkupScreen = ({ navigation }) => {
   const { token } = useAuth();
   const { centeredContent } = useResponsive();
+  // So a saved markup takes effect in search results immediately.
+  const { refresh: refreshMarkup } = useMarkup();
 
   const [rules, setRules] = useState({});
   const [loading, setLoading] = useState(true);
@@ -154,6 +159,7 @@ const AdminMarkupScreen = ({ navigation }) => {
       if (!response.ok) throw new Error(data?.message || 'Unable to save this markup.');
       setDraftOverride((current) => ({ ...current, [service]: null }));
       await load();
+      await refreshMarkup();
     } catch (error) {
       appAlert('Markup', error.message);
     } finally {
@@ -170,6 +176,7 @@ const AdminMarkupScreen = ({ navigation }) => {
       });
       if (!response.ok) throw new Error('Unable to remove this override.');
       await load();
+      await refreshMarkup();
     } catch (error) {
       appAlert('Markup', error.message);
     }
