@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -138,14 +138,14 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
 
   const handleParsePaste = () => {
     if (!pasteText.trim()) {
-      Alert.alert('Nothing to parse', 'Paste the package details first.');
+      appAlert('Nothing to parse', 'Paste the package details first.');
       return;
     }
 
     const parsed = parseFlyerText(pasteText);
     const matchedAny = Object.values(parsed).some((value) => value !== undefined);
     if (!matchedAny) {
-      Alert.alert(
+      appAlert(
         'Could not parse',
         'Didn’t recognize any fields. Try formatting with labels like "Destination:", "Price: ₹...", "Highlights:", and "Day 1: ..." on their own lines.'
       );
@@ -166,17 +166,17 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
       setDayPlans(parsed.dayPlans);
     }
 
-    Alert.alert('Parsed', 'Fields below have been filled in — review and edit before publishing.');
+    appAlert('Parsed', 'Fields below have been filled in — review and edit before publishing.');
   };
 
   const submitItinerary = async () => {
     if (!isAdmin) {
-      Alert.alert('Access denied', 'Only admins can upload itineraries.');
+      appAlert('Access denied', 'Only admins can upload itineraries.');
       return;
     }
 
     if (!canSubmit || !token) {
-      Alert.alert('Missing details', 'Please complete the required package fields and each day plan.');
+      appAlert('Missing details', 'Please complete the required package fields and each day plan.');
       return;
     }
 
@@ -218,7 +218,7 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
         throw new Error(data?.message || data?.error || 'Failed to create itinerary');
       }
 
-      Alert.alert('Itinerary uploaded', 'Your itinerary is now live in the app.', [
+      appAlert('Itinerary uploaded', 'Your itinerary is now live in the app.', [
         {
           text: 'View Details',
           onPress: () => navigation.replace('ItineraryDetail', { itinerary: data }),
@@ -244,7 +244,7 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
         },
       ]);
     } catch (error) {
-      Alert.alert('Upload failed', error.message || 'Unable to upload itinerary.');
+      appAlert('Upload failed', error.message || 'Unable to upload itinerary.');
     } finally {
       setSubmitting(false);
     }

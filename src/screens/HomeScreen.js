@@ -7,10 +7,10 @@ import {
   TextInput,
   ScrollView,
   StatusBar,
-  Alert,
   Animated,
   Image,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,6 +19,13 @@ import { Colors } from '../constants/Colors';
 import { useAuth } from '../context/AuthContext';
 import { digitsOnly } from '../utils/inputSanitizers';
 import PromoBannerCarousel from '../components/PromoBannerCarousel';
+import PageSection from '../components/web/PageSection';
+import useResponsive from '../hooks/useResponsive';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import WebHero from '../components/web/WebHero';
+import WebSearchPanel from '../components/web/WebSearchPanel';
+import WebField from '../components/web/WebField';
 
 const SERVICE_IMAGES = {
   landPackage: require('../../assets/services/land-package.png'),
@@ -26,10 +33,14 @@ const SERVICE_IMAGES = {
   hotels: require('../../assets/services/hotels.png'),
   groupPlanner: require('../../assets/services/group-planner.png'),
   activities: require('../../assets/services/activities.png'),
+  cabs: require('../../assets/services/cabs.png'),
+  tripsafe: require('../../assets/services/tripsafe.png'),
 };
 
 const HomeScreen = ({ navigation }) => {
   const { user } = useAuth();
+  const { isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const [budget, setBudget] = useState('');
   const [destination, setDestination] = useState('');
   const [adults, setAdults] = useState('');
@@ -101,24 +112,21 @@ const HomeScreen = ({ navigation }) => {
       id: 6,
       title: 'Cabs',
       subtitle: 'Airport, outstation & local rides',
-      // No matching illustration yet (the other 5 came from a provided
-      // reference image) - falls back to an icon tile instead of leaving
-      // this one blank. Swap in a real image the same way once available.
-      icon: 'car-outline',
+      image: SERVICE_IMAGES.cabs,
       screen: 'Cabs',
     },
     {
       id: 7,
       title: 'Travel Insurance',
       subtitle: 'Cover your trip against the unexpected',
-      icon: 'shield-checkmark-outline',
+      image: SERVICE_IMAGES.tripsafe,
       screen: 'TripSafe',
     },
   ];
 
   const handleSearch = () => {
     if (!budget || !destination || !adults) {
-      Alert.alert('Error', 'Please fill all fields');
+      appAlert('Error', 'Please fill all fields');
       return;
     }
 
@@ -127,7 +135,7 @@ const HomeScreen = ({ navigation }) => {
     const totalPeople = adultsCount + childrenCount;
 
     if (adultsCount < 1) {
-      Alert.alert('Invalid adults', 'At least 1 adult is required.');
+      appAlert('Invalid adults', 'At least 1 adult is required.');
       return;
     }
 
@@ -143,19 +151,19 @@ const HomeScreen = ({ navigation }) => {
 
   const goNextStep = () => {
     if (tripStep === 1 && !budget.trim()) {
-      Alert.alert('Missing budget', 'Please enter your budget to continue.');
+      appAlert('Missing budget', 'Please enter your budget to continue.');
       return;
     }
     if (tripStep === 2 && !destination.trim()) {
-      Alert.alert('Missing destination', 'Please enter destination to continue.');
+      appAlert('Missing destination', 'Please enter destination to continue.');
       return;
     }
     if (tripStep === 3 && !adults.trim()) {
-      Alert.alert('Missing adults', 'Please enter number of adults to continue.');
+      appAlert('Missing adults', 'Please enter number of adults to continue.');
       return;
     }
     if (tripStep === 3 && (parseInt(adults, 10) || 0) < 1) {
-      Alert.alert('Invalid adults', 'At least 1 adult is required.');
+      appAlert('Invalid adults', 'At least 1 adult is required.');
       return;
     }
     setTripStep((prev) => Math.min(prev + 1, 5));
@@ -168,16 +176,68 @@ const HomeScreen = ({ navigation }) => {
   const currentStep = stepMeta[tripStep - 1];
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, isDesktop && styles.containerDesktop]}>
       <StatusBar backgroundColor={Colors.primaryDark} barStyle="light-content" />
 
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Header */}
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} {...scrollProps}>
+        {/* Desktop uses the same hero shell as every product page, so Home reads
+            as part of the site rather than a differently-designed landing page.
+            The trip search moves into the hero panel alongside it. */}
+        {isDesktop ? (
+          <WebHero
+            title="Plan your perfect trip"
+            subtitle="Tell us your budget and where you're headed - we'll build the itinerary around it."
+            activeProduct="home"
+          >
+            <WebSearchPanel onSearch={handleSearch}>
+              <WebField
+                label="Trip Budget (INR)"
+                icon="wallet-outline"
+                value={budget}
+                onChangeText={(value) => setBudget(digitsOnly(value))}
+                placeholder="Example: 25000"
+                keyboardType="numeric"
+                maxLength={9}
+              />
+              <WebField
+                label="Destination"
+                icon="location-outline"
+                flex={1.6}
+                minWidth={220}
+                value={destination}
+                onChangeText={setDestination}
+                placeholder="Goa, Bali, Jaipur..."
+              />
+              <WebField
+                label="Adults"
+                icon="people-outline"
+                minWidth={110}
+                flex={0.6}
+                value={adults}
+                onChangeText={(value) => setAdults(digitsOnly(value))}
+                placeholder="2"
+                keyboardType="numeric"
+                maxLength={2}
+              />
+              <WebField
+                label="Children"
+                icon="happy-outline"
+                minWidth={110}
+                flex={0.6}
+                value={children}
+                onChangeText={(value) => setChildren(digitsOnly(value))}
+                placeholder="0"
+                keyboardType="numeric"
+                maxLength={2}
+              />
+            </WebSearchPanel>
+          </WebHero>
+        ) : (
         <LinearGradient
           colors={[Colors.primaryLight, Colors.primary, Colors.primaryDark]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.header}
+          style={[styles.header, isDesktop && styles.headerDesktop]}
         >
           <View style={styles.heroGlowLarge} />
           <View style={styles.heroGlowSmall} />
@@ -204,9 +264,11 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.subtitle}>Plan your perfect trip</Text>
           <Text style={styles.roleBadge}>Signed in as: {user?.role || 'CUSTOMER'}</Text>
         </LinearGradient>
+        )}
 
-        {/* Content sheet - overlaps the header's rounded bottom edge */}
-        <View style={styles.contentSheet}>
+        {/* Content sheet - overlaps the header's rounded bottom edge. PageSection
+            caps it to a readable column on desktop and is a no-op on phones. */}
+        <PageSection style={[styles.contentSheet, isDesktop && styles.contentSheetDesktop]} gutter={false}>
           <PromoBannerCarousel placement="HOME" />
 
           {/* Services Section - Activities is deliberately just a 5th item
@@ -214,11 +276,11 @@ const HomeScreen = ({ navigation }) => {
               as part of the group rather than a bolted-on extra. */}
           <View style={styles.servicesSection}>
             <Text style={styles.sectionTitle}>Our Services</Text>
-            <View style={styles.servicesContainer}>
+            <View style={[styles.servicesContainer, isDesktop && styles.servicesContainerDesktop]}>
               {services.map((service) => (
                 <TouchableOpacity
                   key={service.id}
-                  style={styles.serviceCard}
+                  style={[styles.serviceCard, isDesktop && styles.serviceCardDesktop]}
                   onPress={() => navigation.navigate(service.screen)}
                   activeOpacity={0.85}
                 >
@@ -268,51 +330,61 @@ const HomeScreen = ({ navigation }) => {
             </View>
           </TouchableOpacity>
 
-          {/* Search Form */}
-          <View style={styles.searchSection}>
+          {/* Search Form - desktop runs this from the hero panel instead. */}
+          {!isDesktop && <View style={styles.searchSection}>
             <View style={styles.searchHeaderRow}>
               <Text style={styles.searchSectionTitle}>Find Your Trip</Text>
               <Ionicons name="airplane-outline" size={26} color={Colors.primary} style={styles.searchHeaderIcon} />
             </View>
             <Text style={styles.searchSectionSubtitle}>Plan smart. Travel better.</Text>
 
-            <View style={styles.formContainer}>
-              <View style={styles.stepHeaderRow}>
-                <View style={styles.stepIconWrap}>
-                  <Ionicons name={currentStep.icon} size={20} color={Colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.stepTitle}>{currentStep.title}</Text>
-                  <Text style={styles.stepSubtitle}>{currentStep.subtitle}</Text>
-                </View>
-              </View>
+            <View style={[styles.formContainer, isDesktop && styles.formContainerDesktop]}>
+              {/* Wizard furniture - step header, progress bar and dots. There
+                  are no steps to track on desktop, where every field shows at
+                  once, so all three come out. */}
+              {!isDesktop && (
+                <>
+                  <View style={styles.stepHeaderRow}>
+                    <View style={styles.stepIconWrap}>
+                      <Ionicons name={currentStep.icon} size={20} color={Colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.stepTitle}>{currentStep.title}</Text>
+                      <Text style={styles.stepSubtitle}>{currentStep.subtitle}</Text>
+                    </View>
+                  </View>
 
-              <View style={styles.progressTrack}>
-                <LinearGradient
-                  colors={[Colors.primaryLight, Colors.primaryDark]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.progressFill, { width: progressPercent }]}
-                />
-              </View>
+                  <View style={styles.progressTrack}>
+                    <LinearGradient
+                      colors={[Colors.primaryLight, Colors.primaryDark]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.progressFill, { width: progressPercent }]}
+                    />
+                  </View>
 
-              <View style={styles.stepDots}>
-                {stepMeta.map((item) => (
-                  <View
-                    key={item.step}
-                    style={[
-                      styles.stepDot,
-                      tripStep >= item.step && styles.stepDotActive,
-                    ]}
-                  />
-                ))}
-              </View>
+                  <View style={styles.stepDots}>
+                    {stepMeta.map((item) => (
+                      <View
+                        key={item.step}
+                        style={[
+                          styles.stepDot,
+                          tripStep >= item.step && styles.stepDotActive,
+                        ]}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
 
-              {tripStep === 1 && (
+              {(isDesktop || tripStep === 1) && (
                 <Animated.View
                   style={[
                     styles.questionPanel,
-                    { transform: [{ translateX: stepSlide }] },
+                    isDesktop && styles.questionPanelDesktop,
+                    // The slide animation is a step transition; there are no
+                    // steps on desktop, so it would just offset the field.
+                    !isDesktop && { transform: [{ translateX: stepSlide }] },
                   ]}
                 >
                   <View style={styles.inputContainer}>
@@ -335,11 +407,14 @@ const HomeScreen = ({ navigation }) => {
                 </Animated.View>
               )}
 
-              {tripStep === 2 && (
+              {(isDesktop || tripStep === 2) && (
                 <Animated.View
                   style={[
                     styles.questionPanel,
-                    { transform: [{ translateX: stepSlide }] },
+                    isDesktop && styles.questionPanelDesktop,
+                    // The slide animation is a step transition; there are no
+                    // steps on desktop, so it would just offset the field.
+                    !isDesktop && { transform: [{ translateX: stepSlide }] },
                   ]}
                 >
                   <View style={styles.inputContainer}>
@@ -360,11 +435,14 @@ const HomeScreen = ({ navigation }) => {
                 </Animated.View>
               )}
 
-              {tripStep === 3 && (
+              {(isDesktop || tripStep === 3) && (
                 <Animated.View
                   style={[
                     styles.questionPanel,
-                    { transform: [{ translateX: stepSlide }] },
+                    isDesktop && styles.questionPanelDesktop,
+                    // The slide animation is a step transition; there are no
+                    // steps on desktop, so it would just offset the field.
+                    !isDesktop && { transform: [{ translateX: stepSlide }] },
                   ]}
                 >
                   <View style={styles.inputContainer}>
@@ -387,11 +465,14 @@ const HomeScreen = ({ navigation }) => {
                 </Animated.View>
               )}
 
-              {tripStep === 4 && (
+              {(isDesktop || tripStep === 4) && (
                 <Animated.View
                   style={[
                     styles.questionPanel,
-                    { transform: [{ translateX: stepSlide }] },
+                    isDesktop && styles.questionPanelDesktop,
+                    // The slide animation is a step transition; there are no
+                    // steps on desktop, so it would just offset the field.
+                    !isDesktop && { transform: [{ translateX: stepSlide }] },
                   ]}
                 >
                   <View style={styles.inputContainer}>
@@ -414,7 +495,7 @@ const HomeScreen = ({ navigation }) => {
                 </Animated.View>
               )}
 
-              {tripStep === 5 && (
+              {!isDesktop && tripStep === 5 && (
                 <Animated.View
                   style={[
                     styles.questionPanel,
@@ -441,12 +522,32 @@ const HomeScreen = ({ navigation }) => {
                 </Animated.View>
               )}
 
-              <View style={styles.hintBox}>
-                <Ionicons name="shield-checkmark-outline" size={16} color={Colors.accentBlue} />
-                <Text style={styles.hintText}>{stepHints[tripStep - 1]}</Text>
-              </View>
+              {!isDesktop && (
+                <View style={styles.hintBox}>
+                  <Ionicons name="shield-checkmark-outline" size={16} color={Colors.accentBlue} />
+                  <Text style={styles.hintText}>{stepHints[tripStep - 1]}</Text>
+                </View>
+              )}
 
-              {tripStep < 5 ? (
+              {isDesktop ? (
+                // One row of fields means one action: search. Back/Next only
+                // make sense when the form is paged.
+                <TouchableOpacity
+                  onPress={handleSearch}
+                  activeOpacity={0.85}
+                  style={styles.desktopSearchAction}
+                >
+                  <LinearGradient
+                    colors={[Colors.primary, Colors.primaryDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.nextStepButton}
+                  >
+                    <Ionicons name="search" size={17} color={Colors.secondary} style={{ marginRight: 8 }} />
+                    <Text style={styles.nextStepText}>Search Itineraries</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ) : tripStep < 5 ? (
                 <View style={styles.stepActions}>
                   {tripStep > 1 && (
                     <TouchableOpacity
@@ -491,10 +592,12 @@ const HomeScreen = ({ navigation }) => {
                 </View>
               )}
             </View>
-          </View>
+          </View>}
 
-          <View style={{ height: 90 }} />
-        </View>
+          {/* Clears the floating bottom tab bar; desktop has a top header
+              instead, so it only needs ordinary breathing room. */}
+          <View style={{ height: isDesktop ? 48 : 90 }} />
+        </PageSection>
       </ScrollView>
 
       {/* Rendered after the ScrollView (not before it) so it stays tappable
@@ -506,6 +609,7 @@ const HomeScreen = ({ navigation }) => {
       >
         <Ionicons name="headset" size={20} color={Colors.primary} />
       </TouchableOpacity>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -514,6 +618,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.primary,
+  },
+
+  // The orange root is only ever seen on a phone, where the content sheet fills
+  // the width. On desktop the sheet is capped to a centred column, so the orange
+  // would show as two stripes down the sides of the page.
+  containerDesktop: {
+    backgroundColor: Colors.background,
   },
   header: {
     paddingHorizontal: 22,
@@ -619,9 +730,41 @@ const styles = StyleSheet.create({
   contentSheet: {
     backgroundColor: Colors.background,
     marginTop: -36,
+    // Overridden on desktop - see contentSheetDesktop.
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 8,
+  },
+
+  // Desktop only - the hero's phone padding leaves the greeting hard against
+  // the left edge of a wide window, and 60px of bottom padding is a lot of
+  // empty gradient when the viewport is short and wide rather than tall.
+  headerDesktop: {
+    paddingHorizontal: 48,
+    paddingTop: 28,
+    paddingBottom: 72,
+  },
+
+  // WebHero has square edges and no rounded lip to tuck under, so the phone
+  // layout's negative overlap would just clip the hero.
+  contentSheetDesktop: {
+    marginTop: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    paddingTop: 36,
+  },
+
+  // Five services in one row reads as a website nav strip; the 2-up phone grid
+  // stretches each card to ~580px on a 1200px column and looks broken.
+  servicesContainerDesktop: {
+    flexWrap: 'nowrap',
+    gap: 14,
+  },
+
+  serviceCardDesktop: {
+    width: 'auto',
+    flex: 1,
+    marginBottom: 0,
   },
   servicesSection: {
     paddingHorizontal: 20,
@@ -645,6 +788,7 @@ const styles = StyleSheet.create({
   // owns the border/radius/overflow-hidden clip, since a shadow and
   // overflow:hidden don't play well on the same element.
   serviceCard: {
+    // Overridden to flex: 1 inside servicesContainerDesktop's nowrap row.
     width: '48%',
     borderRadius: 18,
     marginBottom: 12,
@@ -837,6 +981,26 @@ const styles = StyleSheet.create({
     padding: 14,
     justifyContent: 'center',
     marginBottom: 12,
+  },
+
+  // Desktop: the four fields sit on one row like a real booking search bar,
+  // with the Search button below spanning the card.
+  formContainerDesktop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    gap: 16,
+  },
+  questionPanelDesktop: {
+    flex: 1,
+    minWidth: 180,
+    marginBottom: 0,
+  },
+
+  // Breaks onto its own line under the field row rather than becoming a fifth
+  // column in it.
+  desktopSearchAction: {
+    width: '100%',
   },
   inputLabel: {
     fontSize: 13,

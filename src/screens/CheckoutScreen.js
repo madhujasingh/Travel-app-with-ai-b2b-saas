@@ -7,8 +7,9 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
-  Alert,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +31,7 @@ const formatExpiry = (value) => {
 const DEFAULT_CONVENIENCE_FEE = 300;
 
 const CheckoutScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const cartItems = route.params?.cartItems || [];
   const total =
     route.params?.total ||
@@ -70,12 +72,12 @@ const CheckoutScreen = ({ route, navigation }) => {
   const handlePayment = () => {
     if (paymentMethod === 'card') {
       if (!cardNumber || !expiryDate || !cvv || !cardName) {
-        Alert.alert('Error', 'Please fill all card details');
+        appAlert('Error', 'Please fill all card details');
         return;
       }
     }
 
-    Alert.alert(
+    appAlert(
       'Payment Successful!',
       'Your booking has been confirmed. You will receive a confirmation email shortly.',
       [
@@ -100,7 +102,7 @@ const CheckoutScreen = ({ route, navigation }) => {
         <View style={{ width: 30 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={centeredForm}>
         {/* Order Summary */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Order Summary</Text>

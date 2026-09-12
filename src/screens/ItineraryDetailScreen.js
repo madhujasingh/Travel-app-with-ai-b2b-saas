@@ -6,8 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  Alert,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,7 @@ import { adaptItineraryToWeather, fetchDestinationWeatherForecast } from '../uti
 import { useCart } from '../context/CartContext';
 
 const ItineraryDetailScreen = ({ route, navigation }) => {
+  const { centeredContent } = useResponsive();
   const { itinerary, destination, people, adults, children } = route.params;
   const { addItemToCart } = useCart();
   const dayPlans = itinerary.dayPlans || [];
@@ -90,7 +92,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
     // Add to cart using context
     addItemToCart(cartItem);
 
-    Alert.alert(
+    appAlert(
       'Added to Cart!',
       `${itinerary.title} has been added to your cart.`,
       [
@@ -147,7 +149,7 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={centeredContent}>
         {/* Hero Section */}
         <View style={styles.heroSection}>
           <Ionicons name={heroIcon} size={80} color={Colors.secondary} style={styles.heroImage} />

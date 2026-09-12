@@ -12,6 +12,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,6 +79,8 @@ const indianDestinations = [
 ];
 
 const LandPackageScreen = ({ navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const ctaScale = useRef(new Animated.Value(1)).current;
@@ -131,7 +137,7 @@ const LandPackageScreen = ({ navigation }) => {
   };
 
   const renderCategorySelection = () => (
-    <ScrollView contentContainerStyle={styles.selectionContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.selectionContent, centeredContent]} showsVerticalScrollIndicator={false} {...scrollProps}>
       <View style={styles.heroPanel}>
         <View style={styles.heroBadge}>
           <Ionicons name="sparkles-outline" size={14} color={Colors.secondary} />
@@ -261,7 +267,8 @@ const LandPackageScreen = ({ navigation }) => {
         data={destinations}
         renderItem={renderDestination}
         keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.destinationsList}
+        contentContainerStyle={[styles.destinationsList, centeredContent]}
+        {...scrollProps}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -275,17 +282,24 @@ const LandPackageScreen = ({ navigation }) => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, isDesktop && styles.containerDesktop]}>
       <StatusBar backgroundColor="#5B2310" barStyle="light-content" />
 
-      <View style={styles.backgroundLayer}>
+      {!isDesktop && <View style={styles.backgroundLayer}>
         <View style={styles.topGradient} />
         <View style={styles.middleGradient} />
         <View style={styles.bottomGradient} />
         <View style={styles.blurOrbOne} />
         <View style={styles.blurOrbTwo} />
-      </View>
+      </View>}
 
+      {isDesktop ? (
+        <WebHero
+          title="Holiday Packages"
+          subtitle="Curated trips by theme and destination, priced end to end."
+          activeProduct="packages"
+        />
+      ) : (
       <View style={styles.header}>
         <TouchableOpacity style={styles.floatingButton} onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={22} color={Colors.secondary} />
@@ -295,6 +309,7 @@ const LandPackageScreen = ({ navigation }) => {
           <Ionicons name="person-circle-outline" size={22} color={Colors.secondary} />
         </TouchableOpacity>
       </View>
+      )}
 
       {selectedCategory ? renderDestinationSelection() : renderCategorySelection()}
 
@@ -320,6 +335,7 @@ const LandPackageScreen = ({ navigation }) => {
           </TouchableOpacity>
         </Animated.View>
       </View>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -328,6 +344,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#5B2310',
+  },
+
+  // The dark brown root and its decorative gradient layer are designed to fill a
+  // phone screen edge to edge. Behind a centred desktop column they just bleed
+  // down both sides of the page.
+  containerDesktop: {
+    backgroundColor: Colors.background,
   },
   backgroundLayer: {
     ...StyleSheet.absoluteFillObject,

@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -12,6 +11,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebResultsLayout, { WebResultsBar, WebResultsCount } from '../components/web/WebResultsLayout';
+import MarkupPrice from '../components/MarkupPrice';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,6 +53,8 @@ const getTopOption = (item) => (item.options || []).find((option) => option.inve
 // scroll past a results list every time. HotelsScreen navigates here with
 // the already-fetched hotels + searchSession once a search succeeds.
 const HotelSearchResultsScreen = ({ route, navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const hotelColumns = isDesktop ? 2 : 1;
   const { hotels, searchSession, destinationLabel } = route.params;
   const { checkIn, checkOut } = searchSession;
 
@@ -83,7 +88,7 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
 
   const openHotelDetail = (hotel) => {
     if (!searchSession || Date.now() >= searchSession.expiresAt) {
-      Alert.alert('Search expired', 'Your search session has expired. Please search again.');
+      appAlert('Search expired', 'Your search session has expired. Please search again.');
       return;
     }
 
@@ -240,7 +245,11 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
     const pricing = topOption?.pricing;
 
     return (
-      <TouchableOpacity style={styles.hotelCard} activeOpacity={0.85} onPress={() => openHotelDetail(item)}>
+      <TouchableOpacity
+        style={[styles.hotelCard, hotelColumns > 1 && styles.hotelCardGrid]}
+        activeOpacity={0.85}
+        onPress={() => openHotelDetail(item)}
+      >
         <View style={styles.hotelIndexBadge} pointerEvents="none">
           <Text style={styles.hotelIndexBadgeText}>
             {index + 1} of {filteredHotels.length}
@@ -292,9 +301,13 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
                       {pricing.currency} {Number(pricing.strikeThrough).toLocaleString()}
                     </Text>
                   )}
-                  <Text style={styles.price}>
-                    {pricing?.currency} {Number(pricing?.totalPrice || 0).toLocaleString()}
-                  </Text>
+                  <MarkupPrice
+                    service="HOTEL"
+                    entityKey={item.hotelId}
+                    baseAmount={pricing?.totalPrice || 0}
+                    prefix={`${pricing?.currency || ''} `}
+                    priceStyle={styles.price}
+                  />
                   {(() => {
                     const nights = nightsBetween(checkIn, checkOut);
                     if (!pricing?.totalPrice || nights <= 1) return null;
@@ -355,120 +368,9 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
-
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={26} color={Colors.secondary} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{destinationLabel || 'Search Results'}</Text>
-          {!!(checkIn && checkOut) && (
-            <Text style={styles.headerSubtitle}>
-              {formatDisplayDate(checkIn)} - {formatDisplayDate(checkOut)}
-            </Text>
-          )}
-        </View>
-        <View style={{ width: 26 }} />
-      </View>
-
-      <ScrollView
-        ref={scrollViewRef}
-        showsVerticalScrollIndicator={false}
-        onScroll={({ nativeEvent }) => {
-          const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
-          const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 300;
-          if (nearBottom) {
-            setVisibleCount((prev) => Math.min(prev + RESULTS_PAGE_SIZE, filteredHotels.length));
-          }
-          setShowScrollTop(contentOffset.y > 400);
-        }}
-        scrollEventThrottle={200}
-      >
-        {hotels.length > 0 && (
-          <View style={styles.resultsToolbar}>
-            <View style={styles.resultsToolbarRow}>
-              <TouchableOpacity style={styles.filtersButton} onPress={() => setFiltersModalVisible(true)}>
-                <Ionicons name="options-outline" size={16} color={Colors.primary} />
-                <Text style={styles.filtersButtonText}>Filters</Text>
-                {activeFilterCount > 0 && (
-                  <View style={styles.filtersBadge}>
-                    <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-            <View style={styles.resultsMetaRow}>
-              <Text style={styles.resultsCount}>
-                {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
-                {filteredHotels.length === 1 ? '' : 's'} loaded
-                {visibleCount < filteredHotels.length ? ' · scroll for more' : ''}
-              </Text>
-              {mappableHotels.length > 0 && (
-                <TouchableOpacity style={styles.mapViewButton} onPress={() => setViewMode('map')}>
-                  <Ionicons name="map-outline" size={14} color={Colors.primary} />
-                  <Text style={styles.mapViewButtonText}>Map view</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )}
-
-        {hotels.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="bed-outline" size={40} color={Colors.textMuted} />
-            <Text style={styles.emptyStateText}>No hotels found for this search.</Text>
-            <Text style={styles.emptyStateSubtext}>Try different dates or another city.</Text>
-          </View>
-        )}
-
-        {hotels.length > 0 && filteredHotels.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="filter-outline" size={40} color={Colors.textMuted} />
-            <Text style={styles.emptyStateText}>No hotels match these filters.</Text>
-            <TouchableOpacity style={styles.clearFilterButton} onPress={clearAllFilters}>
-              <Text style={styles.clearFilterButtonText}>Clear Filters</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <FlatList
-          data={filteredHotels.slice(0, visibleCount)}
-          renderItem={renderHotel}
-          keyExtractor={(item) => item.hotelId}
-          contentContainerStyle={styles.listContainer}
-          scrollEnabled={false}
-        />
-      </ScrollView>
-
-      {showScrollTop && (
-        <TouchableOpacity
-          style={styles.scrollTopButton}
-          activeOpacity={0.85}
-          onPress={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
-        >
-          <Ionicons name="arrow-up" size={22} color={Colors.secondary} />
-        </TouchableOpacity>
-      )}
-
-      <Modal
-        visible={filtersModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFiltersModalVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setFiltersModalVisible(false)}>
-          <Pressable style={styles.filtersModalCard} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filters</Text>
-              <TouchableOpacity onPress={clearAllFilters}>
-                <Text style={styles.resetFiltersText}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.filtersScroll} showsVerticalScrollIndicator={false}>
+  // The same filter controls serve the phone's modal and the desktop sidebar.
+  const renderFilterControls = () => (
+    <>
               {starRatingOptions.length > 0 && (
                 <>
                   <Text style={styles.filterSectionTitle}>Star Rating</Text>
@@ -583,6 +485,168 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
                   </View>
                 </>
               )}
+    </>
+  );
+
+  // One results scroller, rendered bare on phones and inside the desktop
+  // sidebar layout on web.
+  const renderResultsScroll = () => (
+        <ScrollView
+          ref={scrollViewRef}
+          showsVerticalScrollIndicator={false}
+          onScroll={({ nativeEvent }) => {
+            const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+            const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 300;
+            if (nearBottom) {
+              setVisibleCount((prev) => Math.min(prev + RESULTS_PAGE_SIZE, filteredHotels.length));
+            }
+            setShowScrollTop(contentOffset.y > 400);
+          }}
+          scrollEventThrottle={200}
+        >
+          {hotels.length > 0 && (
+            <View style={styles.resultsToolbar}>
+              <View style={[styles.resultsToolbarRow, isDesktop && styles.hidden]}>
+                <TouchableOpacity style={styles.filtersButton} onPress={() => setFiltersModalVisible(true)}>
+                  <Ionicons name="options-outline" size={16} color={Colors.primary} />
+                  <Text style={styles.filtersButtonText}>Filters</Text>
+                  {activeFilterCount > 0 && (
+                    <View style={styles.filtersBadge}>
+                      <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+              <View style={styles.resultsMetaRow}>
+                <Text style={styles.resultsCount}>
+                  {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
+                  {filteredHotels.length === 1 ? '' : 's'} loaded
+                  {visibleCount < filteredHotels.length ? ' · scroll for more' : ''}
+                </Text>
+                {mappableHotels.length > 0 && (
+                  <TouchableOpacity style={styles.mapViewButton} onPress={() => setViewMode('map')}>
+                    <Ionicons name="map-outline" size={14} color={Colors.primary} />
+                    <Text style={styles.mapViewButtonText}>Map view</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
+          {hotels.length === 0 && (
+            <View style={styles.emptyState}>
+              <Ionicons name="bed-outline" size={40} color={Colors.textMuted} />
+              <Text style={styles.emptyStateText}>No hotels found for this search.</Text>
+              <Text style={styles.emptyStateSubtext}>Try different dates or another city.</Text>
+            </View>
+          )}
+
+          {hotels.length > 0 && filteredHotels.length === 0 && (
+            <View style={styles.emptyState}>
+              <Ionicons name="filter-outline" size={40} color={Colors.textMuted} />
+              <Text style={styles.emptyStateText}>No hotels match these filters.</Text>
+              <TouchableOpacity style={styles.clearFilterButton} onPress={clearAllFilters}>
+                <Text style={styles.clearFilterButtonText}>Clear Filters</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <FlatList
+            data={filteredHotels.slice(0, visibleCount)}
+            renderItem={renderHotel}
+            keyExtractor={(item) => item.hotelId}
+            contentContainerStyle={[styles.listContainer, isDesktop ? null : centeredContent]}
+            scrollEnabled={false}
+            // A single column of cards is right on a phone and looks empty at
+            // 1200px. FlatList needs a new key when numColumns changes or it
+            // throws rather than re-laying out.
+            key={hotelColumns}
+            numColumns={hotelColumns}
+            columnWrapperStyle={hotelColumns > 1 ? styles.gridRow : undefined}
+          />
+        </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+
+      {isDesktop ? (
+        <WebResultsBar
+          title={destinationLabel || 'Search Results'}
+          subtitle={checkIn && checkOut ? `${formatDisplayDate(checkIn)} - ${formatDisplayDate(checkOut)}` : ''}
+          actionLabel="Modify search"
+          onAction={() => navigation.goBack()}
+          onBack={() => navigation.goBack()}
+        />
+      ) : (
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={26} color={Colors.secondary} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{destinationLabel || 'Search Results'}</Text>
+          {!!(checkIn && checkOut) && (
+            <Text style={styles.headerSubtitle}>
+              {formatDisplayDate(checkIn)} - {formatDisplayDate(checkOut)}
+            </Text>
+          )}
+        </View>
+        <View style={{ width: 26 }} />
+      </View>
+      )}
+
+      {isDesktop ? (
+        <WebResultsLayout
+          sidebar={
+            <>
+              <WebResultsCount count={filteredHotels.length} noun="hotel" />
+              <View style={styles.webSidebarFilters}>
+                <View style={styles.webSidebarHeader}>
+                  <Text style={styles.webSidebarTitle}>Filters</Text>
+                  <TouchableOpacity onPress={clearAllFilters}>
+                    <Text style={styles.resetFiltersText}>Reset</Text>
+                  </TouchableOpacity>
+                </View>
+                {renderFilterControls()}
+              </View>
+            </>
+          }
+        >
+          {renderResultsScroll()}
+        </WebResultsLayout>
+      ) : (
+        renderResultsScroll()
+      )}
+
+
+      {showScrollTop && (
+        <TouchableOpacity
+          style={styles.scrollTopButton}
+          activeOpacity={0.85}
+          onPress={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+        >
+          <Ionicons name="arrow-up" size={22} color={Colors.secondary} />
+        </TouchableOpacity>
+      )}
+
+      <Modal
+        visible={filtersModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFiltersModalVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setFiltersModalVisible(false)}>
+          <Pressable style={styles.filtersModalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filters</Text>
+              <TouchableOpacity onPress={clearAllFilters}>
+                <Text style={styles.resetFiltersText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.filtersScroll} showsVerticalScrollIndicator={false}>
+              {renderFilterControls()}
             </ScrollView>
 
             <View style={styles.filtersFooter}>
@@ -752,6 +816,14 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: 15,
   },
+
+  // Desktop grid: cards share the row evenly instead of each filling the width.
+  gridRow: {
+    gap: 20,
+  },
+  hotelCardGrid: {
+    flex: 1,
+  },
   hotelCard: {
     backgroundColor: Colors.card,
     borderRadius: 20,
@@ -911,6 +983,30 @@ const styles = StyleSheet.create({
     padding: 16,
     maxHeight: '85%',
   },
+  hidden: {
+    display: 'none',
+  },
+
+  webSidebarFilters: {
+    backgroundColor: Colors.card,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  webSidebarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  webSidebarTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+
   filtersScroll: {
     maxHeight: '100%',
   },

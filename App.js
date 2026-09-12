@@ -5,7 +5,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStorage from './src/utils/secureStorage';
+import { AlertHost } from './src/utils/appAlert';
 
 // Import Screens
 import SplashScreen from './src/screens/SplashScreen';
@@ -48,6 +49,8 @@ import HotelCatalogAdminScreen from './src/screens/HotelCatalogAdminScreen';
 import AdminPlatformSettingsScreen from './src/screens/AdminPlatformSettingsScreen';
 import GroupTripPlannerScreen from './src/screens/GroupTripPlannerScreen';
 import AdminPosterStudioScreen from './src/screens/AdminPosterStudioScreen';
+import AdminCouponsScreen from './src/screens/AdminCouponsScreen';
+import AdminMarkupScreen from './src/screens/AdminMarkupScreen';
 import RequestDetailScreen from './src/screens/RequestDetailScreen';
 import CreatePackageScreen from './src/screens/CreatePackageScreen';
 import SupplierRequestsScreen from './src/screens/SupplierRequestsScreen';
@@ -55,14 +58,48 @@ import ReportsScreen from './src/screens/ReportsScreen';
 import CustomerProfileScreen from './src/screens/CustomerProfileScreen';
 import { AuthContext } from './src/context/AuthContext';
 import { CartProvider } from './src/context/CartContext';
+import { MarkupProvider } from './src/context/MarkupContext';
 import { Colors } from './src/constants/Colors';
 import API_CONFIG from './src/config/api';
+import AppTabBar from './src/components/AppTabBar';
+import WebHeaderNav from './src/components/web/WebHeaderNav';
+import useResponsive from './src/hooks/useResponsive';
+import linking from './src/config/linking';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 const AUTH_STORAGE_KEY = 'itinera.auth';
 
+// Customer screens that are pushed on the stack rather than living in the tab
+// navigator. On the web they still need the site header - a pushed screen with
+// no nav is fine on a phone (there's a back gesture) but reads as a dead end in
+// a browser. Login, Splash and every B2B screen are deliberately absent.
+// Screens that render a WebHero. Their hero carries the product tiles, so they
+// get no in-flow header - they render a WebStickyHeader that slides in once the
+// hero has scrolled away instead.
+const HERO_ROUTES = new Set([
+  'Flights', 'Hotels', 'Activities', 'Cabs', 'TripSafe',
+  'Cart', 'AIRecommendations', 'MyFlightBookings', 'ChatInbox', 'GroupTripPlanner',
+  'LandPackage',
+]);
+
+const WEB_HEADER_ROUTES = new Set([
+  'LandPackage', 'ItineraryList', 'ItineraryDetail', 'Customization',
+  'Cart', 'Checkout', 'TalkToAgent', 'GroupTripPlanner',
+  'Hotels', 'HotelSearchResults', 'HotelDetail', 'HotelBooking',
+  'Flights', 'FlightBooking', 'FlightReissue', 'MyFlightBookings',
+  'Activities', 'ActivityDetail', 'ActivityBooking',
+  'Cabs', 'CabResults', 'CabBooking',
+  'TripSafe', 'TripSafeResults', 'TripSafeBooking',
+  'AIRecommendations', 'AIPlaceInsight',
+  'ChatInbox', 'ChatScreen',
+]);
+
 function CustomerTabs() {
+  // Desktop swaps the floating bottom bar for a top site header (see
+  // AppTabBar), which has to be positioned above the screen rather than over it.
+  const { isDesktop } = useResponsive();
+
   const tabIcon = (name, color, focused) => (
     <View
       style={{
@@ -79,8 +116,10 @@ function CustomerTabs() {
   return (
     <Tab.Navigator
       initialRouteName="HomeTab"
+      tabBar={(props) => <AppTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        tabBarPosition: isDesktop ? 'top' : 'bottom',
         tabBarActiveTintColor: Colors.primary,
         tabBarInactiveTintColor: '#A2A8B3',
         tabBarLabelStyle: {
@@ -89,7 +128,9 @@ function CustomerTabs() {
           marginTop: 2,
           marginBottom: 2,
         },
-        tabBarStyle: {
+        // The floating pill styling only applies to the phone bar; the desktop
+        // header lays itself out and must not be given a fixed height or margins.
+        tabBarStyle: isDesktop ? undefined : {
           backgroundColor: Colors.secondary,
           borderTopWidth: 0,
           height: 70,
@@ -157,11 +198,12 @@ export default function App() {
     user: null,
   });
   const [isHydratingAuth, setIsHydratingAuth] = useState(true);
+  const { isDesktop } = useResponsive();
 
   useEffect(() => {
     const restoreAuthState = async () => {
       try {
-        const savedAuth = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+        const savedAuth = await SecureStorage.getItem(AUTH_STORAGE_KEY);
         if (!savedAuth) {
           return;
         }
@@ -175,7 +217,7 @@ export default function App() {
           });
 
           if (!response.ok) {
-            await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+            await SecureStorage.deleteItem(AUTH_STORAGE_KEY);
             return;
           }
 
@@ -186,12 +228,12 @@ export default function App() {
           };
 
           setAuthState(nextAuthState);
-          await SecureStore.setItemAsync(AUTH_STORAGE_KEY, JSON.stringify(nextAuthState));
+          await SecureStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuthState));
         } else {
-          await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+          await SecureStorage.deleteItem(AUTH_STORAGE_KEY);
         }
       } catch (error) {
-        await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+        await SecureStorage.deleteItem(AUTH_STORAGE_KEY);
       } finally {
         setIsHydratingAuth(false);
       }
@@ -202,7 +244,7 @@ export default function App() {
 
   const persistAuthState = async (nextAuthState) => {
     try {
-      await SecureStore.setItemAsync(AUTH_STORAGE_KEY, JSON.stringify(nextAuthState));
+      await SecureStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuthState));
     } catch (error) {
       console.warn('Unable to persist auth state', error);
     }
@@ -210,7 +252,7 @@ export default function App() {
 
   const clearPersistedAuthState = async () => {
     try {
-      await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+      await SecureStorage.deleteItem(AUTH_STORAGE_KEY);
     } catch (error) {
       console.warn('Unable to clear persisted auth state', error);
     }
@@ -267,20 +309,27 @@ export default function App() {
   return (
     <SafeAreaProvider>
     <AuthContext.Provider value={authContextValue}>
+      <MarkupProvider token={authState.token}>
       <CartProvider>
         {/* Without an explicit flex here, react-native-web lets the whole tree
             grow to fit content instead of being capped at the viewport, so
             nothing anywhere ever scrolls - it just clips at body's edge. */}
-        <NavigationContainer style={{ flex: 1 }}>
+        <NavigationContainer style={{ flex: 1 }} linking={linking}>
         <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
+          screenOptions={({ route }) => ({
+            // Desktop keeps the site header on pushed customer screens; every
+            // other case stays headerless exactly as before.
+            headerShown:
+              isDesktop &&
+              WEB_HEADER_ROUTES.has(route.name) &&
+              !HERO_ROUTES.has(route.name),
+            header: () => <WebHeaderNav showBack />,
             // @react-navigation/stack positions each screen with
             // absolute-fill for card transitions; on web that box needs an
             // explicit flex: 1 or it never gets capped to the viewport,
             // which is what was letting the whole page grow unbounded.
             cardStyle: { flex: 1 },
-          }}
+          })}
         >
           {!authContextValue.isAuthenticated ? (
             <>
@@ -296,7 +345,19 @@ export default function App() {
               {isCustomer ? (
                 <Stack.Screen name="CustomerTabs" component={CustomerTabs} />
               ) : (
-                <Stack.Screen name="B2BDashboard" component={B2BDashboard} />
+                <>
+                  {/* B2BDashboard stays first, so it remains the landing screen
+                      for staff. CustomerTabs is registered too so admins and
+                      suppliers can open the customer storefront - to check a
+                      package they just published, or a price they changed -
+                      without logging out and back in.
+
+                      Deliberately NOT symmetric: a customer never gets
+                      B2BDashboard registered, so /dashboard is unreachable for
+                      them even by URL. */}
+                  <Stack.Screen name="B2BDashboard" component={B2BDashboard} />
+                  <Stack.Screen name="CustomerTabs" component={CustomerTabs} />
+                </>
               )}
 
               <Stack.Screen name="LandPackage" component={LandPackageScreen} />
@@ -333,6 +394,8 @@ export default function App() {
               <Stack.Screen name="HotelCatalogAdmin" component={HotelCatalogAdminScreen} />
               <Stack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
               <Stack.Screen name="AdminPosterStudio" component={AdminPosterStudioScreen} />
+              <Stack.Screen name="AdminCoupons" component={AdminCouponsScreen} />
+              <Stack.Screen name="AdminMarkup" component={AdminMarkupScreen} />
               <Stack.Screen name="GroupTripPlanner" component={GroupTripPlannerScreen} />
               <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
               <Stack.Screen name="CreatePackage" component={CreatePackageScreen} />
@@ -342,7 +405,12 @@ export default function App() {
           )}
         </Stack.Navigator>
         </NavigationContainer>
+        {/* Renders the in-app dialog that replaces Alert.alert on web; a no-op
+            on native, where the OS draws the dialog itself. Mounted here, after
+            the navigator, so it overlays every screen. */}
+        <AlertHost />
       </CartProvider>
+      </MarkupProvider>
     </AuthContext.Provider>
     </SafeAreaProvider>
   );

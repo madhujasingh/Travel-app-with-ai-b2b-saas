@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -9,6 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -110,6 +111,7 @@ const getSsrSegments = (reviewData) => {
 };
 
 const FlightReissueScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { token } = useAuth();
   const { bookingId } = route.params || {};
 
@@ -135,7 +137,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
         setTrips(parseBookingTrips(data));
         setPhase('pickTrip');
       } catch (error) {
-        Alert.alert('Reschedule Flight', error.message || 'Unable to load this booking.');
+        appAlert('Reschedule Flight', error.message || 'Unable to load this booking.');
         navigation.goBack();
       }
     })();
@@ -213,7 +215,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
       setFlightOptions(options);
       setPhase('pickFlight');
     } catch (error) {
-      Alert.alert('Reschedule Flight', error.message);
+      appAlert('Reschedule Flight', error.message);
       setPhase('pickTrip');
     } finally {
       setBusy(false);
@@ -241,7 +243,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
       setReissueSsrSelections({});
       setPhase('confirm');
     } catch (error) {
-      Alert.alert('Reschedule Flight', error.message);
+      appAlert('Reschedule Flight', error.message);
     } finally {
       setBusy(false);
     }
@@ -314,11 +316,11 @@ const FlightReissueScreen = ({ route, navigation }) => {
       }
 
       setPhase('done');
-      Alert.alert('Rescheduled', 'This trip has been successfully rescheduled.', [
+      appAlert('Rescheduled', 'This trip has been successfully rescheduled.', [
         { text: 'OK', onPress: () => navigation.replace('MyFlightBookings') },
       ]);
     } catch (error) {
-      Alert.alert('Reschedule Flight', error.message);
+      appAlert('Reschedule Flight', error.message);
     } finally {
       setBusy(false);
     }
@@ -341,7 +343,7 @@ const FlightReissueScreen = ({ route, navigation }) => {
           <Text style={styles.hintText}>{phase === 'searching' ? 'Searching for new options…' : 'Loading booking…'}</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, centeredForm]}>
           {phase === 'pickTrip' ? (
             <>
               <Text style={styles.sectionTitle}>Which trip do you want to reschedule?</Text>

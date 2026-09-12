@@ -7,8 +7,9 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
-  Alert,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { getDestinationActivities } from '../data/destinationActivities';
 import { useCart } from '../context/CartContext';
 
 const CustomizationScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { itinerary, destination, people } = route.params;
   const { addItemToCart } = useCart();
 
@@ -69,7 +71,7 @@ const CustomizationScreen = ({ route, navigation }) => {
     const activityExists = dayActivities.some(existing => existing.id === activity.id);
 
     if (activityExists) {
-      Alert.alert(
+      appAlert(
         'Activity Already Added',
         `"${activity.name}" is already included in Day ${dayNumber}. Would you like to add it again?`,
         [
@@ -132,7 +134,7 @@ const CustomizationScreen = ({ route, navigation }) => {
     );
 
     if (!hasSelectedActivities) {
-      Alert.alert('Error', 'Please keep at least one activity selected for your trip');
+      appAlert('Error', 'Please keep at least one activity selected for your trip');
       return;
     }
 
@@ -144,7 +146,7 @@ const CustomizationScreen = ({ route, navigation }) => {
       additionalNotes,
     };
 
-    Alert.alert(
+    appAlert(
       'Customization Saved!',
       'Your day-wise customized itinerary has been saved. A travel agent will contact you shortly.',
       [
@@ -178,7 +180,7 @@ const CustomizationScreen = ({ route, navigation }) => {
 
             addItemToCart(cartItem);
 
-            Alert.alert(
+            appAlert(
               'Added to Cart!',
               'Your customized itinerary has been added to cart.',
               [
@@ -217,7 +219,7 @@ const CustomizationScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={centeredForm}>
         {/* Trip Info */}
         <View style={styles.tripInfo}>
           <Text style={styles.tripTitle}>{itinerary.title}</Text>
@@ -390,9 +392,11 @@ const CustomizationScreen = ({ route, navigation }) => {
               destination,
               people,
               customization: {
-                selectedPlaces,
-                excludedPlaces,
-                selectedActivities,
+                // These were `selectedPlaces`/`excludedPlaces`/`selectedActivities`,
+                // which no longer exist on this screen - referencing them threw a
+                // ReferenceError and blanked the screen when this button was
+                // tapped. The shape below matches handleSaveCustomization.
+                customizedDays,
                 additionalNotes,
               },
             })

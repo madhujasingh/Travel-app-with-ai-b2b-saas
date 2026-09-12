@@ -289,6 +289,64 @@ const B2BDashboard = ({ navigation }) => {
   const renderAdminQuickActions = () => (
     <View style={styles.quickActions}>
       <Text style={styles.sectionTitle}>Quick Actions</Text>
+
+      {/* Opens the live customer storefront in the same session, so a price or
+          package change can be checked without logging out. */}
+      {isAdmin && (
+        <TouchableOpacity
+          style={styles.markupCard}
+          onPress={() => navigation.navigate('AdminMarkup')}
+          activeOpacity={0.9}
+        >
+          <View style={styles.markupIcon}>
+            <Ionicons name="trending-up-outline" size={22} color={Colors.secondary} />
+          </View>
+          <View style={styles.storefrontCopy}>
+            <Text style={styles.markupTitle}>Markup</Text>
+            <Text style={styles.storefrontText}>
+              Set what you add on top of supplier fares, per service.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={Colors.success} />
+        </TouchableOpacity>
+      )}
+
+      {isAdmin && (
+        <TouchableOpacity
+          style={styles.couponCard}
+          onPress={() => navigation.navigate('AdminCoupons')}
+          activeOpacity={0.9}
+        >
+          <View style={styles.couponIcon}>
+            <Ionicons name="pricetag-outline" size={22} color={Colors.secondary} />
+          </View>
+          <View style={styles.storefrontCopy}>
+            <Text style={styles.couponTitle}>Coupon codes</Text>
+            <Text style={styles.storefrontText}>
+              Create and configure discount codes customers can apply at checkout.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={styles.storefrontCard}
+        onPress={() => navigation.navigate('CustomerTabs')}
+        activeOpacity={0.9}
+      >
+        <View style={styles.storefrontIcon}>
+          <Ionicons name="storefront-outline" size={22} color={Colors.secondary} />
+        </View>
+        <View style={styles.storefrontCopy}>
+          <Text style={styles.storefrontTitle}>View storefront</Text>
+          <Text style={styles.storefrontText}>
+            See flights, hotels, cabs and packages exactly as a customer does.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={Colors.accentBlue} />
+      </TouchableOpacity>
+
       <TouchableOpacity
         style={styles.adminUploadCard}
         onPress={() => navigation.navigate('AdminItineraryUpload')}
@@ -639,6 +697,90 @@ const styles = StyleSheet.create({
     opacity: 0.9,
     marginTop: 5,
   },
+  markupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#EAF7EC',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.success,
+  },
+  markupIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markupTitle: {
+    fontSize: 15.5,
+    fontWeight: '800',
+    color: '#1B5E20',
+  },
+
+  couponCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: Colors.primarySoft,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  couponIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponTitle: {
+    fontSize: 15.5,
+    fontWeight: '800',
+    color: Colors.primaryDark,
+  },
+
+  storefrontCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: Colors.accentBlueSoft,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.accentBlue,
+  },
+  storefrontIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.accentBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storefrontCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  storefrontTitle: {
+    fontSize: 15.5,
+    fontWeight: '800',
+    color: Colors.accentBlueDark,
+  },
+  storefrontText: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: Colors.textLight,
+  },
+
   quickActions: {
     padding: 20,
   },

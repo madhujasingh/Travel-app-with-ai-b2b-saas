@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -10,6 +9,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
+import { useMarkup } from '../context/MarkupContext';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -69,10 +71,47 @@ const buildInitialTravelers = (rooms) => {
   });
 };
 
+
+// Hotel bookings previously lived only inside TripJack, so there was nothing to
+// show in My Trips and nothing to reconcile margin against. Best-effort, like
+// the flight and cab syncs: a failure here must never block the booking result.
+const syncHotelBooking = async (token, entry) => {
+  if (!token) return;
+  try {
+    await fetch(`${API_CONFIG.BASE_URL}/hotel-bookings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        tripjackBookingId: entry.bookingId,
+        hotelName: entry.hotelName,
+        cityName: entry.cityName,
+        checkIn: entry.checkIn,
+        checkOut: entry.checkOut,
+        // totalFare is the reviewed rate TripJack was paid - it must stay
+        // exactly that. The breakdown is what the customer was charged.
+        totalFare: entry.totalFare,
+        markupAmount: entry.markupAmount,
+        customerTotal: entry.customerTotal,
+        status: entry.status,
+      }),
+    });
+  } catch (error) {
+    // ignored - best-effort sync
+  }
+};
+
 const HotelBookingScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { token } = useAuth();
+  const { markupFor } = useMarkup();
   const { hotelName, searchContext, reviewResult } = route.params;
   const option = reviewResult.option;
+
+  // Charged on top of the reviewed rate; TripJack still receives the rate
+  // exactly (paymentInfos below is untouched).
+  const supplierTotal = Number(option?.pricing?.totalPrice || 0);
+  const markupAmount = markupFor('HOTEL', 'DEFAULT', supplierTotal, 1);
+  const customerTotal = supplierTotal + markupAmount;
   const panRequired = Boolean(option?.compliance?.panRequired);
   const passportRequired = Boolean(option?.compliance?.passportRequired);
   const gstType = option?.compliance?.gstType;
@@ -179,7 +218,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const submitBooking = async () => {
     const validationError = validate();
     if (validationError) {
-      Alert.alert('Check the form', validationError);
+      appAlert('Check the form', validationError);
       return;
     }
 
@@ -201,7 +240,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
       setBookResponse(data);
       pollBookingStatus(data.bookingId || reviewResult.bookingId, 1);
     } catch (err) {
-      Alert.alert('Booking', err.message || 'Unable to submit this booking right now.');
+      appAlert('Booking', err.message || 'Unable to submit this booking right now.');
     } finally {
       setSubmitting(false);
     }
@@ -223,6 +262,18 @@ const HotelBookingScreen = ({ route, navigation }) => {
       setBookingDetails(data);
       const status = data?.order?.status;
 
+      syncHotelBooking(token, {
+        bookingId,
+        hotelName,
+        cityName: searchContext?.cityName || searchContext?.destinationLabel,
+        checkIn: searchContext?.checkIn,
+        checkOut: searchContext?.checkOut,
+        totalFare: data?.order?.amount ?? supplierTotal,
+        markupAmount,
+        customerTotal,
+        status: status || 'PENDING',
+      });
+
       const shouldKeepPolling =
         !TERMINAL_STATUSES.has(status) && status !== SLOW_POLL_STATUS && attempt < MAX_BOOKING_POLL_ATTEMPTS;
       if (shouldKeepPolling) {
@@ -232,7 +283,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
       setPolling(false);
     } catch (err) {
       setPolling(false);
-      Alert.alert('Booking Status', err.message || 'Unable to check booking status.');
+      appAlert('Booking Status', err.message || 'Unable to check booking status.');
     }
   };
 
@@ -260,7 +311,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
 
       pollBookingStatus(bookingId, 1);
     } catch (err) {
-      Alert.alert('Confirm & Pay', err.message || 'Unable to confirm and pay for this booking.');
+      appAlert('Confirm & Pay', err.message || 'Unable to confirm and pay for this booking.');
     } finally {
       setConfirming(false);
     }
@@ -289,10 +340,10 @@ const HotelBookingScreen = ({ route, navigation }) => {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Hotel Voucher' });
       } else {
-        Alert.alert('Voucher Saved', `Saved to ${file.uri}`);
+        appAlert('Voucher Saved', `Saved to ${file.uri}`);
       }
     } catch (error) {
-      Alert.alert('Download Failed', error.message || 'Could not download your voucher.');
+      appAlert('Download Failed', error.message || 'Could not download your voucher.');
     } finally {
       setDownloadingVoucher(false);
     }
@@ -301,7 +352,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const cancelBooking = () => {
     const bookingId = bookingDetails?.order?.bookingId || bookResponse?.bookingId || reviewResult.bookingId;
 
-    Alert.alert('Cancel booking', 'Cancellation charges from the policy will apply. Continue?', [
+    appAlert('Cancel booking', 'Cancellation charges from the policy will apply. Continue?', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Yes, cancel',
@@ -314,10 +365,10 @@ const HotelBookingScreen = ({ route, navigation }) => {
               { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
               'Unable to cancel this booking.'
             );
-            Alert.alert('Cancellation requested', 'Checking the latest status now.');
+            appAlert('Cancellation requested', 'Checking the latest status now.');
             pollBookingStatus(bookingId, 1);
           } catch (err) {
-            Alert.alert('Cancel Booking', err.message || 'Unable to cancel this booking.');
+            appAlert('Cancel Booking', err.message || 'Unable to cancel this booking.');
           } finally {
             setCancelling(false);
           }
@@ -346,14 +397,14 @@ const HotelBookingScreen = ({ route, navigation }) => {
         <View style={{ width: 30 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, centeredForm]} showsVerticalScrollIndicator={false}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryStay}>
             {searchContext.checkIn} → {searchContext.checkOut}
           </Text>
           <Text style={styles.summaryMeal}>{option?.mealBasis}</Text>
           <Text style={styles.summaryTotal}>
-            {option?.pricing?.currency} {Number(option?.pricing?.totalPrice || 0).toLocaleString()}
+            {option?.pricing?.currency} {Math.round(customerTotal).toLocaleString()}
           </Text>
         </View>
 

@@ -7,8 +7,8 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
-  Alert,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,15 +70,15 @@ const CreatePackageScreen = ({ route, navigation }) => {
 
   const handleSubmit = () => {
     if (!packageName.trim()) {
-      Alert.alert('Error', 'Please enter a package name');
+      appAlert('Error', 'Please enter a package name');
       return;
     }
     if (!pricePerPerson && !totalPrice) {
-      Alert.alert('Error', 'Please enter pricing information');
+      appAlert('Error', 'Please enter pricing information');
       return;
     }
 
-    Alert.alert(
+    appAlert(
       'Submit Package',
       'Are you sure you want to submit this package to admin?',
       [
@@ -86,7 +86,7 @@ const CreatePackageScreen = ({ route, navigation }) => {
         {
           text: 'Submit',
           onPress: () => {
-            Alert.alert('Success', 'Package submitted successfully!');
+            appAlert('Success', 'Package submitted successfully!');
             navigation.goBack();
           },
         },

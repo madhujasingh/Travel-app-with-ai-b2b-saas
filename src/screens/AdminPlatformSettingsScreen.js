@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,7 +40,7 @@ const AdminPlatformSettingsScreen = ({ navigation }) => {
       setCurrentFee(data.flightConvenienceFee);
       setFeeInput(String(data.flightConvenienceFee));
     } catch (error) {
-      Alert.alert('Platform Settings', error.message || 'Unable to load platform settings.');
+      appAlert('Platform Settings', error.message || 'Unable to load platform settings.');
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,7 @@ const AdminPlatformSettingsScreen = ({ navigation }) => {
   const handleSave = async () => {
     const parsed = Number(feeInput);
     if (!Number.isFinite(parsed) || parsed < 0) {
-      Alert.alert('Invalid Fee', 'Enter a valid non-negative amount.');
+      appAlert('Invalid Fee', 'Enter a valid non-negative amount.');
       return;
     }
     setSaving(true);
@@ -71,9 +71,9 @@ const AdminPlatformSettingsScreen = ({ navigation }) => {
         throw new Error(data?.message || 'Unable to update the convenience fee.');
       }
       setCurrentFee(data.flightConvenienceFee);
-      Alert.alert('Saved', `Flight convenience fee is now ₹${data.flightConvenienceFee.toLocaleString()}.`);
+      appAlert('Saved', `Flight convenience fee is now ₹${data.flightConvenienceFee.toLocaleString()}.`);
     } catch (error) {
-      Alert.alert('Save Failed', error.message || 'Unable to update the convenience fee.');
+      appAlert('Save Failed', error.message || 'Unable to update the convenience fee.');
     } finally {
       setSaving(false);
     }

@@ -7,10 +7,12 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Linking,
   StatusBar,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
+import { useMarkup } from '../context/MarkupContext';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +37,10 @@ const syncCabBooking = async (token, entry) => {
         routeSummary: entry.routeSummary,
         vehicleLabel: entry.vehicleLabel,
         totalFare: entry.totalFare,
+        // Supplier amount above stays exactly what the supplier was paid; this
+        // is what the customer was charged on our own rail.
+        markupAmount: entry.markupAmount,
+        customerTotal: entry.customerTotal,
         status: entry.status,
       }),
     });
@@ -44,7 +50,9 @@ const syncCabBooking = async (token, entry) => {
 };
 
 const CabBookingScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
+  const { markupFor } = useMarkup();
   // sourceBookingId is set when this cab is being added as an add-on to an
   // already-successful FLIGHT booking (see FlightBookingScreen's "Add an
   // Airport Transfer" prompt, and cabs-api/cab-api-doc.txt's Embedded API
@@ -75,6 +83,12 @@ const CabBookingScreen = ({ route, navigation }) => {
   const netFare = Number(fare.totalFare || 0);
   const totalTax = Number(fare.totalTax || 0);
   const payableTotal = netFare + totalTax;
+
+  // Our markup rides on top of what the customer pays; the supplier is still
+  // remitted payableTotal exactly (TripJack rejects anything else - the Cabs
+  // API's own "Net Payable Amount is ..." error).
+  const markupAmount = markupFor('CAB', 'DEFAULT', payableTotal, 1);
+  const customerTotal = payableTotal + markupAmount;
   const routeSummary = `${routeDetails?.origin?.displayAddress || ''} → ${routeDetails?.destination?.displayAddress || ''}`;
 
   const validate = () => {
@@ -172,7 +186,7 @@ const CabBookingScreen = ({ route, navigation }) => {
   const handleBookAndPay = async () => {
     const validationError = validate();
     if (validationError) {
-      Alert.alert('Missing Information', validationError);
+      appAlert('Missing Information', validationError);
       return;
     }
     setBusy(true);
@@ -286,10 +300,12 @@ const CabBookingScreen = ({ route, navigation }) => {
         routeSummary,
         vehicleLabel: group?.label,
         totalFare: details?.order?.amount ?? payableTotal,
+        markupAmount,
+        customerTotal,
         status: details?.order?.status || status,
       });
     } catch (error) {
-      Alert.alert('Cab Booking', error.message || 'Unable to complete this booking right now.');
+      appAlert('Cab Booking', error.message || 'Unable to complete this booking right now.');
       setPhase('form');
     } finally {
       setBusy(false);
@@ -308,10 +324,12 @@ const CabBookingScreen = ({ route, navigation }) => {
         routeSummary,
         vehicleLabel: group?.label,
         totalFare: details?.order?.amount ?? payableTotal,
+        markupAmount,
+        customerTotal,
         status: details?.order?.status,
       });
     } catch (error) {
-      Alert.alert('Booking Status', error.message || 'Unable to refresh booking status.');
+      appAlert('Booking Status', error.message || 'Unable to refresh booking status.');
     } finally {
       setBusy(false);
     }
@@ -320,7 +338,7 @@ const CabBookingScreen = ({ route, navigation }) => {
   const previewCancelCharges = () => {
     const bookingId = booking?.order?.bookingId;
     if (!bookingId) return;
-    Alert.alert('Cancel booking', 'Check cancellation charges before cancelling?', [
+    appAlert('Cancel booking', 'Check cancellation charges before cancelling?', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Yes, check',
@@ -337,7 +355,7 @@ const CabBookingScreen = ({ route, navigation }) => {
             }
             const amendment = data?.data?.amendment || {};
             setCancelling(false);
-            Alert.alert(
+            appAlert(
               'Confirm Cancellation',
               `Refundable amount: ₹${Number(amendment.refundAmount || 0).toLocaleString()}\nCharges: ₹${Number(amendment.tjAmendmentCharge || 0).toLocaleString()}\n${amendment.appliedAmendmentConfig?.description || ''}`,
               [
@@ -360,7 +378,7 @@ const CabBookingScreen = ({ route, navigation }) => {
               setBooking(refreshed);
               if (refreshed?.order?.status === 'FAILED') {
                 setCancelling(false);
-                Alert.alert(
+                appAlert(
                   'Already Failed',
                   `This booking already failed${
                     refreshed.order.paymentStatus === 'REFUND_SUCCESS' ? ' and your payment has already been refunded' : ''
@@ -371,14 +389,14 @@ const CabBookingScreen = ({ route, navigation }) => {
               if (refreshed?.order?.status === 'CANCELLED') {
                 setCancelled(true);
                 setCancelling(false);
-                Alert.alert('Already Cancelled', 'This booking was already cancelled.');
+                appAlert('Already Cancelled', 'This booking was already cancelled.');
                 return;
               }
             } catch (refreshError) {
               // ignore - fall through to showing the original error below
             }
             setCancelling(false);
-            Alert.alert('Cancellation', error.message || 'Unable to fetch cancellation charges right now.');
+            appAlert('Cancellation', error.message || 'Unable to fetch cancellation charges right now.');
           }
         },
       },
@@ -405,13 +423,15 @@ const CabBookingScreen = ({ route, navigation }) => {
         routeSummary,
         vehicleLabel: group?.label,
         totalFare: order?.amount ?? payableTotal,
+        markupAmount,
+        customerTotal,
         status: 'CANCELLED',
       });
-      Alert.alert('Cancellation Successful', `Refunded: ₹${Number(data?.data?.refundAmount || 0).toLocaleString()}`, [
+      appAlert('Cancellation Successful', `Refunded: ₹${Number(data?.data?.refundAmount || 0).toLocaleString()}`, [
         { text: 'OK', onPress: () => navigation.popToTop() },
       ]);
     } catch (error) {
-      Alert.alert('Cancellation', error.message || 'Unable to cancel this booking right now.');
+      appAlert('Cancellation', error.message || 'Unable to cancel this booking right now.');
     } finally {
       setCancelling(false);
     }
@@ -447,7 +467,7 @@ const CabBookingScreen = ({ route, navigation }) => {
         <View style={{ width: 30 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, centeredForm]}>
         {phase === 'form' ? (
           <>
             <View style={styles.summaryCard}>
@@ -455,7 +475,7 @@ const CabBookingScreen = ({ route, navigation }) => {
               <Text style={styles.summaryRoute} numberOfLines={2}>
                 {routeDetails?.origin?.displayAddress} → {routeDetails?.destination?.displayAddress}
               </Text>
-              <Text style={styles.summaryFare}>₹{payableTotal.toLocaleString()}</Text>
+              <Text style={styles.summaryFare}>₹{Math.round(customerTotal).toLocaleString()}</Text>
             </View>
 
             <View style={styles.card}>
@@ -513,7 +533,7 @@ const CabBookingScreen = ({ route, navigation }) => {
             </View>
 
             <TouchableOpacity style={styles.primaryButton} onPress={handleBookAndPay} disabled={busy}>
-              <Text style={styles.primaryButtonText}>Book & Pay ₹{payableTotal.toLocaleString()}</Text>
+              <Text style={styles.primaryButtonText}>Book & Pay ₹{Math.round(customerTotal).toLocaleString()}</Text>
             </TouchableOpacity>
           </>
         ) : null}

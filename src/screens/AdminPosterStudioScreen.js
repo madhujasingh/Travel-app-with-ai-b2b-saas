@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -112,7 +112,7 @@ const AdminPosterStudioScreen = ({ navigation }) => {
           setSelectedItineraryId(items[0].id);
         }
       } catch (error) {
-        Alert.alert('Error', error.message || 'Unable to load poster data');
+        appAlert('Error', error.message || 'Unable to load poster data');
       } finally {
         setLoading(false);
       }

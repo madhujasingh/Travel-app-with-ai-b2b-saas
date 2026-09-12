@@ -7,6 +7,10 @@ import {
   Text,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +28,8 @@ const CATEGORIES = [
 ];
 
 const PromotionsScreen = () => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const [countsByPlacement, setCountsByPlacement] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -52,6 +58,13 @@ const PromotionsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      {isDesktop ? (
+        <WebHero
+          compact
+          title="Deals & Promotions"
+          subtitle="Handpicked offers across flights, hotels and holidays."
+        />
+      ) : (
       <LinearGradient colors={[Colors.primary, Colors.primaryDark]} style={styles.hero}>
         <View style={styles.heroIconWrap}>
           <Ionicons name="pricetags" size={28} color="#FFFFFF" />
@@ -59,8 +72,19 @@ const PromotionsScreen = () => {
         <Text style={styles.heroTitle}>Deals & Promotions</Text>
         <Text style={styles.heroSubtitle}>Handpicked offers, just for you</Text>
       </LinearGradient>
+      )}
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          centeredContent,
+          // Sections run 2-up on desktop; one per row leaves a very long page
+          // with a lot of empty space either side of each carousel.
+          isDesktop && styles.scrollContentDesktop,
+        ]}
+        {...scrollProps}
+      >
         {loading ? (
           <ActivityIndicator color={Colors.primary} size="large" style={styles.loader} />
         ) : visibleCategories.length === 0 ? (
@@ -70,7 +94,10 @@ const PromotionsScreen = () => {
           </View>
         ) : (
           visibleCategories.map((category) => (
-            <View key={category.placement} style={styles.section}>
+            <View
+              key={category.placement}
+              style={[styles.section, isDesktop && styles.sectionDesktop]}
+            >
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionIconBadge}>
                   <Ionicons name={category.icon} size={16} color={Colors.primary} />
@@ -82,6 +109,7 @@ const PromotionsScreen = () => {
           ))
         )}
       </ScrollView>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -122,6 +150,19 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 20,
     paddingBottom: 100,
+  },
+
+  scrollContentDesktop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 24,
+    paddingBottom: 40,
+  },
+  sectionDesktop: {
+    // Two per row, accounting for the 24px gap between them.
+    width: '48%',
+    flexGrow: 1,
   },
   loader: {
     marginTop: 60,

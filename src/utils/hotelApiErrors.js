@@ -56,18 +56,53 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const MAX_RETRIES = 3;
 const BACKOFF_MS = [1000, 2000, 4000];
 
+// Statuses a proxy returns when the app behind it isn't reachable - typically
+// with an HTML body, not JSON.
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
+
 // fetch + parse + retry in one call. Resolves with the parsed JSON body on
 // success, or throws an Error (with .code/.soldOut/.expired from
 // parseHotelError) once retries are exhausted or the error isn't retryable.
 export const fetchHotelJson = async (url, options, fallbackMessage) => {
   for (let attempt = 0; ; attempt += 1) {
     const response = await fetch(url, options);
-    const data = await response.json();
+
+    // Read as text and parse by hand rather than calling response.json()
+    // directly. A gateway that returns an HTML error page - Render's free tier
+    // does exactly this while the service is cold-starting - would otherwise
+    // throw a raw "Unexpected token <" out of response.json() before the
+    // response.ok check below, escaping all the retry handling in this loop and
+    // surfacing to the user as a bare JSON parse error.
+    const raw = await response.text();
+    let data = null;
+    let parseFailed = false;
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch {
+      parseFailed = true;
+    }
+
     if (response.ok) {
+      if (parseFailed) {
+        throw new Error(fallbackMessage || 'The server returned an unexpected response.');
+      }
       return data;
     }
 
-    const parsed = parseHotelError(data, fallbackMessage);
+    // A non-JSON error body means the request never reached the application -
+    // it's a proxy/gateway failure, which is transient and worth retrying on
+    // the same schedule as an unavailable supplier.
+    const parsed = parseFailed
+      ? {
+          code: GATEWAY_STATUSES.has(response.status) ? 'SUPPLIER_UNAVAILABLE' : null,
+          message: GATEWAY_STATUSES.has(response.status)
+            ? 'The server is waking up. Please try again in a moment.'
+            : fallbackMessage || `Request failed (HTTP ${response.status}).`,
+          soldOut: false,
+          expired: false,
+        }
+      : parseHotelError(data, fallbackMessage);
+
     const retryable = parsed.code === 'SUPPLIER_UNAVAILABLE' || parsed.code === 'RATE_LIMITED';
 
     if (retryable && attempt < MAX_RETRIES) {

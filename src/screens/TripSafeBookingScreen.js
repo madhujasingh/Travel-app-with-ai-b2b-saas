@@ -7,9 +7,11 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
   StatusBar,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
+import { useMarkup } from '../context/MarkupContext';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +47,10 @@ const syncTripSafeBooking = async (token, entry) => {
         planName: entry.planName,
         destinationSummary: entry.destinationSummary,
         amount: entry.amount,
+        // Supplier amount above stays exactly what the supplier was paid; this
+        // is what the customer was charged on our own rail.
+        markupAmount: entry.markupAmount,
+        customerTotal: entry.customerTotal,
         status: entry.status,
       }),
     });
@@ -63,12 +69,19 @@ const getBookedPlan = (details) =>
   details?.itemInfos?.INSURANCE?.iinfo?.pli?.[0] ?? details?.iinfo?.pli?.[0] ?? null;
 
 const TripSafeBookingScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
+  const { markupFor } = useMarkup();
   // viewBookingId is set when opened from Profile > Bookings to view an
   // already-completed policy (see CustomerProfileScreen) - in that mode
   // there's no plan/product/fare from a fresh search+review, only the
   // TripJack booking id to fetch and display.
   const { bookingId, plan, product, fare, journeyType, startDate, endDate, travellerAges, viewBookingId } = route.params || {};
+
+  // Markup is charged on top of the premium; TripJack is still paid the exact
+  // fare via paymentInfos below.
+  const markupAmount = markupFor('INSURANCE', 'DEFAULT', Number(fare || 0), 1);
+  const customerTotal = Number(fare || 0) + markupAmount;
   const isViewMode = Boolean(viewBookingId);
   // tripsafe-api/08-student-api-integration.txt - Student bookings need an
   // extra "sc" (student course/sponsor) object per traveller; AMT/Standalone
@@ -232,7 +245,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
         if (active) setBooking(details);
       } catch (error) {
         if (active) {
-          Alert.alert('Travel Insurance', error.message || 'Unable to load this policy right now.', [
+          appAlert('Travel Insurance', error.message || 'Unable to load this policy right now.', [
             { text: 'OK', onPress: () => navigation.goBack() },
           ]);
         }
@@ -249,7 +262,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
   const handleBookAndPay = async () => {
     const validationError = validate();
     if (validationError) {
-      Alert.alert('Missing Information', validationError);
+      appAlert('Missing Information', validationError);
       return;
     }
     setBusy(true);
@@ -279,6 +292,8 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
             planName,
             destinationSummary,
             amount: details?.order?.amount ?? fare,
+            markupAmount,
+            customerTotal,
             status: details?.order?.status || 'SUCCESS',
           });
           return;
@@ -298,10 +313,12 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
         planName,
         destinationSummary,
         amount: details?.order?.amount ?? fare,
+        markupAmount,
+        customerTotal,
         status: details?.order?.status || 'SUCCESS',
       });
     } catch (error) {
-      Alert.alert('Travel Insurance Booking', error.message || 'Unable to complete this booking right now.');
+      appAlert('Travel Insurance Booking', error.message || 'Unable to complete this booking right now.');
       setPhase('form');
     } finally {
       setBusy(false);
@@ -320,10 +337,12 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
         planName,
         destinationSummary,
         amount: details?.order?.amount ?? fare,
+        markupAmount,
+        customerTotal,
         status: details?.order?.status,
       });
     } catch (error) {
-      Alert.alert('Booking Status', error.message || 'Unable to refresh booking status.');
+      appAlert('Booking Status', error.message || 'Unable to refresh booking status.');
     } finally {
       setBusy(false);
     }
@@ -348,10 +367,10 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
     const id = booking?.order?.bookingId || bookingId;
     const travellerKeys = getTravellerKeys();
     if (!id || !travellerKeys) {
-      Alert.alert('Cancellation', 'Booking details are not fully loaded yet - try Refresh Status first.');
+      appAlert('Cancellation', 'Booking details are not fully loaded yet - try Refresh Status first.');
       return;
     }
-    Alert.alert('Cancel Policy', 'Check the refund amount before cancelling?', [
+    appAlert('Cancel Policy', 'Check the refund amount before cancelling?', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Yes, check',
@@ -373,7 +392,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
             // tripsafe-api/06-cancellation-api.txt) - just a sign convention.
             const refundAmount = Math.abs(Number(data?.insuranceCancellationResponse?.tmr || 0));
             setCancelling(false);
-            Alert.alert(
+            appAlert(
               'Confirm Cancellation',
               `Refundable amount: ₹${refundAmount.toLocaleString()}`,
               [
@@ -383,7 +402,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
             );
           } catch (error) {
             setCancelling(false);
-            Alert.alert('Cancellation', error.message || 'Unable to fetch cancellation details right now.');
+            appAlert('Cancellation', error.message || 'Unable to fetch cancellation details right now.');
           }
         },
       },
@@ -447,13 +466,15 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
         planName,
         destinationSummary,
         amount: booking?.order?.amount ?? fare,
+        markupAmount,
+        customerTotal,
         status: 'CANCELLED',
       });
-      Alert.alert('Cancellation Successful', `Refunded: ₹${refundAmount.toLocaleString()}`, [
+      appAlert('Cancellation Successful', `Refunded: ₹${refundAmount.toLocaleString()}`, [
         { text: 'OK', onPress: () => navigation.popToTop() },
       ]);
     } catch (error) {
-      Alert.alert('Cancellation', error.message || 'Unable to cancel this policy right now.');
+      appAlert('Cancellation', error.message || 'Unable to cancel this policy right now.');
       // Refresh regardless of outcome - if TripJack's async processing (the
       // same asynchronous-after-the-fact pattern seen with Cabs) actually
       // does cancel it a moment later, the next status check should reflect
@@ -486,7 +507,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
         <View style={{ width: 30 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, centeredForm]}>
         {phase === 'form' ? (
           <>
             <View style={styles.summaryCard}>
@@ -494,7 +515,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
               <Text style={styles.summaryRoute} numberOfLines={2}>
                 {destinationSummary} · {formatDisplayDate(startDate)} to {formatDisplayDate(endDate)}
               </Text>
-              {fare != null ? <Text style={styles.summaryFare}>₹{Number(fare).toLocaleString()}</Text> : null}
+              {fare != null ? <Text style={styles.summaryFare}>₹{Math.round(customerTotal).toLocaleString()}</Text> : null}
             </View>
 
             {travellers.map((t, index) => (
@@ -667,7 +688,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
 
             <TouchableOpacity style={styles.primaryButton} onPress={handleBookAndPay} disabled={busy}>
               <Text style={styles.primaryButtonText}>
-                Book & Pay {fare != null ? `₹${Number(fare).toLocaleString()}` : ''}
+                Book & Pay {fare != null ? `₹${Math.round(customerTotal).toLocaleString()}` : ''}
               </Text>
             </TouchableOpacity>
           </>

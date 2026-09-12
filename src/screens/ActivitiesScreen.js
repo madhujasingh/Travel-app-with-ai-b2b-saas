@@ -8,11 +8,19 @@ import {
   FlatList,
   Image,
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   StatusBar,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import WebHero from '../components/web/WebHero';
+import WebSearchPanel from '../components/web/WebSearchPanel';
+import WebField from '../components/web/WebField';
+import WebValueProps from '../components/web/WebValueProps';
+import MarkupPrice from '../components/MarkupPrice';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,6 +64,9 @@ const getActivityPrice = (activity) => {
 };
 
 const ActivitiesScreen = ({ navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
+  const activityColumns = isDesktop ? 3 : 1;
   const [destinationCode, setDestinationCode] = useState('');
   const [destinationLabel, setDestinationLabel] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -118,7 +129,7 @@ const ActivitiesScreen = ({ navigation }) => {
       }
       setCountries(data?.countries || []);
     } catch (error) {
-      Alert.alert('Countries', error.message || 'Unable to load countries right now.');
+      appAlert('Countries', error.message || 'Unable to load countries right now.');
     } finally {
       setLoadingCountries(false);
     }
@@ -141,7 +152,7 @@ const ActivitiesScreen = ({ navigation }) => {
       }
       setDestinations(data?.country?.destinations || []);
     } catch (error) {
-      Alert.alert('Destinations', error.message || 'Unable to load destinations right now.');
+      appAlert('Destinations', error.message || 'Unable to load destinations right now.');
     } finally {
       setLoadingDestinations(false);
     }
@@ -169,7 +180,7 @@ const ActivitiesScreen = ({ navigation }) => {
       );
       setSegments(flattened);
     } catch (error) {
-      Alert.alert('Categories', error.message || 'Unable to load categories right now.');
+      appAlert('Categories', error.message || 'Unable to load categories right now.');
     } finally {
       setLoadingSegments(false);
     }
@@ -193,18 +204,18 @@ const ActivitiesScreen = ({ navigation }) => {
 
   const runSearch = async () => {
     if (!destinationCode) {
-      Alert.alert('Destination required', 'Choose a destination to search.');
+      appAlert('Destination required', 'Choose a destination to search.');
       return;
     }
     if (!fromDate || !toDate) {
-      Alert.alert('Dates required', 'Choose your travel dates.');
+      appAlert('Dates required', 'Choose your travel dates.');
       return;
     }
     const adultsCount = Math.max(1, parseInt(adults, 10) || 1);
 
     const parsedChildAges = childAges.map((age) => parseInt(age, 10));
     if (childrenCount > 0 && parsedChildAges.some((age) => Number.isNaN(age) || age < 0 || age > 17)) {
-      Alert.alert('Children\'s ages required', 'Please enter a valid age (0-17) for every child.');
+      appAlert('Children\'s ages required', 'Please enter a valid age (0-17) for every child.');
       return;
     }
 
@@ -243,15 +254,111 @@ const ActivitiesScreen = ({ navigation }) => {
       setResults(Array.isArray(data?.activities) ? data.activities : []);
     } catch (error) {
       setResults([]);
-      Alert.alert('Activities Search', error.message || 'Unable to search activities right now.');
+      appAlert('Activities Search', error.message || 'Unable to search activities right now.');
     } finally {
       setSearching(false);
     }
   };
 
+
+  // Desktop one-row search panel. Child ages stay in the card below - the count
+  // can be any number, so they can't live on a fixed row.
+  const renderWebSearchPanel = () => (
+    <WebSearchPanel onSearch={runSearch} searching={searching}>
+      <WebField
+        label="Destination"
+        icon="location-outline"
+        flex={2}
+        minWidth={260}
+        value={destinationLabel}
+        placeholder="Where do you want to go?"
+        onPress={openCountryPicker}
+      />
+      <WebField
+        label="Dates"
+        icon="calendar-outline"
+        flex={1.5}
+        minWidth={220}
+        value={fromDate && toDate ? `${formatDisplayDate(fromDate)} - ${formatDisplayDate(toDate)}` : ''}
+        placeholder="Select dates"
+        onPress={() => setDatePickerVisible(true)}
+      />
+      <WebField
+        label="Adults"
+        icon="people-outline"
+        minWidth={110}
+        flex={0.6}
+        value={adults}
+        onChangeText={(value) => setAdults(digitsOnly(value))}
+        placeholder="1"
+        keyboardType="number-pad"
+        maxLength={2}
+      />
+      <WebField
+        label="Children"
+        icon="happy-outline"
+        minWidth={110}
+        flex={0.6}
+        value={children}
+        onChangeText={(value) => setChildren(digitsOnly(value))}
+        placeholder="0"
+        keyboardType="number-pad"
+        maxLength={2}
+      />
+    </WebSearchPanel>
+  );
+
+  const renderActivityCard = ({ item }) => {
+            const imageUrl = getActivityImage(item);
+            const price = getActivityPrice(item);
+            const name = item?.content?.name || 'Activity';
+            const destinationName = item?.country?.destinations?.[0]?.name || '';
+            return (
+              <TouchableOpacity
+                style={[styles.resultCard, activityColumns > 1 && styles.resultCardGrid]}
+                onPress={() =>
+                  navigation.navigate('ActivityDetail', {
+                    activityCode: item?.content?.activityCode,
+                    name,
+                    from: fromDate,
+                    to: toDate,
+                    adults: Math.max(1, parseInt(adults, 10) || 1),
+                    childAges: childAges.map((age) => parseInt(age, 10)),
+                  })
+                }
+              >
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} style={styles.resultImage} />
+                ) : (
+                  <View style={[styles.resultImage, styles.resultImagePlaceholder]}>
+                    <Ionicons name="image-outline" size={24} color={Colors.textMuted} />
+                  </View>
+                )}
+                <View style={styles.resultInfo}>
+                  <Text style={styles.resultName} numberOfLines={2}>{name}</Text>
+                  {!!destinationName && <Text style={styles.resultDestination}>{destinationName}</Text>}
+                  {price && (
+                    <>
+                      <MarkupPrice
+                        service="ACTIVITY"
+                        baseAmount={price.amount}
+                        prefix={`From ${price.currency || ''} `}
+                        priceStyle={styles.resultPrice}
+                      />
+                      {!!formatInrEquivalent(price.amount, price.currency) && (
+                        <Text style={styles.resultPriceInr}>{formatInrEquivalent(price.amount, price.currency)}</Text>
+                      )}
+                    </>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
+      {!isDesktop ? (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={22} color={Colors.text} />
@@ -259,8 +366,9 @@ const ActivitiesScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>Activities</Text>
         <View style={{ width: 22 }} />
       </View>
+      ) : null}
 
-      <View style={styles.formCard}>
+      {!isDesktop && <View style={styles.formCard}>
         <Text style={styles.fieldLabel}>Destination</Text>
         <TouchableOpacity style={styles.inputWithIcon} onPress={openCountryPicker}>
           <Ionicons name="location-outline" size={17} color={Colors.primary} />
@@ -344,70 +452,103 @@ const ActivitiesScreen = ({ navigation }) => {
             <Text style={styles.searchButtonText}>Search Activities</Text>
           )}
         </TouchableOpacity>
-      </View>
+      </View>}
 
-      {searching && (
+      {!isDesktop && searching && (
         <View style={styles.centerState}>
           <ActivityIndicator color={Colors.primary} size="large" />
         </View>
       )}
 
-      {!searching && searched && (results || []).length === 0 && (
+      {!isDesktop && !searching && searched && (results || []).length === 0 && (
         <View style={styles.centerState}>
           <Text style={styles.emptyText}>No activities found for this search.</Text>
         </View>
       )}
 
-      {!searching && (results || []).length > 0 && (
+      {isDesktop ? (
+        // The hero rides in the list header so it scrolls with the results -
+        // as a sibling it stayed pinned and a tall panel was unreachable.
+        <FlatList
+          data={searching ? [] : (results || [])}
+          keyExtractor={(item, index) => item?.activityCode || item?.content?.activityCode || String(index)}
+          contentContainerStyle={styles.resultsList}
+          key={activityColumns}
+          {...scrollProps}
+          numColumns={activityColumns}
+          columnWrapperStyle={activityColumns > 1 ? [styles.gridRow, centeredContent] : undefined}
+          ListHeaderComponent={
+            <View style={styles.webListHeader}>
+              <WebHero
+                image={require('../../assets/activities/hero-sunset.jpg')}
+                title="Things To Do"
+                subtitle="Tours, tickets and experiences at your destination, bookable in advance."
+                activeProduct="activities"
+              >
+                {renderWebSearchPanel()}
+              </WebHero>
+
+              {childAges.length > 0 ? (
+                <View style={[styles.webAgesCard, centeredContent]}>
+                  <Text style={styles.fieldLabel}>Children (ages 0-17)</Text>
+                  <View style={styles.webAgesRow}>
+                    {childAges.map((age, index) => (
+                      <View key={index} style={styles.webAgeField}>
+                        <TextInput
+                          style={styles.inputIconTextField}
+                          placeholder={`Child ${index + 1} age`}
+                          placeholderTextColor={Colors.textMuted}
+                          value={age}
+                          onChangeText={(value) => updateChildAge(index, digitsOnly(value))}
+                          keyboardType="number-pad"
+                          maxLength={2}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {searching ? (
+                <View style={styles.centerState}>
+                  <ActivityIndicator color={Colors.primary} size="large" />
+                </View>
+              ) : null}
+
+              {!searching && searched && (results || []).length === 0 ? (
+                <View style={styles.centerState}>
+                  <Text style={styles.emptyText}>No activities found for this search.</Text>
+                </View>
+              ) : null}
+            </View>
+          }
+          ListFooterComponent={
+            <View style={styles.webListFooter}>
+              <WebValueProps
+                heading="Why book experiences with MyItineri?"
+                items={[
+                  { icon: 'ticket-outline', title: 'Skip-the-line Entry', body: 'Tickets ready on your phone.', tint: Colors.accentBlueSoft },
+                  { icon: 'pricetag-outline', title: 'Best Price Guarantee', body: 'Get the lowest prices, always.', tint: Colors.primarySoft },
+                  { icon: 'calendar-outline', title: 'Flexible Dates', body: 'Change plans without the hassle.', tint: Colors.accentBlueSoft },
+                  { icon: 'headset-outline', title: '24/7 Support', body: "We're here whenever you need us.", tint: Colors.primarySoft },
+                ]}
+              />
+            </View>
+          }
+          renderItem={renderActivityCard}
+        />
+      ) : !searching && (results || []).length > 0 ? (
         <FlatList
           data={results}
           keyExtractor={(item, index) => item?.activityCode || item?.content?.activityCode || String(index)}
-          contentContainerStyle={styles.resultsList}
-          renderItem={({ item }) => {
-            const imageUrl = getActivityImage(item);
-            const price = getActivityPrice(item);
-            const name = item?.content?.name || 'Activity';
-            const destinationName = item?.country?.destinations?.[0]?.name || '';
-            return (
-              <TouchableOpacity
-                style={styles.resultCard}
-                onPress={() =>
-                  navigation.navigate('ActivityDetail', {
-                    activityCode: item?.content?.activityCode,
-                    name,
-                    from: fromDate,
-                    to: toDate,
-                    adults: Math.max(1, parseInt(adults, 10) || 1),
-                    childAges: childAges.map((age) => parseInt(age, 10)),
-                  })
-                }
-              >
-                {imageUrl ? (
-                  <Image source={{ uri: imageUrl }} style={styles.resultImage} />
-                ) : (
-                  <View style={[styles.resultImage, styles.resultImagePlaceholder]}>
-                    <Ionicons name="image-outline" size={24} color={Colors.textMuted} />
-                  </View>
-                )}
-                <View style={styles.resultInfo}>
-                  <Text style={styles.resultName} numberOfLines={2}>{name}</Text>
-                  {!!destinationName && <Text style={styles.resultDestination}>{destinationName}</Text>}
-                  {price && (
-                    <>
-                      <Text style={styles.resultPrice}>
-                        From {price.currency || ''} {Number(price.amount).toLocaleString()}
-                      </Text>
-                      {!!formatInrEquivalent(price.amount, price.currency) && (
-                        <Text style={styles.resultPriceInr}>{formatInrEquivalent(price.amount, price.currency)}</Text>
-                      )}
-                    </>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          }}
+          contentContainerStyle={[styles.resultsList, centeredContent]}
+          key={activityColumns}
+          {...scrollProps}
+          numColumns={activityColumns}
+          columnWrapperStyle={activityColumns > 1 ? styles.gridRow : undefined}
+          renderItem={renderActivityCard}
         />
-      )}
+      ) : null}
 
       <DatePickerModal
         visible={datePickerVisible}
@@ -526,6 +667,7 @@ const ActivitiesScreen = ({ navigation }) => {
           </Pressable>
         </Pressable>
       </Modal>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -610,9 +752,49 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     fontSize: 14,
   },
+  // The list header holds the full-bleed hero, so it must not inherit the
+  // list's horizontal padding.
+  webListHeader: {
+    marginHorizontal: -16,
+    marginTop: -16,
+  },
+  // Cancels the list's padding so the band runs edge to edge.
+  webListFooter: {
+    marginHorizontal: -16,
+    marginBottom: -16,
+  },
+  webAgesCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 18,
+    gap: 10,
+  },
+  webAgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  webAgeField: {
+    minWidth: 150,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+
   resultsList: {
     padding: 16,
     gap: 12,
+  },
+
+  // Desktop grid - see the numColumns note on the FlatList.
+  gridRow: {
+    gap: 12,
+  },
+  resultCardGrid: {
+    flex: 1,
   },
   resultCard: {
     flexDirection: 'row',

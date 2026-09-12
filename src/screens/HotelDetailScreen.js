@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -13,6 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -209,6 +210,7 @@ const cancellationSummary = (cancellation) => {
 };
 
 const HotelDetailScreen = ({ route, navigation }) => {
+  const { centeredContent } = useResponsive();
   const { tjHotelId, hotelName } = route.params;
 
   // Held in state (not just destructured from route.params) because changing
@@ -365,7 +367,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
       );
 
       if (!data.hotels || data.hotels.length === 0) {
-        Alert.alert('No availability', 'This hotel has no rooms available for the selected dates.');
+        appAlert('No availability', 'This hotel has no rooms available for the selected dates.');
         return;
       }
 
@@ -385,7 +387,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
       setSoldOutOptionIds(new Set());
       await fetchDetail(nextContext);
     } catch (err) {
-      Alert.alert('Dates', err.message || 'Unable to check availability for these dates.');
+      appAlert('Dates', err.message || 'Unable to check availability for these dates.');
     } finally {
       setChangingDates(false);
     }
@@ -450,7 +452,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
   // before Book, with the same correlationId used in Listing/Detail.
   const reviewOption = async (option) => {
     if (sessionExpired) {
-      Alert.alert('Search expired', 'Your search session has expired. Please go back and search again.');
+      appAlert('Search expired', 'Your search session has expired. Please go back and search again.');
       return;
     }
 
@@ -482,7 +484,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
       if (err.soldOut) {
         setSoldOutOptionIds((current) => new Set(current).add(option.optionId));
       }
-      Alert.alert('Review', err.message || 'Unable to review this option right now.');
+      appAlert('Review', err.message || 'Unable to review this option right now.');
     } finally {
       setReviewingOptionId(null);
     }
@@ -519,7 +521,7 @@ const HotelDetailScreen = ({ route, navigation }) => {
       )}
 
       {!loading && !error && detail && (
-        <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.listContainer, centeredContent]} showsVerticalScrollIndicator={false}>
           {(() => {
             const galleryImages = parseGalleryImages(catalogHotel?.imagesJson);
             const viewerImages = buildViewerImages(catalogHotel?.heroImageUrl, galleryImages);

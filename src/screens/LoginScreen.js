@@ -7,10 +7,11 @@ import {
   TextInput,
   StatusBar,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Platform,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
@@ -36,6 +37,7 @@ const INITIAL_SIGN_UP = {
 };
 
 const LoginScreen = () => {
+  const { centeredForm } = useResponsive();
   const { login } = useAuth();
   const [mode, setMode] = useState('signin');
   const [signInForm, setSignInForm] = useState(INITIAL_SIGN_IN);
@@ -80,7 +82,7 @@ const LoginScreen = () => {
       const idToken = response.authentication?.idToken || response.params?.id_token;
       if (!idToken) {
         setGoogleLoading(false);
-        Alert.alert('Google Sign-In Failed', 'No ID token received from Google.');
+        appAlert('Google Sign-In Failed', 'No ID token received from Google.');
         return;
       }
 
@@ -104,7 +106,7 @@ const LoginScreen = () => {
 
         login({ token: data.token, user: data.user });
       } catch (error) {
-        Alert.alert('Google Sign-In Failed', error.message || 'Please try again.');
+        appAlert('Google Sign-In Failed', error.message || 'Please try again.');
       } finally {
         setGoogleLoading(false);
       }
@@ -123,7 +125,7 @@ const LoginScreen = () => {
 
   const handleLogin = async () => {
     if (!signInForm.email.trim() || !signInForm.password) {
-      Alert.alert('Missing fields', 'Please enter your email and password.');
+      appAlert('Missing fields', 'Please enter your email and password.');
       return;
     }
 
@@ -148,7 +150,7 @@ const LoginScreen = () => {
 
       login({ token: data.token, user: data.user });
     } catch (error) {
-      Alert.alert(
+      appAlert(
         'Sign in failed',
         error.message || 'Please check your email and password and try again.'
       );
@@ -159,17 +161,17 @@ const LoginScreen = () => {
 
   const handleRegister = async () => {
     if (!signUpForm.email.trim() || !signUpForm.password) {
-      Alert.alert('Missing fields', 'Email and password are required.');
+      appAlert('Missing fields', 'Email and password are required.');
       return;
     }
 
     if (signUpForm.password.length < 6) {
-      Alert.alert('Weak password', 'Please use at least 6 characters.');
+      appAlert('Weak password', 'Please use at least 6 characters.');
       return;
     }
 
     if (signUpForm.password !== signUpForm.confirmPassword) {
-      Alert.alert('Passwords do not match', 'Please re-enter the same password.');
+      appAlert('Passwords do not match', 'Please re-enter the same password.');
       return;
     }
 
@@ -193,7 +195,7 @@ const LoginScreen = () => {
 
       login({ token: data.token, user: data.user });
     } catch (error) {
-      Alert.alert('Sign up failed', error.message || 'Please try again.');
+      appAlert('Sign up failed', error.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
@@ -205,7 +207,7 @@ const LoginScreen = () => {
       (Platform.OS === 'android' && !googleAndroidClientId) ||
       (!googleWebClientId && !googleIosClientId && !googleAndroidClientId)
     ) {
-      Alert.alert(
+      appAlert(
         'Google Sign-In Unavailable',
         'Google Sign-In isn\'t available right now. Please sign in with your email and password instead.'
       );
@@ -221,7 +223,7 @@ const LoginScreen = () => {
     } catch (error) {
       setGoogleLoading(false);
       console.error('[Google Sign-In]', error);
-      Alert.alert(
+      appAlert(
         'Google Sign-In Failed',
         'We couldn\'t sign you in with Google. Please try again, or sign in with your email and password instead.',
         [{ text: 'OK' }]
@@ -346,7 +348,7 @@ const LoginScreen = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scrollContent, centeredForm]} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.title}>Welcome to MyItineri</Text>
           <Text style={styles.subtitle}>Sign in to your account, or create a new one to get started.</Text>

@@ -322,6 +322,13 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     padding: 20,
     maxHeight: '90%',
+    // Uncapped, this fills the window on a laptop, and because each day cell is
+    // 14.28% wide with aspectRatio 1 the grid grows to hundreds of pixels per
+    // day and the month controls fall off screen. No-op on phones, which are
+    // narrower than this anyway.
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
     shadowColor: Colors.shadow,
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.18,

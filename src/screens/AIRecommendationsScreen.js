@@ -8,11 +8,15 @@ import {
   StatusBar,
   ActivityIndicator,
   TextInput,
-  Alert,
   Animated,
   Pressable,
   Image,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -217,6 +221,8 @@ const buildFallbackInsights = ({ destinationInput, parsedBudget, mood, moodLabel
 };
 
 const AIRecommendationsScreen = ({ route, navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const { budget, destination, people } = route.params || {};
   const canGoBack = navigation.canGoBack();
 
@@ -267,11 +273,11 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
 
   const fetchRecommendations = async () => {
     if (!parsedBudget || parsedBudget <= 0) {
-      Alert.alert('Budget required', 'Please enter a valid budget.');
+      appAlert('Budget required', 'Please enter a valid budget.');
       return;
     }
     if (!parsedPeople || parsedPeople <= 0) {
-      Alert.alert('People required', 'Please enter at least 1 traveler.');
+      appAlert('People required', 'Please enter at least 1 traveler.');
       return;
     }
 
@@ -389,6 +395,9 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
       <View style={styles.heroBackGlow} />
       <View style={styles.heroBackGlowSecondary} />
 
+      {isDesktop ? (
+        <WebHero compact title="AI Trip Picks" subtitle="Tell us your budget and mood - we rank the best-fit escapes." />
+      ) : (
       <View style={styles.header}>
         {canGoBack ? (
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navButton}>
@@ -405,8 +414,9 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
           <Ionicons name="sparkles" size={20} color={Colors.secondary} />
         </View>
       </View>
+      )}
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, centeredContent]} showsVerticalScrollIndicator={false} {...scrollProps}>
         <View style={styles.heroCard}>
           <View style={styles.heroOrbLarge} />
           <View style={styles.heroOrbSmall} />
@@ -582,11 +592,18 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
             </Text>
           </View>
         ) : (
-          recommendations.map((item, index) => (
+          // Two cards per row on desktop; one per row leaves a very tall page
+          // with half the width unused.
+          <View style={isDesktop ? styles.recGrid : undefined}>
+          {recommendations.map((item, index) => (
             <Pressable
               key={item.id}
               onPress={() => navigation.navigate('ItineraryDetail', { itinerary: item, destination: item.destination, people: String(parsedPeople) })}
-              style={({ pressed }) => [styles.recCard, pressed && { opacity: 0.9 }]}
+              style={({ pressed }) => [
+                styles.recCard,
+                isDesktop && styles.recCardGrid,
+                pressed && { opacity: 0.9 },
+              ]}
             >
               <Image source={{ uri: item.imageUrl }} style={styles.recImage} />
               <View style={styles.recBanner}>
@@ -644,7 +661,8 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
                 </View>
               </View>
             </Pressable>
-          ))
+          ))}
+          </View>
         )}
 
         <View style={{ height: 110 }} />
@@ -669,6 +687,7 @@ const AIRecommendationsScreen = ({ route, navigation }) => {
           </Pressable>
         </Animated.View>
       </View>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -1094,6 +1113,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 18,
     elevation: 6,
+  },
+
+  recGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 20,
+  },
+  recCardGrid: {
+    width: '48%',
+    flexGrow: 1,
+    marginBottom: 0,
   },
   recImage: {
     width: '100%',

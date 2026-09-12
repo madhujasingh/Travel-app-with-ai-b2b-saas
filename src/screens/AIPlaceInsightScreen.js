@@ -8,19 +8,21 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 
 const AIPlaceInsightScreen = ({ route, navigation }) => {
+  const { centeredContent } = useResponsive();
   const { recommendation } = route.params || {};
   const gallery = recommendation?.gallery || (recommendation?.imageUrl ? [recommendation.imageUrl] : []);
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={centeredContent}>
         <View style={styles.hero}>
           <Image source={{ uri: gallery[0] }} style={styles.heroImage} />
           <View style={styles.heroOverlay} />

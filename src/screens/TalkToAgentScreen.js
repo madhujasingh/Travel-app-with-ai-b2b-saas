@@ -7,9 +7,10 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { phoneDigits } from '../utils/inputSanitizers';
 
 const TalkToAgentScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const canGoBack = navigation.canGoBack();
   const { token, user } = useAuth();
   const { itinerary, destination, people, adults, children, customization, cartItems } = route.params || {};
@@ -37,12 +39,12 @@ const TalkToAgentScreen = ({ route, navigation }) => {
 
   const handleSubmit = async () => {
     if (!name || !phone || !email) {
-      Alert.alert('Error', 'Please fill all required fields');
+      appAlert('Error', 'Please fill all required fields');
       return;
     }
 
     if (!token) {
-      Alert.alert('Error', 'Please login again before sending a request.');
+      appAlert('Error', 'Please login again before sending a request.');
       return;
     }
 
@@ -89,7 +91,7 @@ const TalkToAgentScreen = ({ route, navigation }) => {
         throw new Error(data?.message || 'Unable to start chat');
       }
 
-      Alert.alert('Chat Started', 'Your request reached our travel agent. Continue in chat.', [
+      appAlert('Chat Started', 'Your request reached our travel agent. Continue in chat.', [
         {
           text: 'Open Chat',
           // navigate, not replace - 'ChatScreen' isn't a route inside this
@@ -102,7 +104,7 @@ const TalkToAgentScreen = ({ route, navigation }) => {
         },
       ]);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to submit request');
+      appAlert('Error', error.message || 'Unable to submit request');
     } finally {
       setSubmitting(false);
     }
@@ -125,7 +127,7 @@ const TalkToAgentScreen = ({ route, navigation }) => {
         <View style={{ width: 30 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={centeredForm}>
         {/* Agent Info */}
         <View style={styles.agentSection}>
           <View style={styles.agentCard}>

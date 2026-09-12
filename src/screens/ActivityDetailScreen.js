@@ -7,9 +7,10 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
-  Alert,
   StatusBar,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -65,6 +66,7 @@ const getHeroImage = (content) => {
 };
 
 const ActivityDetailScreen = ({ route, navigation }) => {
+  const { centeredContent } = useResponsive();
   const { activityCode, name, from, to, adults, childAges } = route.params;
   const [loading, setLoading] = useState(true);
   const [activity, setActivity] = useState(null);
@@ -113,7 +115,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
           }
         } catch (error) {
           if (!cancelled) {
-            Alert.alert('Activity Details', error.message || 'Unable to load activity details.');
+            appAlert('Activity Details', error.message || 'Unable to load activity details.');
           }
         } finally {
           if (!cancelled) {
@@ -160,7 +162,7 @@ const ActivityDetailScreen = ({ route, navigation }) => {
       )}
 
       {!loading && activity && (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, centeredContent]}>
           {heroImage && <Image source={{ uri: heroImage }} style={styles.heroImage} />}
 
           <Text style={styles.activityName}>{activity?.content?.name || name}</Text>

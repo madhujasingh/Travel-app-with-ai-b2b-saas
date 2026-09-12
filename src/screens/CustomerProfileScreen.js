@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   View,
   Text,
   StyleSheet,
@@ -12,6 +11,12 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import TwoColumn from '../components/web/TwoColumn';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,8 +28,22 @@ import { phoneDigits } from '../utils/inputSanitizers';
 
 const BOOKING_TABS = new Set(['bookings', 'transactions']);
 
+const PROFILE_TABS = [
+  { key: 'preferences', label: 'Preferences', icon: 'settings-outline' },
+  { key: 'insights', label: 'AI Insights', icon: 'bulb-outline' },
+  { key: 'bookings', label: 'Bookings', icon: 'calendar-outline' },
+  { key: 'saved', label: 'Saved', icon: 'heart-outline' },
+  { key: 'groups', label: 'Groups', icon: 'people-outline' },
+  { key: 'transactions', label: 'Payments', icon: 'card-outline' },
+  { key: 'notifications', label: 'Alerts', icon: 'notifications-outline' },
+];
+
 const CustomerProfileScreen = ({ navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const { user, token, login, logout } = useAuth();
+  // Admins and suppliers can browse the storefront without logging out.
+  const isStaff = !!user?.role && user.role !== 'CUSTOMER';
   const [activeTab, setActiveTab] = useState('preferences');
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -578,11 +597,11 @@ const CustomerProfileScreen = ({ navigation }) => {
 
   const saveProfile = async () => {
     if (!editName.trim()) {
-      Alert.alert('Name required', 'Please enter your name.');
+      appAlert('Name required', 'Please enter your name.');
       return;
     }
     if (!editPhone.trim()) {
-      Alert.alert('Phone required', 'Please enter your phone number.');
+      appAlert('Phone required', 'Please enter your phone number.');
       return;
     }
 
@@ -604,7 +623,7 @@ const CustomerProfileScreen = ({ navigation }) => {
       login({ token, user: { ...user, ...data } });
       setEditModalVisible(false);
     } catch (error) {
-      Alert.alert('Profile', error.message || 'Unable to update profile right now.');
+      appAlert('Profile', error.message || 'Unable to update profile right now.');
     } finally {
       setSavingProfile(false);
     }
@@ -615,6 +634,9 @@ const CustomerProfileScreen = ({ navigation }) => {
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
       {/* Header */}
+      {isDesktop ? (
+        <WebHero compact title="My Account" subtitle="Preferences, bookings, payments and saved trips." />
+      ) : (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={Colors.secondary} />
@@ -624,8 +646,9 @@ const CustomerProfileScreen = ({ navigation }) => {
           <Ionicons name="chatbubble-ellipses-outline" size={24} color={Colors.secondary} />
         </TouchableOpacity>
       </View>
+      )}
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={centeredContent} {...scrollProps}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.profileImageContainer}>
@@ -641,38 +664,68 @@ const CustomerProfileScreen = ({ navigation }) => {
           <Text style={styles.userPhone}>{user?.phone || '+91 98765 43210'}</Text>
         </View>
 
-        {/* Tab Navigation */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabContainer}>
-          {[
-            { key: 'preferences', label: 'Preferences', icon: 'settings-outline' },
-            { key: 'insights', label: 'AI Insights', icon: 'bulb-outline' },
-            { key: 'bookings', label: 'Bookings', icon: 'calendar-outline' },
-            { key: 'saved', label: 'Saved', icon: 'heart-outline' },
-            { key: 'groups', label: 'Groups', icon: 'people-outline' },
-            { key: 'transactions', label: 'Payments', icon: 'card-outline' },
-            { key: 'notifications', label: 'Alerts', icon: 'notifications-outline' },
-          ].map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              style={[styles.tab, activeTab === tab.key && styles.activeTab]}
-              onPress={() => setActiveTab(tab.key)}
+        {/* Account nav: a horizontal scroller on phones, a vertical sidebar on
+            desktop where there's room to show every section at once. */}
+        <TwoColumn
+          asideWidth={220}
+          asideFirst
+          main={<>
+            {renderTabContent()}
+
+            {/* Staff arrive here by opening the storefront from their
+                dashboard; this is the way back on phones, where there is no
+                site header to carry the link. */}
+            {isStaff && (
+              <TouchableOpacity
+                style={styles.backToDashboard}
+                onPress={() => navigation.navigate('B2BDashboard')}
+              >
+                <Ionicons name="grid-outline" size={19} color={Colors.accentBlue} />
+                <Text style={styles.backToDashboardText}>Back to dashboard</Text>
+              </TouchableOpacity>
+            )}
+
+            {!isDesktop && (
+              <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+                <Ionicons name="log-out-outline" size={20} color="#F44336" />
+                <Text style={styles.logoutText}>Logout</Text>
+              </TouchableOpacity>
+            )}
+          </>}
+          aside={
+            <ScrollView
+              horizontal={!isDesktop}
+              showsHorizontalScrollIndicator={false}
+              style={isDesktop ? styles.sidebar : styles.tabContainer}
             >
-              <Ionicons name={tab.icon} size={16} color={activeTab === tab.key ? Colors.secondary : '#666'} />
-              <Text style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}>{tab.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+              <View style={isDesktop ? styles.sidebarInner : styles.tabRow}>
+                {PROFILE_TABS.map((tab) => (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[
+                      styles.tab,
+                      isDesktop && styles.sidebarTab,
+                      activeTab === tab.key && styles.activeTab,
+                    ]}
+                    onPress={() => setActiveTab(tab.key)}
+                  >
+                    <Ionicons name={tab.icon} size={16} color={activeTab === tab.key ? Colors.secondary : '#666'} />
+                    <Text style={[styles.tabText, activeTab === tab.key && styles.activeTabText]}>{tab.label}</Text>
+                  </TouchableOpacity>
+                ))}
 
-        {/* Tab Content */}
-        {renderTabContent()}
+                {isDesktop && (
+                  <TouchableOpacity style={[styles.logoutButton, styles.sidebarLogout]} onPress={logout}>
+                    <Ionicons name="log-out-outline" size={20} color="#F44336" />
+                    <Text style={styles.logoutText}>Logout</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </ScrollView>
+          }
+        />
 
-        {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Ionicons name="log-out-outline" size={20} color="#F44336" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: 100 }} />
+        <View style={{ height: isDesktop ? 40 : 100 }} />
       </ScrollView>
 
       <Modal visible={editModalVisible} transparent animationType="fade" onRequestClose={() => setEditModalVisible(false)}>
@@ -715,6 +768,7 @@ const CustomerProfileScreen = ({ navigation }) => {
           </Pressable>
         </Pressable>
       </Modal>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -788,6 +842,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
     paddingHorizontal: 10,
     paddingVertical: 10,
+  },
+
+  // Desktop account sidebar - replaces the horizontal tab scroller.
+  sidebar: {
+    flexGrow: 0,
+  },
+  sidebarInner: {
+    gap: 4,
+  },
+  tabRow: {
+    flexDirection: 'row',
+  },
+  sidebarTab: {
+    width: '100%',
+    justifyContent: 'flex-start',
+    marginRight: 0,
+  },
+  sidebarLogout: {
+    marginTop: 14,
+    marginHorizontal: 0,
   },
   tab: {
     flexDirection: 'row',
@@ -1033,6 +1107,25 @@ const styles = StyleSheet.create({
     color: '#666',
     marginLeft: 5,
   },
+  backToDashboard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    marginHorizontal: 20,
+    marginTop: 18,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accentBlue,
+    backgroundColor: Colors.accentBlueSoft,
+  },
+  backToDashboardText: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: Colors.accentBlueDark,
+  },
+
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',

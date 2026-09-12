@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Alert, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,  StatusBar } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,6 +83,7 @@ const extractPlanFare = (plan, dayKey, ages) => {
 };
 
 const TripSafeResultsScreen = ({ route, navigation }) => {
+  const { centeredContent } = useResponsive();
   const { token } = useAuth();
   const { plans, journeyType, startDate, endDate, travellerAges, regionLabel, searchQuery } = route.params || {};
   const dayKey = coverageDayKey(searchQuery, startDate, endDate);
@@ -89,7 +92,7 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
   const selectPlan = async (plan) => {
     const product = plan?.pi?.[0];
     if (!product?.pid) {
-      Alert.alert('Plan Unavailable', 'This plan is missing product details and cannot be selected.');
+      appAlert('Plan Unavailable', 'This plan is missing product details and cannot be selected.');
       return;
     }
     setReviewingPlid(plan.plid);
@@ -128,7 +131,7 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
         travellerAges,
       });
     } catch (error) {
-      Alert.alert('Travel Insurance', error.message || 'Unable to review this plan right now.');
+      appAlert('Travel Insurance', error.message || 'Unable to review this plan right now.');
     } finally {
       setReviewingPlid(null);
     }
@@ -210,7 +213,7 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
         <FlatList
           data={plans}
           keyExtractor={(item, index) => item.plid || String(index)}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, centeredContent]}
           renderItem={renderCard}
         />
       )}

@@ -6,9 +6,17 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
   StatusBar,
+  ScrollView,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import WebHero from '../components/web/WebHero';
+import WebSearchPanel, { WebPanelTabs } from '../components/web/WebSearchPanel';
+import WebField from '../components/web/WebField';
+import WebValueProps from '../components/web/WebValueProps';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,6 +103,8 @@ const addDays = (isoDate, days) => {
 };
 
 const TripSafeScreen = ({ navigation }) => {
+  const { centeredForm, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const { token } = useAuth();
 
   const [journeyType, setJourneyType] = useState('STANDALONE');
@@ -130,7 +140,7 @@ const TripSafeScreen = ({ navigation }) => {
 
   const addTraveller = () => {
     if (ages.length >= 10) {
-      Alert.alert('Traveller limit', 'A maximum of 10 travellers is allowed per search.');
+      appAlert('Traveller limit', 'A maximum of 10 travellers is allowed per search.');
       return;
     }
     setAges((prev) => [...prev, '']);
@@ -144,48 +154,48 @@ const TripSafeScreen = ({ navigation }) => {
   const runSearch = async () => {
     if (journeyType === 'STANDALONE') {
       if (selectedRegions.length === 0) {
-        Alert.alert('Destination required', 'Choose at least one region you\'re travelling to.');
+        appAlert('Destination required', 'Choose at least one region you\'re travelling to.');
         return;
       }
       if (!startDate || !endDate) {
-        Alert.alert('Dates required', 'Choose your coverage start and end date.');
+        appAlert('Dates required', 'Choose your coverage start and end date.');
         return;
       }
       if (new Date(endDate) <= new Date(startDate)) {
-        Alert.alert('Invalid dates', 'End date must be after the start date.');
+        appAlert('Invalid dates', 'End date must be after the start date.');
         return;
       }
     } else if (journeyType === 'STUDENT') {
       if (!countryCode.trim()) {
-        Alert.alert('Country required', 'Enter the country code you\'re studying in (e.g. US, FR, DE).');
+        appAlert('Country required', 'Enter the country code you\'re studying in (e.g. US, FR, DE).');
         return;
       }
       if (!startDate) {
-        Alert.alert('Start date required', 'Choose your coverage start date.');
+        appAlert('Start date required', 'Choose your coverage start date.');
         return;
       }
     } else if (journeyType === 'AMT') {
       if (!startDate) {
-        Alert.alert('Start date required', 'Choose your coverage start date.');
+        appAlert('Start date required', 'Choose your coverage start date.');
         return;
       }
     }
 
     const parsedAges = ages.map((age) => parseInt(age, 10)).filter((age) => Number.isFinite(age));
     if (parsedAges.length !== ages.length) {
-      Alert.alert('Traveller ages required', 'Enter an age for every traveller.');
+      appAlert('Traveller ages required', 'Enter an age for every traveller.');
       return;
     }
     if (journeyType === 'STUDENT') {
       // Doc "Important Note" (tripsafe-api/08-student-api-integration.txt):
       // eligible age group is 18-45 ONLY for the Student channel.
       if (parsedAges.some((age) => age < 18 || age > 45)) {
-        Alert.alert('Invalid age', 'Student plan travellers must be aged 18-45.');
+        appAlert('Invalid age', 'Student plan travellers must be aged 18-45.');
         return;
       }
     } else if (parsedAges.some((age) => age < 0 || age > 75)) {
       // Doc FAQ (tripsafe-api/01-search-api.txt): valid age range 0-75.
-      Alert.alert('Invalid age', 'Traveller ages must be between 0 and 75.');
+      appAlert('Invalid age', 'Traveller ages must be between 0 and 75.');
       return;
     }
 
@@ -198,7 +208,7 @@ const TripSafeScreen = ({ navigation }) => {
         (new Date(`${endDate}T00:00:00`) - new Date(`${startDate}T00:00:00`)) / 86400000
       );
       if (nights >= 180) {
-        Alert.alert(
+        appAlert(
           'Trip too long',
           'Travel insurance covers trips of up to 180 days. Please shorten the dates, or choose Annual Multi-Trip for longer cover.'
         );
@@ -271,7 +281,7 @@ const TripSafeScreen = ({ navigation }) => {
       // ever turns out inconsistent across accounts/plans.
       const plans = data?.isr?.iinfo?.pli ?? data?.iinfo?.pli ?? [];
       if (plans.length === 0) {
-        Alert.alert('No Plans Found', 'No insurance plans were found for this search. Try different dates or destinations.');
+        appAlert('No Plans Found', 'No insurance plans were found for this search. Try different dates or destinations.');
         return;
       }
       navigation.navigate('TripSafeResults', {
@@ -287,15 +297,96 @@ const TripSafeScreen = ({ navigation }) => {
         searchQuery: data?.isq,
       });
     } catch (error) {
-      Alert.alert('Travel Insurance Search', error.message || 'Unable to fetch insurance plans right now.');
+      appAlert('Travel Insurance Search', error.message || 'Unable to fetch insurance plans right now.');
     } finally {
       setSearching(false);
     }
   };
 
+
+  // Desktop one-row panel. Journey type drives which fields appear, exactly as
+  // it does in the phone form - only the arrangement differs.
+  const renderWebSearchPanel = () => (
+    <WebSearchPanel
+      onSearch={runSearch}
+      searching={searching}
+      tabs={
+        <WebPanelTabs options={JOURNEY_TYPES} value={journeyType} onChange={setJourneyType} />
+      }
+      chips={
+        journeyType === 'STANDALONE' ? (
+          <View style={styles.webChipRow}>
+            <Text style={styles.webChipRowLabel}>Destination regions</Text>
+            {POPULAR_REGIONS.map((region) => {
+              const active = selectedRegions.includes(region.rkey);
+              return (
+                <TouchableOpacity
+                  key={region.rkey}
+                  style={[styles.webChip, active && styles.webChipActive]}
+                  onPress={() => toggleRegion(region.rkey)}
+                >
+                  <Text style={[styles.webChipText, active && styles.webChipTextActive]}>
+                    {region.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null
+      }
+    >
+      {journeyType === 'STUDENT' ? (
+        <WebField
+          label="Country of study"
+          icon="school-outline"
+          flex={1.4}
+          value={countryCode}
+          onChangeText={(v) => setCountryCode(v.toUpperCase().slice(0, 2))}
+          placeholder="US, FR, DE"
+          maxLength={2}
+        />
+      ) : null}
+
+      <WebField
+        label={journeyType === 'STANDALONE' ? 'Coverage Start' : 'Coverage Start Date'}
+        icon="calendar-outline"
+        flex={1.4}
+        value={startDate ? formatDisplayDate(startDate) : ''}
+        placeholder="Start date"
+        onPress={() => openDatePicker('start')}
+      />
+
+      {journeyType === 'STANDALONE' ? (
+        <WebField
+          label="Coverage End"
+          icon="calendar-outline"
+          flex={1.4}
+          value={endDate ? formatDisplayDate(endDate) : ''}
+          placeholder="End date"
+          onPress={() => openDatePicker('end')}
+        />
+      ) : null}
+    </WebSearchPanel>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.bodyScroll}
+        {...scrollProps}
+      >
+      {isDesktop ? (
+        <WebHero
+          image={require('../../assets/tripsafe/hero-sunset.jpg')}
+          title="Travel Insurance"
+          subtitle="Cover your trip against delays, cancellations and medical costs."
+          activeProduct="insurance"
+        >
+          {renderWebSearchPanel()}
+        </WebHero>
+      ) : (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
@@ -303,9 +394,10 @@ const TripSafeScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>Travel Insurance</Text>
         <View style={{ width: 30 }} />
       </View>
+      )}
 
-      <View style={styles.formCard}>
-        <View style={styles.chipRow}>
+      <View style={[styles.formCard, isDesktop ? styles.webFormCard : centeredForm]}>
+        {!isDesktop && <View style={styles.chipRow}>
           {JOURNEY_TYPES.map((jt) => (
             <TouchableOpacity
               key={jt.value}
@@ -315,9 +407,9 @@ const TripSafeScreen = ({ navigation }) => {
               <Text style={[styles.chipText, journeyType === jt.value && styles.chipTextActive]}>{jt.label}</Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </View>}
 
-        {journeyType === 'STANDALONE' ? (
+        {!isDesktop && journeyType === 'STANDALONE' ? (
           <>
             <Text style={styles.fieldLabel}>Where are you travelling to?</Text>
             <View style={styles.chipRow}>
@@ -354,6 +446,8 @@ const TripSafeScreen = ({ navigation }) => {
 
         {journeyType === 'STUDENT' ? (
           <>
+            {/* Country and start date are in the hero panel on desktop. */}
+            {!isDesktop && <>
             <Text style={styles.fieldLabel}>Country you're studying in</Text>
             <View style={styles.inputWithIcon}>
               <Ionicons name="school-outline" size={17} color={Colors.primary} />
@@ -375,6 +469,7 @@ const TripSafeScreen = ({ navigation }) => {
                 {startDate ? formatDisplayDate(startDate) : 'Start date'}
               </Text>
             </TouchableOpacity>
+            </>}
 
             <Text style={styles.fieldLabel}>Coverage Duration</Text>
             <View style={styles.chipRow}>
@@ -468,6 +563,19 @@ const TripSafeScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
+      {isDesktop && (
+        <WebValueProps
+          items={[
+            { icon: 'shield-checkmark-outline', title: 'Trip Protection', body: 'Cover for delays, cancellations and baggage.', tint: Colors.accentBlueSoft },
+            { icon: 'medkit-outline', title: 'Medical Cover', body: 'Treatment costs while you are abroad.', tint: Colors.primarySoft },
+            { icon: 'document-text-outline', title: 'Instant Policy', body: 'Your documents arrive as soon as you book.', tint: Colors.accentBlueSoft },
+            { icon: 'headset-outline', title: '24/7 Support', body: "We're here whenever you need us.", tint: Colors.primarySoft },
+          ]}
+          heading="Why insure with MyItineri?"
+        />
+      )}
+      </ScrollView>
+
       <DatePickerModal
         visible={datePicker.visible}
         title={datePicker.target === 'start' ? 'Coverage Start Date' : 'Coverage End Date'}
@@ -475,6 +583,7 @@ const TripSafeScreen = ({ navigation }) => {
         onSelect={chooseDate}
         onClose={() => setDatePicker({ visible: false, target: null })}
       />
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -497,6 +606,53 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.secondary,
   },
+  bodyScroll: {
+    paddingBottom: 32,
+  },
+
+  // --- Desktop ---------------------------------------------------------------
+  webFormCard: {
+    width: '100%',
+    maxWidth: 860,
+    alignSelf: 'center',
+    marginTop: 26,
+    paddingVertical: 24,
+    paddingHorizontal: 26,
+    borderRadius: 14,
+  },
+  webChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  webChipRowLabel: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginRight: 4,
+  },
+  webChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  webChipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(246, 106, 42, 0.14)',
+  },
+  webChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.82)',
+  },
+  webChipTextActive: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+
   formCard: {
     backgroundColor: Colors.card,
     margin: 16,

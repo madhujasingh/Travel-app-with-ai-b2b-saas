@@ -7,9 +7,11 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
   StatusBar,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
+import { useMarkup } from '../context/MarkupContext';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,7 +43,9 @@ const buildInitialTravelers = (adults, childAges) => [
 ];
 
 const ActivityBookingScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { token } = useAuth();
+  const { markupFor } = useMarkup();
   const {
     activityCode,
     name,
@@ -93,7 +97,14 @@ const ActivityBookingScreen = ({ route, navigation }) => {
         activityName: activity?.name || name,
         visitDateFrom: activity?.dateFrom || from,
         visitDateTo: activity?.dateTo || to,
+        // totalAmount stays what HotelBeds billed - they debit the agency
+        // account directly and take no amount in the booking request, so this
+        // is purely the supplier side. The breakdown records what the customer
+        // was charged on our own rail.
         totalAmount: b.total,
+        markupAmount: markupFor('ACTIVITY', 'DEFAULT', Number(b.total || 0), 1),
+        customerTotal:
+          Number(b.total || 0) + markupFor('ACTIVITY', 'DEFAULT', Number(b.total || 0), 1),
         currency: b.currency,
         status: b.status,
       }),
@@ -118,7 +129,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
         }
         setBooking(data?.booking || null);
       } catch (error) {
-        Alert.alert('Booking', error.message || 'Unable to load this booking.');
+        appAlert('Booking', error.message || 'Unable to load this booking.');
       } finally {
         setResuming(false);
       }
@@ -138,16 +149,16 @@ const ActivityBookingScreen = ({ route, navigation }) => {
 
   const submitBooking = async () => {
     if (!holderName.trim() || !holderSurname.trim() || !email.trim() || !phone.trim()) {
-      Alert.alert('Missing details', 'Please fill in your name, email, and phone number.');
+      appAlert('Missing details', 'Please fill in your name, email, and phone number.');
       return;
     }
     if (travelers.some((t) => !t.name.trim() || !t.surname.trim())) {
-      Alert.alert('Missing traveler details', 'Please provide a name and surname for every traveler.');
+      appAlert('Missing traveler details', 'Please provide a name and surname for every traveler.');
       return;
     }
     const missingRequired = (questions || []).find((q) => q.required && !answers[q.code]?.trim());
     if (missingRequired) {
-      Alert.alert('Missing information', missingRequired.text || 'Please answer all required questions.');
+      appAlert('Missing information', missingRequired.text || 'Please answer all required questions.');
       return;
     }
 
@@ -210,7 +221,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       setBooking(data?.booking || null);
       persistLocalRecord(data?.booking);
     } catch (error) {
-      Alert.alert('Booking Failed', error.message || 'Unable to confirm this booking.');
+      appAlert('Booking Failed', error.message || 'Unable to confirm this booking.');
     } finally {
       setSubmitting(false);
     }
@@ -230,7 +241,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       setBooking(data?.booking || booking);
       persistLocalRecord(data?.booking);
     } catch (error) {
-      Alert.alert('Booking Status', error.message || 'Unable to check booking status.');
+      appAlert('Booking Status', error.message || 'Unable to check booking status.');
     } finally {
       setCheckingStatus(false);
     }
@@ -273,10 +284,10 @@ const ActivityBookingScreen = ({ route, navigation }) => {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Activity Voucher' });
       } else {
-        Alert.alert('Voucher Saved', `Saved to ${file.uri}`);
+        appAlert('Voucher Saved', `Saved to ${file.uri}`);
       }
     } catch (error) {
-      Alert.alert('Download Failed', error.message || 'Could not download your voucher.');
+      appAlert('Download Failed', error.message || 'Could not download your voucher.');
     } finally {
       setDownloadingVoucher(false);
     }
@@ -286,7 +297,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   // cancellation fee before actually cancelling - same two-step pattern
   // HotelBookingScreen uses for hotel cancellations.
   const cancelBooking = () => {
-    Alert.alert('Cancel booking', 'Check cancellation charges before cancelling?', [
+    appAlert('Cancel booking', 'Check cancellation charges before cancelling?', [
       { text: 'No', style: 'cancel' },
       {
         text: 'Yes, check',
@@ -303,7 +314,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
             }
             const fee = simData?.booking?.cancelValuationAmount ?? 0;
 
-            Alert.alert(
+            appAlert(
               'Confirm cancellation',
               fee > 0
                 ? `Cancelling now will incur a fee of ${booking.currency} ${fee}. Continue?`
@@ -326,7 +337,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
                       setBooking(data?.booking || booking);
                       persistLocalRecord(data?.booking);
                     } catch (error) {
-                      Alert.alert('Cancel Booking', error.message || 'Unable to cancel this booking.');
+                      appAlert('Cancel Booking', error.message || 'Unable to cancel this booking.');
                     } finally {
                       setCancelling(false);
                     }
@@ -336,7 +347,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
             );
           } catch (error) {
             setCancelling(false);
-            Alert.alert('Cancel Booking', error.message || 'Unable to check cancellation charges.');
+            appAlert('Cancel Booking', error.message || 'Unable to check cancellation charges.');
           }
         },
       },
@@ -359,13 +370,16 @@ const ActivityBookingScreen = ({ route, navigation }) => {
     const paxDistribution = describePaxDistribution(confirmedActivity?.paxes);
     const remarks = contractRemarks(confirmedActivity?.comments);
     const cancellationPolicies = confirmedActivity?.cancellationPolicies || [];
-    const pricePaid = confirmedActivity?.amountDetail?.totalAmount?.amount ?? booking.total;
+    const supplierPaid = confirmedActivity?.amountDetail?.totalAmount?.amount ?? booking.total;
+    // What the customer was charged, not what HotelBeds billed us.
+    const pricePaid =
+      Number(supplierPaid || 0) + markupFor('ACTIVITY', 'DEFAULT', Number(supplierPaid || 0), 1);
     const paidCurrency = booking.currency || currency;
 
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.confirmedState}>
+        <ScrollView contentContainerStyle={[styles.confirmedState, centeredForm]}>
           <Ionicons
             name={booking.status === 'CANCELLED' ? 'close-circle' : 'checkmark-circle'}
             size={64}
@@ -492,7 +506,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, centeredForm]}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryName} numberOfLines={2}>{name}</Text>
           <Text style={styles.summaryDate}>

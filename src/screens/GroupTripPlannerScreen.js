@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -13,6 +12,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -107,6 +111,8 @@ const buildSeedOptionsFromItinerary = (itinerary) => {
 };
 
 const GroupTripPlannerScreen = ({ navigation, route }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const { token } = useAuth();
   const seedItinerary = route?.params?.seedItinerary || null;
   const requestedTripId = route?.params?.tripId || null;
@@ -223,7 +229,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
         setTripDetail(null);
       }
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to load group planner'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to load group planner'));
     } finally {
       setLoading(false);
     }
@@ -245,7 +251,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       }
       setTripDetail(data);
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to load group trip details'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to load group trip details'));
     } finally {
       setDetailLoading(false);
     }
@@ -311,7 +317,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       }
       setDestinations(Array.isArray(data) ? data : []);
     } catch (error) {
-      Alert.alert('Destinations', getFriendlyErrorMessage(error, 'Unable to load destinations right now.'));
+      appAlert('Destinations', getFriendlyErrorMessage(error, 'Unable to load destinations right now.'));
     } finally {
       setLoadingDestinations(false);
     }
@@ -329,7 +335,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
 
   const createTrip = async () => {
     if (!createForm.title.trim() || !createForm.destination.trim()) {
-      Alert.alert('Missing details', 'Please enter a trip title and destination.');
+      appAlert('Missing details', 'Please enter a trip title and destination.');
       return;
     }
 
@@ -371,14 +377,14 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       await loadTrips();
       setSelectedTripId(data.id);
       await loadTripDetail(data.id);
-      Alert.alert(
+      appAlert(
         'Group trip created',
         seedItinerary
           ? 'Your selected land package was imported as the starting point for group voting.'
           : 'Invite friends and start voting on options.'
       );
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to create group trip'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to create group trip'));
     } finally {
       setCreatingTrip(false);
     }
@@ -386,7 +392,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
 
   const joinTrip = async () => {
     if (!joinCode.trim()) {
-      Alert.alert('Missing invite code', 'Enter the invite code to join a group trip.');
+      appAlert('Missing invite code', 'Enter the invite code to join a group trip.');
       return;
     }
 
@@ -410,9 +416,9 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       await loadTrips();
       setSelectedTripId(data.id);
       setTripDetail(data);
-      Alert.alert('Joined group trip', 'You can now vote on options with the rest of the group.');
+      appAlert('Joined group trip', 'You can now vote on options with the rest of the group.');
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to join trip'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to join trip'));
     } finally {
       setJoiningTrip(false);
     }
@@ -423,7 +429,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       return;
     }
     if (!optionForm.title.trim()) {
-      Alert.alert('Missing title', 'Add a title for this option.');
+      appAlert('Missing title', 'Add a title for this option.');
       return;
     }
 
@@ -450,7 +456,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       });
       await loadTripDetail(tripDetail.id);
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to add option'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to add option'));
     } finally {
       setAddingOption(false);
     }
@@ -483,7 +489,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       }
       await loadTripDetail(tripDetail.id);
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to save vote'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to save vote'));
     }
   };
 
@@ -506,7 +512,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       setTripDetail(data);
       await loadTrips();
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to lock winner'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to lock winner'));
     }
   };
 
@@ -529,7 +535,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       setTripDetail(data);
       await loadTrips();
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to unlock winner'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to unlock winner'));
     }
   };
 
@@ -538,7 +544,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       return;
     }
 
-    Alert.alert('Remove option', 'Remove this option and its votes from the trip?', [
+    appAlert('Remove option', 'Remove this option and its votes from the trip?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
@@ -556,7 +562,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
             setTripDetail(data);
             await loadTrips();
           } catch (error) {
-            Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to remove option'));
+            appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to remove option'));
           }
         },
       },
@@ -579,7 +585,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       }
       await loadTripDetail(tripDetail.id);
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to retract vote'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to retract vote'));
     }
   };
 
@@ -588,7 +594,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       return;
     }
 
-    Alert.alert('Leave trip', `Leave "${tripDetail.title}"? You'll need the invite code to rejoin.`, [
+    appAlert('Leave trip', `Leave "${tripDetail.title}"? You'll need the invite code to rejoin.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
@@ -608,7 +614,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
             setTripDetail(null);
             await loadTrips();
           } catch (error) {
-            Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to leave trip'));
+            appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to leave trip'));
           } finally {
             setLeavingTrip(false);
           }
@@ -635,7 +641,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
         people: String(tripDetail.members.length || 1),
       });
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to open itinerary'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to open itinerary'));
     }
   };
 
@@ -660,9 +666,9 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       setActiveSection('PREVIOUS');
       setTripDetail(data);
       await loadTrips();
-      Alert.alert('Itinerary ready', 'Your group winners have been turned into a trip itinerary draft.');
+      appAlert('Itinerary ready', 'Your group winners have been turned into a trip itinerary draft.');
     } catch (error) {
-      Alert.alert('Group Planner', getFriendlyErrorMessage(error, 'Unable to generate itinerary'));
+      appAlert('Group Planner', getFriendlyErrorMessage(error, 'Unable to generate itinerary'));
     } finally {
       setFinalizingTrip(false);
     }
@@ -741,6 +747,9 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
       <View style={styles.backdropGlowTop} />
       <View style={styles.backdropGlowMid} />
+      {isDesktop ? (
+        <WebHero compact title="Group Trip Planner" subtitle="Invite friends, vote on options, and lock in the winner." />
+      ) : (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
@@ -750,8 +759,9 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
           <Text style={styles.refreshText}>Refresh</Text>
         </TouchableOpacity>
       </View>
+      )}
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, centeredContent]} showsVerticalScrollIndicator={false} {...scrollProps}>
         <View style={styles.heroCard}>
           <View style={styles.heroOrbLarge} />
           <View style={styles.heroOrbSmall} />
@@ -1110,6 +1120,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
           </Pressable>
         </Pressable>
       </Modal>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };

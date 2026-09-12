@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   StatusBar,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -65,11 +65,11 @@ const HotelCatalogAdminScreen = ({ navigation }) => {
 
   const runSync = async (hotelIds) => {
     if (!hotelIds.length) {
-      Alert.alert('Sync Hotel Catalog', 'No hotel IDs to sync.');
+      appAlert('Sync Hotel Catalog', 'No hotel IDs to sync.');
       return;
     }
     if (hotelIds.length > 100) {
-      Alert.alert('Sync Hotel Catalog', 'TripJack allows a maximum of 100 hotel IDs per sync call.');
+      appAlert('Sync Hotel Catalog', 'TripJack allows a maximum of 100 hotel IDs per sync call.');
       return;
     }
 
@@ -87,10 +87,10 @@ const HotelCatalogAdminScreen = ({ navigation }) => {
       if (!response.ok) {
         throw new Error(data?.message || data?.error || 'Sync failed');
       }
-      Alert.alert('Sync Hotel Catalog', `Synced ${data.synced} hotel${data.synced === 1 ? '' : 's'}.`);
+      appAlert('Sync Hotel Catalog', `Synced ${data.synced} hotel${data.synced === 1 ? '' : 's'}.`);
       loadCatalog();
     } catch (error) {
-      Alert.alert('Sync Hotel Catalog', error.message || 'Unable to sync right now.');
+      appAlert('Sync Hotel Catalog', error.message || 'Unable to sync right now.');
     } finally {
       setSyncing(false);
     }
@@ -112,7 +112,7 @@ const HotelCatalogAdminScreen = ({ navigation }) => {
   // button tap should trigger silently. This screen only does explicit,
   // bounded ID-based syncs for now.
   const syncCountryUnavailable = () => {
-    Alert.alert(
+    appAlert(
       'Not Yet Available',
       `Full-country sync for "${countryInput.trim()}" needs a deliberate, rate-limited batch job (a country can be thousands of hotels) - not built yet. Use explicit hotel IDs above for now.`
     );

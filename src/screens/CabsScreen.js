@@ -6,12 +6,20 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   FlatList,
   StatusBar,
+  ScrollView,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import WebHero from '../components/web/WebHero';
+import WebSearchPanel, { WebPanelTabs } from '../components/web/WebSearchPanel';
+import WebField from '../components/web/WebField';
+import WebValueProps from '../components/web/WebValueProps';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -70,6 +78,8 @@ const fitsParty = (group, passengers, bags) => {
 };
 
 const CabsScreen = ({ route, navigation }) => {
+  const { centeredForm, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const { token } = useAuth();
   // Set when arriving from FlightBookingScreen's "Add an Airport Transfer"
   // prompt after a successful flight booking (see cabs-api/cab-api-doc.txt's
@@ -148,7 +158,7 @@ const CabsScreen = ({ route, navigation }) => {
       if (target === 'origin') setOrigin(locationDto);
       else setDestination(locationDto);
     } catch (error) {
-      Alert.alert('Location', error.message || 'Unable to load this location right now.');
+      appAlert('Location', error.message || 'Unable to load this location right now.');
     }
   };
 
@@ -188,30 +198,30 @@ const CabsScreen = ({ route, navigation }) => {
 
   const runSearch = async () => {
     if (!origin || !destination) {
-      Alert.alert('Locations required', 'Choose both a pickup and drop-off location.');
+      appAlert('Locations required', 'Choose both a pickup and drop-off location.');
       return;
     }
     if (!pickupDate || !pickupTime) {
-      Alert.alert('Pickup time required', 'Choose your pickup date and time.');
+      appAlert('Pickup time required', 'Choose your pickup date and time.');
       return;
     }
     const pickupDateTime = new Date(`${pickupDate}T${pickupTime}:00`);
     // Doc: pickupDate "must be >=2 hours in future" - checked client-side too
     // so an obviously-invalid time is caught before hitting the API.
     if (pickupDateTime.getTime() < Date.now() + 2 * 60 * 60 * 1000) {
-      Alert.alert('Pickup too soon', 'Pickup time must be at least 2 hours from now.');
+      appAlert('Pickup too soon', 'Pickup time must be at least 2 hours from now.');
       return;
     }
 
     let returnDateTimeString;
     if (tripType === 'roundtrip') {
       if (!returnDate || !returnTime) {
-        Alert.alert('Return time required', 'Choose your return date and time.');
+        appAlert('Return time required', 'Choose your return date and time.');
         return;
       }
       const returnDateTime = new Date(`${returnDate}T${returnTime}:00`);
       if (returnDateTime.getTime() < pickupDateTime.getTime() + 30 * 60 * 1000) {
-        Alert.alert('Return too soon', 'Return time must be at least 30 minutes after pickup.');
+        appAlert('Return too soon', 'Return time must be at least 30 minutes after pickup.');
         return;
       }
       returnDateTimeString = `${returnDate} ${returnTime}`;
@@ -250,7 +260,7 @@ const CabsScreen = ({ route, navigation }) => {
       }
       const quotesInfo = data?.data?.quotesInfo || [];
       if (quotesInfo.length === 0) {
-        Alert.alert('No Cabs Available', 'No cabs were found for this route and time. Try a different time or location.');
+        appAlert('No Cabs Available', 'No cabs were found for this route and time. Try a different time or location.');
         return;
       }
       // Keep only vehicles that actually seat the party and take the bags. If
@@ -259,7 +269,7 @@ const CabsScreen = ({ route, navigation }) => {
       // claim there are none.
       const fitting = quotesInfo.filter((group) => fitsParty(group, passengersCount, bagsCount));
       if (fitting.length === 0) {
-        Alert.alert(
+        appAlert(
           'No exact match',
           `No cab fits ${passengersCount} passenger${passengersCount > 1 ? 's' : ''} and ${bagsCount} bag${bagsCount === 1 ? '' : 's'}. Showing everything available for this route instead.`
         );
@@ -275,15 +285,144 @@ const CabsScreen = ({ route, navigation }) => {
         sourceBookingId,
       });
     } catch (error) {
-      Alert.alert('Cab Search', error.message || 'Unable to fetch cab quotes right now.');
+      appAlert('Cab Search', error.message || 'Unable to fetch cab quotes right now.');
     } finally {
       setSearching(false);
     }
   };
 
+
+  // Desktop one-row search panel. Presentation only - every handler here is the
+  // one the phone form already calls.
+  const renderWebSearchPanel = () => (
+    <WebSearchPanel
+      onSearch={runSearch}
+      searching={searching}
+      tabs={
+        <WebPanelTabs
+          options={JOURNEY_TYPES}
+          value={journeyType}
+          onChange={setJourneyType}
+        />
+      }
+      chips={
+        <View style={styles.webTripRow}>
+          {[
+            { label: 'One Way', value: 'oneway' },
+            { label: 'Round Trip', value: 'roundtrip' },
+          ].map((option) => {
+            const active = tripType === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[styles.webTripChip, active && styles.webTripChipActive]}
+                onPress={() => setTripType(option.value)}
+              >
+                <Text style={[styles.webTripChipText, active && styles.webTripChipTextActive]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      }
+    >
+      <WebField
+        label="Pickup Location"
+        icon="radio-button-on-outline"
+        flex={1.8}
+        minWidth={220}
+        value={origin?.displayAddress}
+        placeholder="Where should we pick you up?"
+        onPress={() => openLocationPicker('origin')}
+      />
+
+      <TouchableOpacity
+        style={styles.webSwapButton}
+        onPress={swapLocations}
+        disabled={!origin && !destination}
+        accessibilityLabel="Swap pickup and drop-off"
+      >
+        <Ionicons name="swap-horizontal" size={18} color={Colors.primary} />
+      </TouchableOpacity>
+
+      <WebField
+        label="Drop-off Location"
+        icon="location-outline"
+        flex={1.8}
+        minWidth={220}
+        value={destination?.displayAddress}
+        placeholder="Where are you going?"
+        onPress={() => openLocationPicker('destination')}
+      />
+
+      <WebField
+        label="Pickup Date"
+        icon="calendar-outline"
+        value={pickupDate ? formatDisplayDate(pickupDate) : ''}
+        placeholder="Date"
+        onPress={() => openDatePicker('pickup')}
+      />
+
+      <WebField
+        label="Pickup Time"
+        icon="time-outline"
+        minWidth={120}
+        flex={0.8}
+        value={pickupTime ? formatDisplayTime(pickupTime) : ''}
+        placeholder="Time"
+        onPress={() => openTimePicker('pickup')}
+      />
+
+      {tripType === 'roundtrip' ? (
+        <>
+          <WebField
+            label="Return Date"
+            icon="calendar-outline"
+            value={returnDate ? formatDisplayDate(returnDate) : ''}
+            placeholder="Date"
+            onPress={() => openDatePicker('return')}
+          />
+          <WebField
+            label="Return Time"
+            icon="time-outline"
+            minWidth={120}
+            flex={0.8}
+            value={returnTime ? formatDisplayTime(returnTime) : ''}
+            placeholder="Time"
+            onPress={() => openTimePicker('return')}
+          />
+        </>
+      ) : null}
+
+      <WebField
+        label="Passengers & Bags"
+        icon="person-outline"
+        minWidth={180}
+        value={partySummary}
+        onPress={() => setPartyPicker(true)}
+      />
+    </WebSearchPanel>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.bodyScroll}
+        {...scrollProps}
+      >
+      {isDesktop ? (
+        <WebHero
+          image={require('../../assets/cabs/hero-sunset.jpg')}
+          title="Cab Booking"
+          subtitle="Airport transfers and outstation trips, booked in a couple of taps."
+          activeProduct="cabs"
+        >
+          {renderWebSearchPanel()}
+        </WebHero>
+      ) : (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
@@ -291,8 +430,9 @@ const CabsScreen = ({ route, navigation }) => {
         <Text style={styles.headerTitle}>{sourceBookingId ? 'Add Airport Transfer' : 'Cabs'}</Text>
         <View style={{ width: 30 }} />
       </View>
+      )}
 
-      <View style={styles.formCard}>
+      {!isDesktop && <View style={[styles.formCard, centeredForm]}>
         <View style={styles.chipRow}>
           {JOURNEY_TYPES.map((jt) => (
             <TouchableOpacity
@@ -402,7 +542,20 @@ const CabsScreen = ({ route, navigation }) => {
             <Text style={styles.searchButtonText}>Search Cabs</Text>
           )}
         </TouchableOpacity>
-      </View>
+      </View>}
+
+      {isDesktop && (
+        <WebValueProps
+          items={[
+            { icon: 'time-outline', title: 'On-time Pickups', body: 'Drivers tracked from the moment you book.', tint: Colors.accentBlueSoft },
+            { icon: 'pricetag-outline', title: 'Upfront Pricing', body: 'The fare you see is the fare you pay.', tint: Colors.primarySoft },
+            { icon: 'headset-outline', title: '24/7 Support', body: "We're here whenever you need us.", tint: Colors.accentBlueSoft },
+            { icon: 'car-outline', title: 'Airport & Outstation', body: 'Transfers, day trips and local rides.', tint: Colors.primarySoft },
+          ]}
+          heading="Why ride with MyItineri?"
+        />
+      )}
+      </ScrollView>
 
       <DatePickerModal
         visible={datePicker.visible}
@@ -552,6 +705,7 @@ const CabsScreen = ({ route, navigation }) => {
           </Pressable>
         </Pressable>
       </Modal>
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -574,6 +728,45 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.secondary,
   },
+  bodyScroll: {
+    paddingBottom: 32,
+  },
+
+  // --- Desktop hero panel ---------------------------------------------------
+  webSwapButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  webTripRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  webTripChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  webTripChipActive: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(246, 106, 42, 0.14)',
+  },
+  webTripChipText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  webTripChipTextActive: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+
   formCard: {
     backgroundColor: Colors.card,
     margin: 16,

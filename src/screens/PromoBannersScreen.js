@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   Modal,
@@ -15,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -93,7 +93,7 @@ const PromoBannersScreen = ({ navigation }) => {
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permission needed', 'Please allow photo library access to pick a banner image.');
+      appAlert('Permission needed', 'Please allow photo library access to pick a banner image.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -109,7 +109,7 @@ const PromoBannersScreen = ({ navigation }) => {
 
   const suggestTitle = async () => {
     if (!selectedImage && !editingBanner) {
-      Alert.alert('Pick an image first', 'AI needs an image to suggest a title from.');
+      appAlert('Pick an image first', 'AI needs an image to suggest a title from.');
       return;
     }
 
@@ -144,7 +144,7 @@ const PromoBannersScreen = ({ navigation }) => {
         updateField('description', data.description);
       }
     } catch (err) {
-      Alert.alert('AI Suggestion Failed', err.message || 'Unable to suggest a title right now.');
+      appAlert('AI Suggestion Failed', err.message || 'Unable to suggest a title right now.');
     } finally {
       setSuggestingTitle(false);
     }
@@ -177,15 +177,15 @@ const PromoBannersScreen = ({ navigation }) => {
 
   const submitBanner = async () => {
     if (!form.title.trim()) {
-      Alert.alert('Missing title', 'Please give this banner a title.');
+      appAlert('Missing title', 'Please give this banner a title.');
       return;
     }
     if (!selectedImage && !editingBanner) {
-      Alert.alert('Missing image', 'Please pick an image for this banner.');
+      appAlert('Missing image', 'Please pick an image for this banner.');
       return;
     }
     if ((form.linkType === 'SCREEN' || form.linkType === 'URL') && !form.linkTarget.trim()) {
-      Alert.alert(
+      appAlert(
         'Missing link target',
         form.linkType === 'SCREEN' ? 'Please pick which screen to navigate to.' : 'Please enter the URL to open.'
       );
@@ -225,7 +225,7 @@ const PromoBannersScreen = ({ navigation }) => {
       resetForm();
       loadBanners();
     } catch (err) {
-      Alert.alert('Save Failed', err.message || 'Unable to save this banner.');
+      appAlert('Save Failed', err.message || 'Unable to save this banner.');
     } finally {
       setSubmitting(false);
     }
@@ -247,14 +247,14 @@ const PromoBannersScreen = ({ navigation }) => {
       }
       loadBanners();
     } catch (err) {
-      Alert.alert('Update Failed', err.message || 'Unable to update this banner.');
+      appAlert('Update Failed', err.message || 'Unable to update this banner.');
     } finally {
       setBusyBannerId(null);
     }
   };
 
   const deleteBanner = (banner) => {
-    Alert.alert('Delete banner', `Remove "${banner.title}"? This can't be undone.`, [
+    appAlert('Delete banner', `Remove "${banner.title}"? This can't be undone.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -271,7 +271,7 @@ const PromoBannersScreen = ({ navigation }) => {
             }
             loadBanners();
           } catch (err) {
-            Alert.alert('Delete Failed', err.message || 'Unable to delete this banner.');
+            appAlert('Delete Failed', err.message || 'Unable to delete this banner.');
           } finally {
             setBusyBannerId(null);
           }

@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ import { decimalOnly } from '../utils/inputSanitizers';
 const MESSAGES_POLL_INTERVAL_MS = 10000;
 
 const ChatScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
   const { conversation } = route.params || {};
   const [messages, setMessages] = useState([]);
@@ -83,7 +85,7 @@ const ChatScreen = ({ route, navigation }) => {
       setMessages(Array.isArray(data) ? data : []);
     } catch (error) {
       if (!hasLoadedMessagesOnceRef.current) {
-        Alert.alert('Error', error.message || 'Unable to load chat');
+        appAlert('Error', error.message || 'Unable to load chat');
       }
     } finally {
       hasLoadedMessagesOnceRef.current = true;
@@ -120,7 +122,7 @@ const ChatScreen = ({ route, navigation }) => {
       setMessages((prev) => [...prev, data]);
       setContent('');
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to send message');
+      appAlert('Error', error.message || 'Unable to send message');
     } finally {
       setSending(false);
     }
@@ -176,18 +178,18 @@ const ChatScreen = ({ route, navigation }) => {
 
             navigation.push('ChatScreen', { conversation: newConversation });
           } catch (error) {
-            Alert.alert('Error', error.message || 'Unable to forward conversation');
+            appAlert('Error', error.message || 'Unable to forward conversation');
           }
         },
       });
 
-      Alert.alert(
+      appAlert(
         'Forward To Supplier',
         'Select supplier to continue this request.',
         [...suppliers.slice(0, 3).map(pickSupplier), { text: 'Cancel', style: 'cancel' }]
       );
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to load suppliers');
+      appAlert('Error', error.message || 'Unable to load suppliers');
     } finally {
       setForwarding(false);
     }
@@ -208,11 +210,11 @@ const ChatScreen = ({ route, navigation }) => {
       messages[messages.length - 1];
 
     if (!proposal) {
-      Alert.alert('Nothing to send', 'There is no package message in this conversation yet.');
+      appAlert('Nothing to send', 'There is no package message in this conversation yet.');
       return;
     }
 
-    Alert.alert(
+    appAlert(
       'Send Package To Customer',
       `Send this to the customer now?\n\n${proposal.content}`,
       [
@@ -252,7 +254,7 @@ const ChatScreen = ({ route, navigation }) => {
 
               navigation.push('ChatScreen', { conversation: linkedConversation });
             } catch (error) {
-              Alert.alert('Error', error.message || 'Unable to send package to customer');
+              appAlert('Error', error.message || 'Unable to send package to customer');
             } finally {
               setSendingToCustomer(false);
             }
@@ -277,7 +279,7 @@ const ChatScreen = ({ route, navigation }) => {
       !templateForm.duration.trim() ||
       !templateForm.price.trim()
     ) {
-      Alert.alert('Missing details', 'Please fill title, destination, duration and price.');
+      appAlert('Missing details', 'Please fill title, destination, duration and price.');
       return;
     }
 
@@ -313,9 +315,9 @@ const ChatScreen = ({ route, navigation }) => {
       }));
 
       await loadMessages();
-      Alert.alert('Sent', `Itinerary proposal #${data?.itineraryId || ''} sent to admin.`);
+      appAlert('Sent', `Itinerary proposal #${data?.itineraryId || ''} sent to admin.`);
     } catch (error) {
-      Alert.alert('Error', error.message || 'Unable to submit itinerary proposal');
+      appAlert('Error', error.message || 'Unable to submit itinerary proposal');
     } finally {
       setSubmittingTemplate(false);
     }
@@ -499,7 +501,7 @@ const ChatScreen = ({ route, navigation }) => {
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderMessage}
         style={styles.flatListFlex}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, centeredForm]}
       />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   StatusBar,
@@ -10,6 +9,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,6 +61,8 @@ const formatWhen = (iso) => {
 };
 
 const MyFlightBookingsScreen = ({ navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const { token } = useAuth();
   const [holds, setHolds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +104,7 @@ const MyFlightBookingsScreen = ({ navigation }) => {
   const clearStaleHolds = () => {
     if (!staleCount) return;
     const staleItems = holds.filter(isStaleHold);
-    Alert.alert(
+    appAlert(
       'Clear Stale Holds',
       `Remove ${staleCount} on-hold booking${staleCount === 1 ? '' : 's'} that never got confirmed? This won't cancel anything with the airline.`,
       [
@@ -200,6 +206,9 @@ const MyFlightBookingsScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
+      {isDesktop ? (
+        <WebHero compact title="My Trips" subtitle="Every flight you have booked or held with us." />
+      ) : (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
@@ -207,6 +216,7 @@ const MyFlightBookingsScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>My Trips</Text>
         <View style={{ width: 28 }} />
       </View>
+      )}
 
       {loading ? (
         <View style={styles.loaderWrap}>
@@ -217,7 +227,8 @@ const MyFlightBookingsScreen = ({ navigation }) => {
         data={holds}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
-        contentContainerStyle={holds.length ? styles.listContent : styles.listContentEmpty}
+        contentContainerStyle={[holds.length ? styles.listContent : styles.listContentEmpty, centeredContent]}
+        {...scrollProps}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           staleCount > 0 ? (
@@ -250,6 +261,7 @@ const MyFlightBookingsScreen = ({ navigation }) => {
         }
       />
       )}
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   ImageBackground,
   Modal,
@@ -14,6 +13,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive, { CONTENT_MAX_WIDTH } from '../hooks/useResponsive';
+import { LinearGradient } from 'expo-linear-gradient';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import WebHero from '../components/web/WebHero';
+import WebSearchPanel from '../components/web/WebSearchPanel';
+import WebValueProps from '../components/web/WebValueProps';
+import WebField from '../components/web/WebField';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +54,12 @@ const formatDisplayDate = (value) => {
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+// Used by the hero's quick chips and the Popular Destinations row. Tapping one
+// opens the city picker already filtered to that name, so these are real
+// shortcuts into the existing flow rather than decoration.
+const POPULAR_CITIES = ['Goa', 'Dubai', 'Bali', 'Singapore', 'Bangkok', 'Hong Kong'];
+const RECENT_SEARCH_CITIES = POPULAR_CITIES.slice(0, 5);
+
 const startOfTomorrow = () => {
   const date = new Date();
   date.setDate(date.getDate() + 1);
@@ -71,10 +85,26 @@ const chunkArray = (arr, size) => {
 };
 
 const HotelsScreen = ({ navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
   const [hotelIdsInput, setHotelIdsInput] = useState('');
   const [rooms, setRooms] = useState([createEmptyRoom()]);
+  const [roomsModal, setRoomsModal] = useState(false);
+  const scrollRef = useRef(null);
+
+  // "2 Rooms, 5 Guests" - the collapsed form shown in the desktop hero field.
+  const roomsSummary = (() => {
+    const guests = rooms.reduce(
+      (total, room) => total + (Number(room.adults) || 0) + (Number(room.children) || 0),
+      0,
+    );
+    const roomLabel = `${rooms.length} Room${rooms.length === 1 ? '' : 's'}`;
+    const guestLabel = `${guests} Guest${guests === 1 ? '' : 's'}`;
+    return `${roomLabel}, ${guestLabel}`;
+  })();
+
   const [nationality, setNationality] = useState('106');
   const [nationalityLabel, setNationalityLabel] = useState('India');
   const [currency, setCurrency] = useState('INR');
@@ -191,18 +221,18 @@ const HotelsScreen = ({ navigation }) => {
 
   const searchHotels = async () => {
     if (!checkIn || !checkOut) {
-      Alert.alert('Dates required', 'Choose your check-in and check-out dates.');
+      appAlert('Dates required', 'Choose your check-in and check-out dates.');
       return;
     }
     if (!nationality.trim()) {
-      Alert.alert('Nationality required', 'Choose the guest nationality.');
+      appAlert('Nationality required', 'Choose the guest nationality.');
       return;
     }
 
     try {
       const hids = buildHotelIds();
       if (hids.length === 0) {
-        Alert.alert('Destination required', 'Choose a city to search.');
+        appAlert('Destination required', 'Choose a city to search.');
         return;
       }
 
@@ -260,7 +290,7 @@ const HotelsScreen = ({ navigation }) => {
         destinationLabel,
       });
     } catch (error) {
-      Alert.alert('Hotel Search', error.message || 'Unable to fetch hotels right now.');
+      appAlert('Hotel Search', error.message || 'Unable to fetch hotels right now.');
     } finally {
       setLoading(false);
     }
@@ -281,7 +311,7 @@ const HotelsScreen = ({ navigation }) => {
       );
       setNationalities(data.nationalityInfos || []);
     } catch (error) {
-      Alert.alert('Nationalities', error.message || 'Unable to load nationalities right now.');
+      appAlert('Nationalities', error.message || 'Unable to load nationalities right now.');
     } finally {
       setLoadingNationalities(false);
     }
@@ -316,10 +346,16 @@ const HotelsScreen = ({ navigation }) => {
       );
       setCities(data || []);
     } catch (error) {
-      Alert.alert('Cities', error.message || 'Unable to load cities right now.');
+      appAlert('Cities', error.message || 'Unable to load cities right now.');
     } finally {
       setLoadingCities(false);
     }
+  };
+
+  // Opens the picker pre-filtered to a city name.
+  const openCityForName = (city) => {
+    setCitySearch(city);
+    openCityModal();
   };
 
   const selectCity = async (cityEntry) => {
@@ -333,7 +369,7 @@ const HotelsScreen = ({ navigation }) => {
 
       const ids = hotelsInCity.map((h) => h.tjHotelId).filter(Boolean);
       if (ids.length === 0) {
-        Alert.alert('No hotels', 'No synced hotels found for this city.');
+        appAlert('No hotels', 'No synced hotels found for this city.');
         return;
       }
 
@@ -342,7 +378,7 @@ const HotelsScreen = ({ navigation }) => {
       setCityModal(false);
       setCitySearch('');
     } catch (error) {
-      Alert.alert('City Search', error.message || 'Unable to load hotels for this city right now.');
+      appAlert('City Search', error.message || 'Unable to load hotels for this city right now.');
     } finally {
       setSelectingCity(false);
     }
@@ -352,101 +388,13 @@ const HotelsScreen = ({ navigation }) => {
     `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={Colors.accentBlueDark} barStyle="light-content" />
-
-      <ImageBackground
-        source={require('../../assets/hotels/hero-sunset.jpg')}
-        style={styles.hero}
-        imageStyle={styles.heroImage}
-      >
-        <View style={styles.heroOverlay} />
-        <TouchableOpacity style={styles.heroBackButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={22} color={Colors.text} />
-        </TouchableOpacity>
-        <View style={styles.heroContent}>
-          <Text style={styles.heroTitle}>
-            Find Your{'\n'}
-            <Text style={styles.heroTitleAccent}>Perfect Stay</Text>
-          </Text>
-          <Text style={styles.heroSubtitle}>Comfortable stays, unforgettable journeys.</Text>
-        </View>
-      </ImageBackground>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <PromoBannerCarousel placement="HOTELS" />
-
-        <View style={styles.formCard}>
-          <Text style={styles.fieldLabel}>Destination</Text>
-          <TouchableOpacity style={styles.browseButton} onPress={openCityModal} disabled={selectingCity}>
-            <Ionicons name="location-outline" size={18} color={Colors.accentBlue} />
-            <Text style={styles.browseButtonText}>
-              {selectingCity ? 'Loading hotels...' : destinationLabel || 'Where do you want to go?'}
-            </Text>
-            {selectingCity ? (
-              <ActivityIndicator size="small" color={Colors.primary} />
-            ) : (
-              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.dateRow}>
-            <View style={styles.dateField}>
-              <Text style={styles.fieldLabel}>Check-in</Text>
-              <TouchableOpacity style={styles.inputWithIcon} onPress={() => openDatePicker('checkIn')}>
-                <Ionicons name="calendar-outline" size={17} color={Colors.accentBlue} />
-                <Text style={[styles.inputIconText, checkIn ? styles.pickerText : styles.pickerPlaceholder]}>
-                  {formatDisplayDate(checkIn) || 'Select date'}
-                </Text>
-                <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.dateField}>
-              <Text style={styles.fieldLabel}>Check-out</Text>
-              <TouchableOpacity
-                style={[styles.inputWithIcon, !checkIn && styles.inputDisabled]}
-                onPress={() => checkIn && openDatePicker('checkOut')}
-                disabled={!checkIn}
-              >
-                <Ionicons name="calendar-outline" size={17} color={Colors.accentBlue} />
-                <Text style={[styles.inputIconText, checkOut ? styles.pickerText : styles.pickerPlaceholder]}>
-                  {formatDisplayDate(checkOut) || 'Select date'}
-                </Text>
-                <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.dateRow}>
-            <View style={styles.dateField}>
-              <Text style={styles.fieldLabel}>Nationality</Text>
-              <TouchableOpacity style={styles.inputWithIcon} onPress={openNationalityModal}>
-                <Ionicons name="people-outline" size={17} color={Colors.accentBlue} />
-                <Text style={[styles.inputIconText, styles.pickerText]}>{nationalityLabel}</Text>
-                <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.dateField}>
-              <Text style={styles.fieldLabel}>Currency</Text>
-              <View style={styles.inputWithIcon}>
-                <Ionicons name="card-outline" size={17} color={Colors.accentBlue} />
-                <TextInput
-                  style={styles.inputIconTextField}
-                  placeholder="INR"
-                  placeholderTextColor={Colors.textMuted}
-                  value={currency}
-                  onChangeText={setCurrency}
-                  autoCapitalize="characters"
-                  maxLength={3}
-                />
-              </View>
-            </View>
-          </View>
-
-          <Text style={styles.sectionLabel}>Rooms & Guests</Text>
+  // The full room editor. Rendered in the phone form card, and in a modal from
+  // the desktop hero's Rooms & Guests field so it never needs a scroll.
+  const renderRoomsEditor = () => (
+    <>
+          <View style={isDesktop ? styles.roomGrid : null}>
           {rooms.map((room, index) => (
-            <View key={index} style={styles.roomCard}>
+            <View key={index} style={[styles.roomCard, isDesktop && styles.roomCardDesktop]}>
               <View style={styles.roomCardHeader}>
                 <View style={styles.roomCardTitleRow}>
                   <Ionicons name="bed-outline" size={16} color={Colors.accentBlue} />
@@ -521,11 +469,246 @@ const HotelsScreen = ({ navigation }) => {
               )}
             </View>
           ))}
+          </View>
 
           <TouchableOpacity style={styles.addRoomButton} onPress={addRoom}>
             <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
             <Text style={styles.addRoomText}>Add another room</Text>
           </TouchableOpacity>
+    </>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor={Colors.accentBlueDark} barStyle="light-content" />
+
+
+      <ScrollView
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+        {...scrollProps}
+        contentContainerStyle={isDesktop ? null : centeredContent}
+      >
+      {isDesktop ? (
+        <WebHero
+          image={require('../../assets/hotels/hero-sunset.jpg')}
+          align="left"
+          eyebrow="Stay more. Explore more."
+          title="Hotel Booking"
+          subtitle="Discover amazing stays at the best prices around the world."
+          badges={[
+            { icon: 'pricetag-outline', label: 'Best Price Guarantee' },
+            { icon: 'headset-outline', label: '24/7 Support' },
+            { icon: 'shield-checkmark-outline', label: 'Secure Booking' },
+          ]}
+          activeProduct="hotels"
+        >
+          <WebSearchPanel
+            variant="light"
+            searchLabel="Search Hotels"
+            onSearch={searchHotels}
+            searching={loading}
+            secondary={
+              <>
+                <WebField
+                  tone="onLight"
+                  label="Nationality"
+                  icon="people-outline"
+                  flex={1}
+                  minWidth={200}
+                  value={nationalityLabel}
+                  onPress={openNationalityModal}
+                />
+                <WebField
+                  tone="onLight"
+                  label="Currency"
+                  icon="card-outline"
+                  flex={0.6}
+                  minWidth={140}
+                  value={currency}
+                  onChangeText={setCurrency}
+                  placeholder="INR"
+                  maxLength={3}
+                />
+                <View style={styles.secondarySpacer} />
+              </>
+            }
+            chips={
+              <View style={styles.recentRow}>
+                <Text style={styles.recentLabel}>Recent searches:</Text>
+                {RECENT_SEARCH_CITIES.map((city) => (
+                  <TouchableOpacity
+                    key={city}
+                    style={styles.recentChip}
+                    onPress={() => openCityForName(city)}
+                  >
+                    <Text style={styles.recentChipText}>{city}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            }
+          >
+            <WebField
+              tone="onLight"
+              label="Destination"
+              icon="location-outline"
+              flex={2}
+              minWidth={260}
+              value={destinationLabel}
+              placeholder="Where do you want to go?"
+              loading={selectingCity}
+              onPress={openCityModal}
+            />
+            <WebField
+              tone="onLight"
+              label="Check In"
+              icon="calendar-outline"
+              value={formatDisplayDate(checkIn)}
+              placeholder="Select date"
+              onPress={() => openDatePicker('checkIn')}
+            />
+            <WebField
+              tone="onLight"
+              label="Check Out"
+              icon="calendar-outline"
+              value={formatDisplayDate(checkOut)}
+              placeholder="Select date"
+              disabled={!checkIn}
+              onPress={() => checkIn && openDatePicker('checkOut')}
+            />
+            <WebField
+              tone="onLight"
+              label="Rooms & Guests"
+              icon="person-outline"
+              value={roomsSummary}
+              onPress={() => setRoomsModal(true)}
+            />
+          </WebSearchPanel>
+        </WebHero>
+      ) : (
+      <ImageBackground
+        source={require('../../assets/hotels/hero-sunset.jpg')}
+        style={styles.hero}
+        imageStyle={styles.heroImage}
+      >
+        <View style={styles.heroOverlay} />
+        <TouchableOpacity style={styles.heroBackButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={22} color={Colors.text} />
+        </TouchableOpacity>
+        <View style={styles.heroContent}>
+          <Text style={styles.heroTitle}>
+            Find Your{'\n'}
+            <Text style={styles.heroTitleAccent}>Perfect Stay</Text>
+          </Text>
+          <Text style={styles.heroSubtitle}>Comfortable stays, unforgettable journeys.</Text>
+        </View>
+      </ImageBackground>
+      )}
+
+        <View style={isDesktop ? styles.webBody : null}>
+        <PromoBannerCarousel placement="HOTELS" heading="Offers for you" />
+
+        {isDesktop && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeading}>Popular Destinations</Text>
+            <View style={styles.destinationRow}>
+              {POPULAR_CITIES.map((city) => (
+                <TouchableOpacity
+                  key={city}
+                  style={styles.destinationCard}
+                  onPress={() => openCityForName(city)}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={[Colors.accentBlue, Colors.accentBlueDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.destinationImage}
+                  >
+                    <Ionicons name="business-outline" size={26} color="rgba(255,255,255,0.65)" />
+                  </LinearGradient>
+                  <Text style={styles.destinationName}>{city}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {!isDesktop && <>
+        <View style={styles.formCard}>
+          {/* Destination and the date pair live in the hero panel on desktop;
+              showing them again here would be two sources of truth on screen. */}
+          {!isDesktop && <>
+          <Text style={styles.fieldLabel}>Destination</Text>
+          <TouchableOpacity style={styles.browseButton} onPress={openCityModal} disabled={selectingCity}>
+            <Ionicons name="location-outline" size={18} color={Colors.accentBlue} />
+            <Text style={styles.browseButtonText}>
+              {selectingCity ? 'Loading hotels...' : destinationLabel || 'Where do you want to go?'}
+            </Text>
+            {selectingCity ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <Ionicons name="chevron-forward" size={16} color={Colors.primary} />
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.dateRow}>
+            <View style={styles.dateField}>
+              <Text style={styles.fieldLabel}>Check-in</Text>
+              <TouchableOpacity style={styles.inputWithIcon} onPress={() => openDatePicker('checkIn')}>
+                <Ionicons name="calendar-outline" size={17} color={Colors.accentBlue} />
+                <Text style={[styles.inputIconText, checkIn ? styles.pickerText : styles.pickerPlaceholder]}>
+                  {formatDisplayDate(checkIn) || 'Select date'}
+                </Text>
+                <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dateField}>
+              <Text style={styles.fieldLabel}>Check-out</Text>
+              <TouchableOpacity
+                style={[styles.inputWithIcon, !checkIn && styles.inputDisabled]}
+                onPress={() => checkIn && openDatePicker('checkOut')}
+                disabled={!checkIn}
+              >
+                <Ionicons name="calendar-outline" size={17} color={Colors.accentBlue} />
+                <Text style={[styles.inputIconText, checkOut ? styles.pickerText : styles.pickerPlaceholder]}>
+                  {formatDisplayDate(checkOut) || 'Select date'}
+                </Text>
+                <Ionicons name="chevron-forward" size={15} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          </>}
+
+          <View style={styles.dateRow}>
+            <View style={styles.dateField}>
+              <Text style={styles.fieldLabel}>Nationality</Text>
+              <TouchableOpacity style={styles.inputWithIcon} onPress={openNationalityModal}>
+                <Ionicons name="people-outline" size={17} color={Colors.accentBlue} />
+                <Text style={[styles.inputIconText, styles.pickerText]}>{nationalityLabel}</Text>
+                <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dateField}>
+              <Text style={styles.fieldLabel}>Currency</Text>
+              <View style={styles.inputWithIcon}>
+                <Ionicons name="card-outline" size={17} color={Colors.accentBlue} />
+                <TextInput
+                  style={styles.inputIconTextField}
+                  placeholder="INR"
+                  placeholderTextColor={Colors.textMuted}
+                  value={currency}
+                  onChangeText={setCurrency}
+                  autoCapitalize="characters"
+                  maxLength={3}
+                />
+              </View>
+            </View>
+          </View>
+
+          <Text style={styles.sectionLabel}>Rooms & Guests</Text>
+          {renderRoomsEditor()}
+
 
           <TouchableOpacity style={styles.searchButton} onPress={searchHotels} disabled={loading}>
             {loading ? (
@@ -564,6 +747,11 @@ const HotelsScreen = ({ navigation }) => {
           <View style={styles.flightPathLine} />
           <Ionicons name="airplane" size={16} color={Colors.accentBlue} style={styles.flightPathIcon} />
         </View>
+        </>}
+
+        </View>
+
+        {isDesktop && <WebValueProps />}
       </ScrollView>
 
       <Modal visible={nationalityModal} transparent animationType="fade" onRequestClose={() => setNationalityModal(false)}>
@@ -641,6 +829,30 @@ const HotelsScreen = ({ navigation }) => {
         </Pressable>
       </Modal>
 
+      <Modal
+        visible={roomsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRoomsModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setRoomsModal(false)}>
+          <Pressable style={styles.roomsModalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Rooms & Guests</Text>
+              <TouchableOpacity onPress={() => setRoomsModal(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {renderRoomsEditor()}
+            </ScrollView>
+            <TouchableOpacity style={styles.roomsDoneButton} onPress={() => setRoomsModal(false)}>
+              <Text style={styles.roomsDoneText}>Done</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <DatePickerModal
         visible={datePickerField !== null}
         title={datePickerField === 'checkOut' ? 'Check-out date' : 'Check-in → Check-out'}
@@ -655,6 +867,7 @@ const HotelsScreen = ({ navigation }) => {
         onSelectRange={chooseDateRange}
         onClose={closeDatePicker}
       />
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -730,6 +943,158 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 6,
+  },
+
+  // Desktop: the leftover trip details (nationality, currency, rooms) were still
+  // rendering as the stacked phone card under a full-width hero.
+  recentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 9,
+  },
+  recentLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    marginRight: 4,
+  },
+  recentChip: {
+    paddingHorizontal: 15,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: Colors.accentBlueSoft,
+  },
+  recentChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.accentBlue,
+  },
+
+  section: {
+    marginTop: 38,
+    gap: 18,
+  },
+  sectionHeading: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: Colors.accentBlueDark,
+  },
+  destinationRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  destinationCard: {
+    flex: 1,
+    minWidth: 150,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  destinationImage: {
+    height: 118,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  destinationName: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: Colors.text,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  whyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  whyCard: {
+    flex: 1,
+    minWidth: 220,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 13,
+    borderRadius: 12,
+    padding: 18,
+  },
+  whyIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  whyText: {
+    flex: 1,
+    gap: 5,
+  },
+  whyTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.accentBlueDark,
+  },
+  whyBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.textLight,
+  },
+
+  secondarySpacer: {
+    flex: 1.4,
+    minWidth: 0,
+  },
+  roomsModalCard: {
+    width: '100%',
+    maxWidth: 620,
+    maxHeight: '86%',
+    alignSelf: 'center',
+    backgroundColor: Colors.card,
+    borderRadius: 18,
+    padding: 20,
+    gap: 12,
+  },
+  roomsDoneButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  roomsDoneText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: Colors.secondary,
+  },
+
+  webBody: {
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 48,
+  },
+  formCardDesktop: {
+    marginHorizontal: 0,
+    marginTop: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 26,
+    borderRadius: 14,
+  },
+  roomGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  roomCardDesktop: {
+    // Two rooms per row; they grow to fill a lone trailing card.
+    width: '48%',
+    flexGrow: 1,
+    marginBottom: 0,
   },
   dateRow: {
     flexDirection: 'row',

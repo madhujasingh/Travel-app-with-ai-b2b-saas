@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -13,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -75,7 +75,7 @@ const ManageSuppliersScreen = ({ navigation }) => {
 
   const submitNewSupplier = async () => {
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.company.trim()) {
-      Alert.alert('Missing fields', 'Name, email, phone, and company are required.');
+      appAlert('Missing fields', 'Name, email, phone, and company are required.');
       return;
     }
 
@@ -104,12 +104,12 @@ const ManageSuppliersScreen = ({ navigation }) => {
       setForm(EMPTY_FORM);
       setAddModalVisible(false);
       setSuppliers((current) => [data, ...current]);
-      Alert.alert(
+      appAlert(
         'Supplier added',
         `${data.name} has been added as unverified. Verify them once you've confirmed the partnership, then they can sign up in the app using ${data.email}.`
       );
     } catch (err) {
-      Alert.alert('Add Supplier', err.message || 'Failed to add supplier.');
+      appAlert('Add Supplier', err.message || 'Failed to add supplier.');
     } finally {
       setSubmitting(false);
     }
@@ -127,19 +127,19 @@ const ManageSuppliersScreen = ({ navigation }) => {
         throw new Error(data?.message || data?.error || 'Failed to verify supplier');
       }
       setSuppliers((current) => current.map((s) => (s.id === supplier.id ? data : s)));
-      Alert.alert(
+      appAlert(
         'Supplier verified',
         `${data.name} can now sign up in the app as a Supplier using ${data.email}.`
       );
     } catch (err) {
-      Alert.alert('Verify Supplier', err.message || 'Failed to verify supplier.');
+      appAlert('Verify Supplier', err.message || 'Failed to verify supplier.');
     } finally {
       setBusySupplierId(null);
     }
   };
 
   const removeSupplier = (supplier) => {
-    Alert.alert(
+    appAlert(
       'Remove supplier',
       `Remove ${supplier.name}? This does not delete any account they've already created - only the supplier record used to approve future signups.`,
       [
@@ -160,7 +160,7 @@ const ManageSuppliersScreen = ({ navigation }) => {
               }
               setSuppliers((current) => current.filter((s) => s.id !== supplier.id));
             } catch (err) {
-              Alert.alert('Remove Supplier', err.message || 'Failed to remove supplier.');
+              appAlert('Remove Supplier', err.message || 'Failed to remove supplier.');
             } finally {
               setBusySupplierId(null);
             }

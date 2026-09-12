@@ -6,13 +6,21 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
-  Alert,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import TwoColumn from '../components/web/TwoColumn';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
 
 // Falls back to the platform default (see backend PlatformSettings) if the
@@ -21,9 +29,19 @@ import API_CONFIG from '../config/api';
 const DEFAULT_CONVENIENCE_FEE = 300;
 
 const CartScreen = ({ route, navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const canGoBack = navigation.canGoBack();
   const { cartItems, addItemToCart, removeItemFromCart, getCartTotal, getCartItemCount } = useCart();
+  const { token } = useAuth();
   const [convenienceFee, setConvenienceFee] = React.useState(DEFAULT_CONVENIENCE_FEE);
+
+  // Coupon. The server decides what the code is worth - this screen only sends
+  // the code and the order total, and displays whatever discount comes back.
+  const [couponCode, setCouponCode] = React.useState('');
+  const [appliedCoupon, setAppliedCoupon] = React.useState(null);
+  const [couponChecking, setCouponChecking] = React.useState(false);
+  const [couponError, setCouponError] = React.useState('');
 
   React.useEffect(() => {
     (async () => {
@@ -73,7 +91,7 @@ const CartScreen = ({ route, navigation }) => {
   }, [route.params, addItemToCart]);
 
   const handleRemoveItem = (itemId) => {
-    Alert.alert(
+    appAlert(
       'Remove Item',
       'Are you sure you want to remove this item from cart?',
       [
@@ -94,7 +112,7 @@ const CartScreen = ({ route, navigation }) => {
 
   const handleContactAgent = () => {
     if (getCartItemCount() === 0) {
-      Alert.alert('Error', 'Your cart is empty');
+      appAlert('Error', 'Your cart is empty');
       return;
     }
     navigation.navigate('TalkToAgent', { cartItems });
@@ -102,7 +120,7 @@ const CartScreen = ({ route, navigation }) => {
 
   const handleMakePayment = () => {
     if (getCartItemCount() === 0) {
-      Alert.alert('Error', 'Your cart is empty');
+      appAlert('Error', 'Your cart is empty');
       return;
     }
     navigation.navigate('Checkout', { cartItems, total: getCartTotal() });
@@ -150,11 +168,85 @@ const CartScreen = ({ route, navigation }) => {
     </View>
   );
 
+
+  const applyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) {
+      setCouponError('Enter a coupon code.');
+      return;
+    }
+
+    try {
+      setCouponChecking(true);
+      setCouponError('');
+      const response = await fetch(`${API_CONFIG.BASE_URL}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          code,
+          orderAmount: getCartTotal() + convenienceFee,
+          productType: 'PACKAGE',
+        }),
+      });
+
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok || !data) {
+        setCouponError(data?.message || 'Unable to check that code right now.');
+        return;
+      }
+      if (!data.valid) {
+        setCouponError(data.message || "This coupon code isn't valid.");
+        return;
+      }
+
+      setAppliedCoupon(data);
+      setCouponCode('');
+    } catch (error) {
+      setCouponError('Unable to check that code right now.');
+    } finally {
+      setCouponChecking(false);
+    }
+  };
+
+  // Display only - the server recomputes the discount when the booking is
+  // actually made, so a tampered value here buys nothing.
+  const orderTotal = getCartTotal() + convenienceFee;
+  const payableTotal = Math.max(orderTotal - (appliedCoupon?.discountAmount || 0), 0);
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError('');
+  };
+
+  const actionButtons = (
+    <>
+      <TouchableOpacity style={styles.contactButton} onPress={handleContactAgent}>
+        <Ionicons name="chatbubble-ellipses-outline" size={20} color={Colors.secondary} style={styles.contactIcon} />
+        <Text style={styles.contactButtonText}>Contact Agent</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.paymentButton} onPress={handleMakePayment}>
+        <Ionicons name="card-outline" size={20} color={Colors.secondary} style={styles.paymentIcon} />
+        <Text style={styles.paymentButtonText}>Make Payment</Text>
+      </TouchableOpacity>
+    </>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
       {/* Header */}
+      {isDesktop ? (
+        <WebHero compact title="My Cart" subtitle="Review your trip before you book." />
+      ) : (
       <View style={styles.header}>
         {canGoBack ? (
           <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -168,6 +260,7 @@ const CartScreen = ({ route, navigation }) => {
           <Text style={styles.cartCountText}>{getCartItemCount()}</Text>
         </View>
       </View>
+      )}
 
       {getCartItemCount() === 0 ? (
         <View style={styles.emptyContainer}>
@@ -188,9 +281,12 @@ const CartScreen = ({ route, navigation }) => {
           <ScrollView
             style={styles.cartList}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={centeredContent}
+            {...scrollProps}
           >
-            {cartItems.map(renderCartItem)}
-
+            <TwoColumn
+            main={<>{cartItems.map(renderCartItem)}</>}
+            aside={<>
             {/* Price Summary */}
             <View style={styles.summarySection}>
               <Text style={styles.summaryTitle}>Price Summary</Text>
@@ -207,11 +303,21 @@ const CartScreen = ({ route, navigation }) => {
                     ₹{Math.round(convenienceFee).toLocaleString()}
                   </Text>
                 </View>
+                {appliedCoupon ? (
+                  <View style={styles.summaryRow}>
+                    <Text style={[styles.summaryLabel, styles.discountLabel]}>
+                      Discount ({appliedCoupon.code})
+                    </Text>
+                    <Text style={[styles.summaryValue, styles.discountValue]}>
+                      -₹{Math.round(appliedCoupon.discountAmount || 0).toLocaleString()}
+                    </Text>
+                  </View>
+                ) : null}
                 <View style={styles.divider} />
                 <View style={styles.summaryRow}>
                   <Text style={styles.totalLabel}>Total Amount</Text>
                   <Text style={styles.totalValue}>
-                    ₹{Math.round(getCartTotal() + convenienceFee).toLocaleString()}
+                    ₹{Math.round(payableTotal).toLocaleString()}
                   </Text>
                 </View>
               </View>
@@ -220,35 +326,66 @@ const CartScreen = ({ route, navigation }) => {
             {/* Promo Code */}
             <View style={styles.promoSection}>
               <Text style={styles.promoTitle}>Have a promo code?</Text>
-              <TouchableOpacity style={styles.promoButton}>
-                <Text style={styles.promoButtonText}>Apply Code</Text>
-              </TouchableOpacity>
+
+              {appliedCoupon ? (
+                <View style={styles.couponApplied}>
+                  <Ionicons name="checkmark-circle" size={18} color={Colors.success} />
+                  <View style={styles.couponAppliedCopy}>
+                    <Text style={styles.couponAppliedCode}>{appliedCoupon.code}</Text>
+                    {!!appliedCoupon.description && (
+                      <Text style={styles.couponAppliedText}>{appliedCoupon.description}</Text>
+                    )}
+                  </View>
+                  <TouchableOpacity onPress={removeCoupon}>
+                    <Text style={styles.couponRemove}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.couponRow}>
+                    <TextInput
+                      style={styles.couponInput}
+                      placeholder="Enter code"
+                      placeholderTextColor={Colors.textMuted}
+                      value={couponCode}
+                      onChangeText={(value) =>
+                        setCouponCode(value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))
+                      }
+                      autoCapitalize="characters"
+                      maxLength={40}
+                    />
+                    <TouchableOpacity
+                      style={styles.promoButton}
+                      onPress={applyCoupon}
+                      disabled={couponChecking}
+                    >
+                      {couponChecking ? (
+                        <ActivityIndicator color={Colors.primary} size="small" />
+                      ) : (
+                        <Text style={styles.promoButtonText}>Apply Code</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  {!!couponError && <Text style={styles.couponError}>{couponError}</Text>}
+                </>
+              )}
             </View>
 
-            {/* Bottom Spacing */}
-            <View style={{ height: 200 }} />
+            {isDesktop && <View style={styles.railActions}>{actionButtons}</View>}
+            </>}
+            />
+
+            {/* Clears the fixed bottom action bar on phones; the desktop rail
+                carries those buttons instead, so it only needs normal spacing. */}
+            <View style={{ height: isDesktop ? 40 : 200 }} />
           </ScrollView>
 
-          {/* Bottom Actions */}
-          <View style={styles.bottomActions}>
-            <TouchableOpacity
-              style={styles.contactButton}
-              onPress={handleContactAgent}
-            >
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color={Colors.secondary} style={styles.contactIcon} />
-              <Text style={styles.contactButtonText}>Contact Agent</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.paymentButton}
-              onPress={handleMakePayment}
-            >
-              <Ionicons name="card-outline" size={20} color={Colors.secondary} style={styles.paymentIcon} />
-              <Text style={styles.paymentButtonText}>Make Payment</Text>
-            </TouchableOpacity>
-          </View>
+          {/* On desktop these sit in the sticky rail with the price summary;
+              on a phone they stay pinned to the bottom of the screen. */}
+          {!isDesktop && <View style={styles.bottomActions}>{actionButtons}</View>}
         </>
       )}
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
@@ -257,6 +394,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  // Desktop only: the action buttons after they move out of the pinned bottom
+  // bar and into the sticky summary rail.
+  railActions: {
+    gap: 10,
+    marginTop: 4,
+    paddingHorizontal: 15,
   },
   header: {
     backgroundColor: Colors.primary,
@@ -441,6 +585,53 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.primary,
   },
+  couponRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  couponInput: {
+    flex: 1,
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: Colors.text,
+    outlineStyle: 'none',
+  },
+  couponError: {
+    marginTop: 8,
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: Colors.error,
+  },
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#EAF7EC',
+    borderWidth: 1,
+    borderColor: Colors.success,
+  },
+  couponAppliedCopy: { flex: 1, gap: 2 },
+  couponAppliedCode: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: 0.8,
+  },
+  couponAppliedText: { fontSize: 12, color: Colors.textLight },
+  couponRemove: { fontSize: 12.5, fontWeight: '700', color: Colors.error },
+  discountLabel: { color: Colors.success, fontWeight: '700' },
+  discountValue: { color: Colors.success, fontWeight: '800' },
+
   promoSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',

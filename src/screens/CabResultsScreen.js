@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, StatusBar } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import MarkupPrice from '../components/MarkupPrice';
+import WebResultsLayout, {
+  WebResultsBar,
+  WebFilterGroup,
+  WebResultsCount,
+} from '../components/web/WebResultsLayout';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +28,7 @@ const grandTotalOf = (quote) => Number(quote?.fareBreakup?.totalFare || 0) + Num
 // quote (quotes[0]) per every sample in the docs, so this flattens the two
 // levels into one list item rather than nesting a second FlatList.
 const CabResultsScreen = ({ route, navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
   const { quotesInfo, journeyInfo, routeDetails, journeyType, tripType, passengers, sourceBookingId } = route.params || {};
   const [sortBy, setSortBy] = useState('price');
 
@@ -97,7 +105,11 @@ const CabResultsScreen = ({ route, navigation }) => {
 
         <View style={styles.cardFooter}>
           <View>
-            <Text style={styles.fareValue}>₹{payableTotal.toLocaleString()}</Text>
+            <MarkupPrice
+              service="CAB"
+              baseAmount={payableTotal}
+              priceStyle={styles.fareValue}
+            />
             {totalTax > 0 ? <Text style={styles.fareTaxNote}>incl. ₹{totalTax.toLocaleString()} taxes</Text> : null}
           </View>
           <TouchableOpacity
@@ -125,6 +137,44 @@ const CabResultsScreen = ({ route, navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      {isDesktop ? (
+        <>
+          <WebResultsBar
+            title={`${routeDetails?.origin?.displayAddress || ''} → ${routeDetails?.destination?.displayAddress || ''}`}
+            subtitle={`${journeyInfo?.distance || ''} · ${passengers} passenger${passengers === 1 ? '' : 's'}`}
+            actionLabel="Modify search"
+            onAction={() => navigation.goBack()}
+            onBack={() => navigation.goBack()}
+          />
+          <WebResultsLayout
+            sidebar={
+              <>
+                <WebResultsCount count={cards.length} noun="cab" />
+                <WebFilterGroup
+                  title="Sort By"
+                  options={SORT_OPTIONS}
+                  value={sortBy}
+                  onChange={setSortBy}
+                />
+              </>
+            }
+          >
+            {cards.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No cabs available for this route.</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={cards}
+                keyExtractor={(item, index) => item.quote?.quotationId || String(index)}
+                contentContainerStyle={styles.list}
+                renderItem={renderCard}
+              />
+            )}
+          </WebResultsLayout>
+        </>
+      ) : (
+        <>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
@@ -164,9 +214,11 @@ const CabResultsScreen = ({ route, navigation }) => {
         <FlatList
           data={cards}
           keyExtractor={(item, index) => item.quote?.quotationId || String(index)}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, centeredContent]}
           renderItem={renderCard}
         />
+      )}
+        </>
       )}
     </SafeAreaView>
   );

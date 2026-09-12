@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Modal,
   Pressable,
@@ -13,6 +12,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import { appAlert } from '../utils/appAlert';
+import { useMarkup } from '../context/MarkupContext';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,7 +57,14 @@ const syncFlightBooking = async (token, entry) => {
         tripjackBookingId: entry.bookingId,
         routeSummary: entry.summary,
         airlineCode: entry.airlineCode,
+        // totalFare stays the SUPPLIER amount - the exact figure sent to
+        // TripJack. The margin breakdown is recorded alongside it so a booking
+        // can be reconciled later without re-deriving it from settings that
+        // may since have changed.
         totalFare: entry.totalFare,
+        markupAmount: entry.markupAmount,
+        convenienceFee: entry.convenienceFee,
+        customerTotal: entry.customerTotal,
         status: entry.status,
       }),
     });
@@ -325,7 +334,9 @@ const roundToHalfHourSlot = (isoDateTime) => {
 };
 
 const FlightBookingScreen = ({ route, navigation }) => {
+  const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
+  const { markupFor } = useMarkup();
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId, openCancel } = route.params || {};
   const isResume = !reviewResponse;
   const autoCancelHandled = useRef(false);
@@ -515,7 +526,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
 
   const chooseSeat = (segmentId, travellerIndex, seat) => {
     if (seat.isBooked) {
-      Alert.alert('Seat unavailable', `Seat ${seat.seatNo} is already booked.`);
+      appAlert('Seat unavailable', `Seat ${seat.seatNo} is already booked.`);
       return;
     }
     setSeatSelections((prev) => {
@@ -527,7 +538,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
         );
         if (takenBy) {
           const otherTraveller = travellers[Number(takenBy[0])];
-          Alert.alert(
+          appAlert(
             'Seat taken',
             `Seat ${seat.seatNo} is already selected for ${otherTraveller?.fN || `traveller ${Number(takenBy[0]) + 1}`}.`
           );
@@ -629,12 +640,28 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // every other totalWithSsr call site (Hold, cancellation, sync) is
   // completely unaffected by whether insurance is opted into.
   const insuranceAmount = insuranceEnabled && selectedInsurance ? Number(selectedInsurance.fare || 0) : 0;
+
+  // Our markup. Like the convenience fee, it is added to what the CUSTOMER is
+  // charged and never to totalWithSsr - that figure has to match the reviewed
+  // fare exactly or TripJack rejects the booking with errCode 1015.
+  const markupCategory = (() => {
+    const first = Array.isArray(flights) ? flights[0] : null;
+    const last = Array.isArray(flights) ? flights[flights.length - 1] : null;
+    const international =
+      first?.fromCountryCode && last?.toCountryCode
+        ? first.fromCountryCode !== last.toCountryCode
+        : false;
+    const round = Array.isArray(flights) && flights.length > 1;
+    if (international) return round ? 'INTERNATIONAL_ROUND' : 'INTERNATIONAL_ONEWAY';
+    return round ? 'DOMESTIC_ROUND' : 'DOMESTIC_ONEWAY';
+  })();
+  const markupAmount = markupFor('FLIGHT', markupCategory, totalWithSsr, travellers.length || 1);
   // Convenience fee is OUR platform's own fee, charged separately - never
   // added to totalWithSsr, which is exactly what gets sent to TripJack as
   // paymentInfos.amount for Instant Book / Confirm & Pay (it must equal the
   // reviewed fare + SSR exactly, or TripJack 400s with errCode 1015). It
   // only affects what's DISPLAYED to the customer as their total.
-  const customerTotal = totalWithSsr + convenienceFee + insuranceAmount;
+  const customerTotal = totalWithSsr + convenienceFee + insuranceAmount + markupAmount;
 
   // Departure/arrival dates for the insurance search, derived straight from
   // the flight legs already in hand - no separate date picker needed. Round
@@ -698,15 +725,15 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // "isq" - confirmed in the doc's own real sample request.
   const searchInsurancePlans = async () => {
     if (!insuranceDestinationCountry) {
-      Alert.alert('Travel Insurance', 'Could not determine this trip\'s destination country from the flight data.');
+      appAlert('Travel Insurance', 'Could not determine this trip\'s destination country from the flight data.');
       return;
     }
     if (!insuranceDates) {
-      Alert.alert('Travel Insurance', 'Flight dates are required to search for insurance.');
+      appAlert('Travel Insurance', 'Flight dates are required to search for insurance.');
       return;
     }
     if (insuranceTravellerAges.some((age) => age == null)) {
-      Alert.alert('Travel Insurance', 'Enter date of birth for every traveller before adding insurance.');
+      appAlert('Travel Insurance', 'Enter date of birth for every traveller before adding insurance.');
       return;
     }
     setInsuranceSearching(true);
@@ -760,13 +787,13 @@ const FlightBookingScreen = ({ route, navigation }) => {
       // in "isr" live, this fallback just costs nothing if that ever changes.
       const plans = data?.isr?.iinfo?.pli ?? data?.iinfo?.pli ?? [];
       if (plans.length === 0) {
-        Alert.alert('Travel Insurance', 'No insurance plans were found for this trip.');
+        appAlert('Travel Insurance', 'No insurance plans were found for this trip.');
         return;
       }
       setInsurancePlans(plans);
       setInsuranceModalVisible(true);
     } catch (error) {
-      Alert.alert('Travel Insurance', error.message || 'Unable to fetch insurance plans right now.');
+      appAlert('Travel Insurance', error.message || 'Unable to fetch insurance plans right now.');
     } finally {
       setInsuranceSearching(false);
     }
@@ -784,7 +811,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const selectInsurancePlan = async (plan) => {
     const product = plan?.pi?.[0];
     if (!product?.pid) {
-      Alert.alert('Travel Insurance', 'This plan is missing product details and cannot be selected.');
+      appAlert('Travel Insurance', 'This plan is missing product details and cannot be selected.');
       return;
     }
     setInsuranceReviewing(true);
@@ -841,7 +868,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       });
       setInsuranceModalVisible(false);
     } catch (error) {
-      Alert.alert('Travel Insurance', error.message || 'Unable to review this plan right now.');
+      appAlert('Travel Insurance', error.message || 'Unable to review this plan right now.');
     } finally {
       setInsuranceReviewing(false);
     }
@@ -871,7 +898,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
         setBookingDetails(data);
         setPhase(data?.order?.status === 'SUCCESS' ? 'confirmed' : 'held');
       } catch (error) {
-        Alert.alert('Booking Status', error.message || 'Unable to load this booking.');
+        appAlert('Booking Status', error.message || 'Unable to load this booking.');
         setPhase('held');
       }
     })();
@@ -924,13 +951,13 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const showTripJackErrorAlert = (title, error) => {
     const message = error?.message || 'Something went wrong - please try again.';
     if (error?.sessionDead) {
-      Alert.alert(title, message, [
+      appAlert(title, message, [
         { text: 'Search Again', onPress: () => navigation.goBack() },
         { text: 'Cancel', style: 'cancel' },
       ]);
       return;
     }
-    Alert.alert(title, message);
+    appAlert(title, message);
   };
 
   // Shared by Hold and Instant Book - the only difference between the two
@@ -1068,7 +1095,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     if (!bookingId) return;
     const validationError = validateBookingForm();
     if (validationError) {
-      Alert.alert('Missing Information', validationError);
+      appAlert('Missing Information', validationError);
       return;
     }
     setBusy(true);
@@ -1092,6 +1119,9 @@ const FlightBookingScreen = ({ route, navigation }) => {
         summary: routeSummary(flights),
         airlineCode: routeAirlineCode(flights),
         totalFare: totalWithSsr,
+        markupAmount,
+        convenienceFee,
+        customerTotal,
         status: 'ON_HOLD',
       });
 
@@ -1117,7 +1147,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     if (!bookingId) return;
     const validationError = validateBookingForm();
     if (validationError) {
-      Alert.alert('Missing Information', validationError);
+      appAlert('Missing Information', validationError);
       return;
     }
     // Insurance only ever applies to this Book & Pay path (Hold has no
@@ -1126,7 +1156,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     // Without this, toggling insurance on but never selecting a plan would
     // silently book flight-only while the toggle still shows "on".
     if (insuranceEnabled && !selectedInsurance) {
-      Alert.alert('Missing Information', 'Select a travel insurance plan to continue, or turn off travel insurance.');
+      appAlert('Missing Information', 'Select a travel insurance plan to continue, or turn off travel insurance.');
       return;
     }
     setBusy(true);
@@ -1159,6 +1189,9 @@ const FlightBookingScreen = ({ route, navigation }) => {
         summary: routeSummary(flights),
         airlineCode: routeAirlineCode(flights),
         totalFare: details?.order?.amount ?? totalWithSsr,
+        markupAmount,
+        convenienceFee,
+        customerTotal,
         status: details?.order?.status || 'SUCCESS',
       });
       if (insuranceAmount > 0 && selectedInsurance) {
@@ -1246,6 +1279,9 @@ const FlightBookingScreen = ({ route, navigation }) => {
         summary: routeSummary(flights),
         airlineCode: routeAirlineCode(flights),
         totalFare: details?.order?.amount ?? totalWithSsr,
+        markupAmount,
+        convenienceFee,
+        customerTotal,
         status: details?.order?.status || 'SUCCESS',
       });
       setPhase('confirmed');
@@ -1264,6 +1300,9 @@ const FlightBookingScreen = ({ route, navigation }) => {
             summary: routeSummary(flights),
             airlineCode: routeAirlineCode(flights),
             totalFare: details?.order?.amount ?? totalWithSsr,
+            markupAmount,
+            convenienceFee,
+            customerTotal,
             status: 'SUCCESS',
           });
           setPhase('confirmed');
@@ -1288,7 +1327,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
       setBookingDetails(details);
       if (details?.order?.status === 'SUCCESS') setPhase('confirmed');
     } catch (error) {
-      Alert.alert('Booking Status', error.message || 'Unable to refresh booking status.');
+      appAlert('Booking Status', error.message || 'Unable to refresh booking status.');
     } finally {
       setBusy(false);
     }
@@ -1319,17 +1358,20 @@ const FlightBookingScreen = ({ route, navigation }) => {
           summary: routeSummary(flights),
           airlineCode: routeAirlineCode(flights),
           totalFare: bookingDetails?.order?.amount ?? totalWithSsr,
+          markupAmount,
+          convenienceFee,
+          customerTotal,
           status: 'CANCELLED',
         });
-        Alert.alert(
+        appAlert(
           'Cancellation Successful',
           `Refundable amount: ₹${Math.round(data?.refundableAmount || 0).toLocaleString()}`,
           [{ text: 'OK', onPress: () => navigation.replace('MyFlightBookings') }]
         );
       } else if (amendmentStatus === 'REJECTED') {
-        Alert.alert('Cancellation Rejected', 'TripJack rejected this cancellation request. Please contact TripJack support for details.');
+        appAlert('Cancellation Rejected', 'TripJack rejected this cancellation request. Please contact TripJack support for details.');
       } else {
-        Alert.alert(
+        appAlert(
           'Still Processing',
           'This cancellation is still being processed after several checks. You can check back later from My Trips, or contact TripJack support if it doesn\'t resolve.'
         );
@@ -1382,7 +1424,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
           `${paxType}: refund ₹${Math.round(info?.refundAmount || 0).toLocaleString()} (charge ₹${Math.round(info?.amendmentCharges || 0).toLocaleString()})`
       );
 
-      Alert.alert(
+      appAlert(
         'Confirm Cancellation',
         lines.length ? lines.join('\n') : 'Charges are not available for this fare yet - TripJack may need to be contacted directly.',
         [
@@ -1524,7 +1566,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
     if (!bookingId) return;
     const amount = computeAncillaryAmount();
     if (amount <= 0) {
-      Alert.alert('Add Extras', 'Please select at least one baggage, meal, or seat option.');
+      appAlert('Add Extras', 'Please select at least one baggage, meal, or seat option.');
       return;
     }
     setAncillaryBusy(true);
@@ -1544,11 +1586,11 @@ const FlightBookingScreen = ({ route, navigation }) => {
       setAncillaryBusy(false);
       closeAncillaryModal();
       if (statuses.length && statuses.every((s) => s === 'SUCCESS')) {
-        Alert.alert('Extras Added', 'Your baggage, meal, and/or seat selections have been added to this booking.');
+        appAlert('Extras Added', 'Your baggage, meal, and/or seat selections have been added to this booking.');
       } else if (statuses.some((s) => s === 'REJECTED')) {
-        Alert.alert('Extras Not Added', 'TripJack rejected this request. Please contact TripJack support for details.');
+        appAlert('Extras Not Added', 'TripJack rejected this request. Please contact TripJack support for details.');
       } else {
-        Alert.alert('Still Processing', 'This is still being processed. You can check back later from My Trips.');
+        appAlert('Still Processing', 'This is still being processed. You can check back later from My Trips.');
       }
     } catch (error) {
       setAncillaryBusy(false);
@@ -1628,7 +1670,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
 
   const handleDownloadTicket = async () => {
     if (!bookingDetails?.itemInfos?.AIR?.travellerInfos?.length) {
-      Alert.alert('Ticket Not Ready', 'Tap Refresh Status once, then try downloading again.');
+      appAlert('Ticket Not Ready', 'Tap Refresh Status once, then try downloading again.');
       return;
     }
     setBusy(true);
@@ -1652,10 +1694,10 @@ const FlightBookingScreen = ({ route, navigation }) => {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: 'Flight Ticket' });
       } else {
-        Alert.alert('Ticket Saved', `Saved to ${file.uri}`);
+        appAlert('Ticket Saved', `Saved to ${file.uri}`);
       }
     } catch (error) {
-      Alert.alert('Download Failed', error.message || 'Could not download your ticket.');
+      appAlert('Download Failed', error.message || 'Could not download your ticket.');
     } finally {
       setBusy(false);
     }
@@ -1731,7 +1773,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
 
       <ScrollView
         ref={formScrollRef}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, centeredForm]}
         onScroll={handleFormScroll}
         scrollEventThrottle={32}
       >
@@ -2253,6 +2295,16 @@ const FlightBookingScreen = ({ route, navigation }) => {
                 <Text style={styles.metaLabel}>Convenience Fee</Text>
                 <Text style={styles.metaValue}>₹{Math.round(convenienceFee).toLocaleString()}</Text>
               </View>
+              {markupAmount > 0 ? (
+                <View style={styles.metaRow}>
+                  {/* Staff see this broken out; to a customer it is simply part
+                      of the service charge, not a separate supplier line. */}
+                  <Text style={styles.metaLabel}>
+                    {user?.role && user.role !== 'CUSTOMER' ? 'Markup (yours)' : 'Service Charge'}
+                  </Text>
+                  <Text style={styles.metaValue}>₹{Math.round(markupAmount).toLocaleString()}</Text>
+                </View>
+              ) : null}
               <View style={styles.ticketDivider} />
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Total</Text>
@@ -2481,7 +2533,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
               <Text style={styles.hintText}>Loading available extras…</Text>
             </View>
           ) : (
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView contentContainerStyle={[styles.content, centeredForm]}>
               {ancillary.segments.length === 0 ? (
                 <Text style={styles.hintText}>No baggage, meal, or seat options are available for this booking.</Text>
               ) : (
@@ -2599,7 +2651,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
             <Text style={styles.headerTitle}>Choose a Plan</Text>
             <View style={{ width: 26 }} />
           </View>
-          <ScrollView contentContainerStyle={styles.content}>
+          <ScrollView contentContainerStyle={[styles.content, centeredForm]}>
             {insurancePlans.map((plan, index) => {
               const product = plan?.pi?.[0] || {};
               const planName = product.pi || product.pn || 'Travel Insurance Plan';

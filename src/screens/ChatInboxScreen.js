@@ -1,7 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   StatusBar,
   StyleSheet,
@@ -9,6 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
+import WebHero from '../components/web/WebHero';
+import useHeroHeader from '../hooks/useHeroHeader';
+import WebStickyHeader from '../components/web/WebStickyHeader';
+import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +24,8 @@ import usePolling from '../hooks/usePolling';
 const CONVERSATIONS_POLL_INTERVAL_MS = 20000;
 
 const ChatInboxScreen = ({ navigation }) => {
+  const { centeredContent, isDesktop } = useResponsive();
+  const { scrolled, scrollProps } = useHeroHeader();
   const canGoBack = navigation.canGoBack();
   const { token, user } = useAuth();
   const [conversations, setConversations] = useState([]);
@@ -49,7 +55,7 @@ const ChatInboxScreen = ({ navigation }) => {
       setConversations(Array.isArray(data) ? data : []);
     } catch (error) {
       if (!hasLoadedOnceRef.current) {
-        Alert.alert('Error', error.message || 'Unable to load chats');
+        appAlert('Error', error.message || 'Unable to load chats');
       }
     } finally {
       hasLoadedOnceRef.current = true;
@@ -107,6 +113,9 @@ const ChatInboxScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      {isDesktop ? (
+        <WebHero compact title="Messages" subtitle="Talk to our travel agents about any trip." />
+      ) : (
       <View style={styles.header}>
         {canGoBack ? (
           <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -120,6 +129,7 @@ const ChatInboxScreen = ({ navigation }) => {
           <Text style={styles.refresh}>Refresh</Text>
         </TouchableOpacity>
       </View>
+      )}
 
       {loading ? (
         <View style={styles.center}>
@@ -140,9 +150,11 @@ const ChatInboxScreen = ({ navigation }) => {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderConversation}
           style={styles.flatListFlex}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, centeredContent]}
+          {...scrollProps}
         />
       )}
+      {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };

@@ -8,6 +8,7 @@ import {
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import useResponsive from '../hooks/useResponsive';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,6 +49,7 @@ const normalizeItinerary = (item) => {
 };
 
 const ItineraryListScreen = ({ route, navigation }) => {
+  const { centeredContent } = useResponsive();
   const { destination, budget, people, adults, children, type } = route.params;
   const [itineraries, setItineraries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -288,7 +290,7 @@ const ItineraryListScreen = ({ route, navigation }) => {
           data={getFilteredItineraries()}
           renderItem={renderItinerary}
           keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={[styles.listContainer, centeredContent]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
