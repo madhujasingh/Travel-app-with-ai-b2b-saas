@@ -78,18 +78,34 @@ const MyFlightBookingsScreen = ({ navigation }) => {
       let active = true;
       (async () => {
         setLoading(true);
-        try {
-          const response = await fetch(`${API_CONFIG.BASE_URL}/flight-bookings`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const data = await response.json();
-          if (active) {
-            setHolds(response.ok && Array.isArray(data) ? data : []);
+        // Flights and hotels are separate endpoints; fetch both and merge into
+        // one list so My Trips reads as a trip history rather than a flight log.
+        // Settled rather than all, so one failing endpoint doesn't blank the other.
+        const load = async (path, kind) => {
+          try {
+            const response = await fetch(`${API_CONFIG.BASE_URL}${path}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) return [];
+            const data = await response.json();
+            return Array.isArray(data) ? data.map((row) => ({ ...row, kind })) : [];
+          } catch (error) {
+            return [];
           }
-        } catch (error) {
-          if (active) setHolds([]);
-        } finally {
-          if (active) setLoading(false);
+        };
+
+        const [flights, hotels] = await Promise.all([
+          load('/flight-bookings', 'FLIGHT'),
+          load('/hotel-bookings', 'HOTEL'),
+        ]);
+
+        if (active) {
+          setHolds(
+            [...flights, ...hotels].sort(
+              (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+            ),
+          );
+          setLoading(false);
         }
       })();
 
@@ -99,11 +115,12 @@ const MyFlightBookingsScreen = ({ navigation }) => {
     }, [token])
   );
 
-  const staleCount = holds.filter(isStaleHold).length;
+  // Only flights can be held, so only they can go stale.
+  const staleCount = holds.filter((item) => item.kind !== 'HOTEL' && isStaleHold(item)).length;
 
   const clearStaleHolds = () => {
     if (!staleCount) return;
-    const staleItems = holds.filter(isStaleHold);
+    const staleItems = holds.filter((item) => item.kind !== 'HOTEL' && isStaleHold(item));
     appAlert(
       'Clear Stale Holds',
       `Remove ${staleCount} on-hold booking${staleCount === 1 ? '' : 's'} that never got confirmed? This won't cancel anything with the airline.`,
@@ -129,7 +146,48 @@ const MyFlightBookingsScreen = ({ navigation }) => {
     );
   };
 
+  const renderHotel = (item) => {
+    const meta = statusMeta(item.status);
+    const stay = [item.checkIn, item.checkOut].filter(Boolean).join(' → ');
+    // What the customer paid, falling back to the supplier rate for rows
+    // written before the margin breakdown existed.
+    const paid = item.customerTotal ?? item.totalFare ?? 0;
+
+    return (
+      // Not tappable: there is no read-only hotel booking view yet -
+      // HotelBookingScreen needs a reviewResult, which a saved row doesn't have.
+      <View style={styles.card}>
+        <View style={styles.cardTop}>
+          <View style={styles.routeIconWrap}>
+            <Ionicons name="business" size={18} color={Colors.primary} />
+          </View>
+          <View style={styles.cardTopText}>
+            <Text style={styles.cardRoute} numberOfLines={1}>
+              {item.hotelName || 'Hotel booking'}
+            </Text>
+            <Text style={styles.cardDate}>
+              {[item.cityName, stay].filter(Boolean).join(' · ') || formatWhen(item.createdAt)}
+            </Text>
+          </View>
+          <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+            <Ionicons name={meta.icon} size={12} color={meta.fg} />
+            <Text style={[styles.statusPillText, { color: meta.fg }]}>{meta.label}</Text>
+          </View>
+        </View>
+
+        <View style={styles.cardDivider} />
+
+        <View style={styles.cardBottom}>
+          <Text style={styles.cardBookingId}>Booking ID · {item.tripjackBookingId}</Text>
+          <Text style={styles.cardFare}>₹{Math.round(paid).toLocaleString()}</Text>
+        </View>
+      </View>
+    );
+  };
+
   const renderItem = ({ item }) => {
+    if (item.kind === 'HOTEL') return renderHotel(item);
+
     const meta = statusMeta(item.status);
     return (
       <TouchableOpacity
@@ -207,7 +265,7 @@ const MyFlightBookingsScreen = ({ navigation }) => {
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
 
       {isDesktop ? (
-        <WebHero compact title="My Trips" subtitle="Every flight you have booked or held with us." />
+        <WebHero compact title="My Trips" subtitle="Every flight and hotel you have booked with us." />
       ) : (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -225,7 +283,7 @@ const MyFlightBookingsScreen = ({ navigation }) => {
       ) : (
       <FlatList
         data={holds}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item) => `${item.kind || 'FLIGHT'}-${item.id}`}
         renderItem={renderItem}
         contentContainerStyle={[holds.length ? styles.listContent : styles.listContentEmpty, centeredContent]}
         {...scrollProps}
@@ -255,7 +313,7 @@ const MyFlightBookingsScreen = ({ navigation }) => {
             </View>
             <Text style={styles.emptyTitle}>No trips yet</Text>
             <Text style={styles.emptyText}>
-              Once you review and hold a fare, it'll show up here so you can track its status, add extras, or make changes.
+              Once you book a flight or a hotel, it'll show up here so you can track its status, add extras, or make changes.
             </Text>
           </View>
         }
