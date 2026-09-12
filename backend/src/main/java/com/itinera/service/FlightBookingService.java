@@ -37,6 +37,13 @@ public class FlightBookingService {
             existing.setRouteSummary(incoming.getRouteSummary());
             existing.setAirlineCode(incoming.getAirlineCode());
             existing.setTotalFare(incoming.getTotalFare());
+            // Margin breakdown - see the booking model for why the supplier
+            // amount and the customer total are stored separately.
+            existing.setMarkupAmount(incoming.getMarkupAmount());
+            existing.setConvenienceFee(incoming.getConvenienceFee());
+            existing.setCouponCode(incoming.getCouponCode());
+            existing.setDiscountAmount(incoming.getDiscountAmount());
+            existing.setCustomerTotal(incoming.getCustomerTotal());
             existing.setStatus(incoming.getStatus());
             return flightBookingRepository.save(existing);
         }

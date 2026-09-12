@@ -71,6 +71,7 @@ public class SecurityConfig {
                 .requestMatchers("/flight-bookings/**").authenticated()
                 .requestMatchers("/activity-bookings/**").authenticated()
                 .requestMatchers("/cab-bookings/**").authenticated()
+                .requestMatchers("/hotel-bookings/**").authenticated()
                 // Cabs is UAT/certification only (see CabsService/TripJackClient) -
                 // every endpoint, including quotes, requires auth, unlike flights/
                 // hotels' public discovery split, since even a "search" here runs
@@ -128,6 +129,30 @@ public class SecurityConfig {
                 // (per-placement listing, image bytes) is public display
                 // content. Mutations (create/update/delete) are admin-only
                 // via the fallback below.
+                // Markup rules. Reading them is fine for any signed-in user -
+                // the supplier fare is already in the search response we proxy,
+                // so the markup reveals nothing new - but only ADMIN may change
+                // them. The admin matcher must come first.
+                .requestMatchers("/markup/admin/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/markup/admin").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/markup").authenticated()
+                .requestMatchers(HttpMethod.POST, "/markup/quote").authenticated()
+                .requestMatchers("/markup/**").hasRole("ADMIN")
+
+                // Coupons. The admin subtree is locked to ROLE_ADMIN so a
+                // customer token cannot create, edit, delete or even LIST
+                // coupons - listing would let codes be harvested. /validate is
+                // merely authenticated: it needs a real user to throttle
+                // guessing and to enforce the per-customer limit.
+                //
+                // Ordering matters - the admin matcher must precede the
+                // catch-all, since the first match wins.
+                .requestMatchers("/coupons/admin/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/coupons/admin").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/coupons/admin").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/coupons/validate").authenticated()
+                .requestMatchers("/coupons/**").hasRole("ADMIN")
+
                 .requestMatchers(HttpMethod.GET, "/promo-banners/admin").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/promo-banners/*/suggest-title").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/promo-banners/**").permitAll()

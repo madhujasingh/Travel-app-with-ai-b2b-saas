@@ -51,6 +51,31 @@ public class ActivityBooking {
     @Column(name = "total_amount")
     private BigDecimal totalAmount;
 
+    // --- Margin breakdown -----------------------------------------------
+    // The supplier amount above is what the supplier was actually paid, and it
+    // must stay that way - TripJack rejects a booking whose payment differs
+    // from the reviewed fare (errCode 1015). These three record what the
+    // CUSTOMER was charged on our own rail, so a booking can be reconciled
+    // later without re-deriving margin from settings that may since have
+    // changed.
+    //
+    // Nullable: rows created before markup existed simply have no breakdown.
+    @Column(name = "markup_amount", precision = 12, scale = 2)
+    private BigDecimal markupAmount;
+
+    @Column(name = "convenience_fee", precision = 12, scale = 2)
+    private BigDecimal convenienceFee;
+
+    @Column(name = "coupon_code", length = 40)
+    private String couponCode;
+
+    @Column(name = "discount_amount", precision = 12, scale = 2)
+    private BigDecimal discountAmount;
+
+    // supplier amount + markup + convenience fee - discount.
+    @Column(name = "customer_total", precision = 12, scale = 2)
+    private BigDecimal customerTotal;
+
     private String currency;
 
     // Raw HotelBeds status (PRECONFIRMED, CONFIRMED, CANCELLED) stored as-is,

@@ -40,6 +40,13 @@ public class ActivityBookingService {
             existing.setVisitDateFrom(incoming.getVisitDateFrom());
             existing.setVisitDateTo(incoming.getVisitDateTo());
             existing.setTotalAmount(incoming.getTotalAmount());
+            // Margin breakdown - see the booking model for why the supplier
+            // amount and the customer total are stored separately.
+            existing.setMarkupAmount(incoming.getMarkupAmount());
+            existing.setConvenienceFee(incoming.getConvenienceFee());
+            existing.setCouponCode(incoming.getCouponCode());
+            existing.setDiscountAmount(incoming.getDiscountAmount());
+            existing.setCustomerTotal(incoming.getCustomerTotal());
             existing.setCurrency(incoming.getCurrency());
             existing.setStatus(incoming.getStatus());
             return activityBookingRepository.save(existing);

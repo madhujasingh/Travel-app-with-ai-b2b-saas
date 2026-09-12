@@ -36,6 +36,13 @@ public class TripSafeBookingService {
             existing.setPlanName(incoming.getPlanName());
             existing.setDestinationSummary(incoming.getDestinationSummary());
             existing.setAmount(incoming.getAmount());
+            // Margin breakdown - see the booking model for why the supplier
+            // amount and the customer total are stored separately.
+            existing.setMarkupAmount(incoming.getMarkupAmount());
+            existing.setConvenienceFee(incoming.getConvenienceFee());
+            existing.setCouponCode(incoming.getCouponCode());
+            existing.setDiscountAmount(incoming.getDiscountAmount());
+            existing.setCustomerTotal(incoming.getCustomerTotal());
             existing.setStatus(incoming.getStatus());
             return tripSafeBookingRepository.save(existing);
         }
