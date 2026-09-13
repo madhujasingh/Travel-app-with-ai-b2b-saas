@@ -479,6 +479,9 @@ const buildFlightCartItem = ({ flights, reviewResponse, passengerCounts, markupA
     infants: Number(passengerCounts?.infants || 0),
     image: 'Flight',
     iconName: 'airplane-outline',
+    // Which markup and coupon rules apply to this line. Without it the cart
+    // has to guess, and a FLIGHT-only coupon was being rejected on a flight.
+    productType: 'FLIGHT',
     fareType: primaryLeg.fareType,
     journeyLabel: legs.map((leg) => leg.journeyLabel).join(' + '),
     reviewResponse,

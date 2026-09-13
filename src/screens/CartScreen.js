@@ -169,6 +169,22 @@ const CartScreen = ({ route, navigation }) => {
   );
 
 
+  // Coupons and margin are per product type, so the cart has to say what it
+  // holds. Items added before this tag existed are itinerary packages.
+  //
+  // A mixed cart has no single right answer - the discount and the available
+  // margin both differ per product - so the highest-value line decides, and
+  // that is the one a coupon is most likely meant for.
+  const cartProductType = (() => {
+    if (!cartItems.length) return 'PACKAGE';
+    const byType = {};
+    cartItems.forEach((item) => {
+      const type = item.productType || 'PACKAGE';
+      byType[type] = (byType[type] || 0) + (item.lineTotal || item.price * item.people || 0);
+    });
+    return Object.entries(byType).sort((a, b) => b[1] - a[1])[0][0];
+  })();
+
   const applyCoupon = async () => {
     const code = couponCode.trim();
     if (!code) {
@@ -185,7 +201,7 @@ const CartScreen = ({ route, navigation }) => {
         body: JSON.stringify({
           code,
           orderAmount: getCartTotal() + convenienceFee,
-          productType: 'PACKAGE',
+          productType: cartProductType,
         }),
       });
 
@@ -219,6 +235,12 @@ const CartScreen = ({ route, navigation }) => {
   // actually made, so a tampered value here buys nothing.
   const orderTotal = getCartTotal() + convenienceFee;
   const payableTotal = Math.max(orderTotal - (appliedCoupon?.discountAmount || 0), 0);
+
+  React.useEffect(() => {
+    // The discount was priced against the previous cart, so it is no longer
+    // the number the server would give.
+    setAppliedCoupon(null);
+  }, [cartItems.length, cartProductType]);
 
   const removeCoupon = () => {
     setAppliedCoupon(null);
