@@ -22,6 +22,7 @@ import WebSearchPanel, { WebPanelTabs, WebPanelChips } from '../components/web/W
 import WebField from '../components/web/WebField';
 import RangeSlider from '../components/RangeSlider';
 import MarkupPrice from '../components/MarkupPrice';
+import { useMarkup } from '../context/MarkupContext';
 import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -433,7 +434,7 @@ const stripFareRuleRtf = (raw) => {
     .trim();
 };
 
-const buildFlightCartItem = ({ flights, reviewResponse, passengerCounts }) => {
+const buildFlightCartItem = ({ flights, reviewResponse, passengerCounts, markupAmount = 0 }) => {
   const legs = Array.isArray(flights) ? flights : [flights];
   const primaryLeg = legs[0] || {};
   const people =
@@ -465,9 +466,14 @@ const buildFlightCartItem = ({ flights, reviewResponse, passengerCounts }) => {
     title,
     destination,
     duration: primaryLeg.duration,
-    price: lineTotal / (people || 1),
+    // lineTotal is what the CART and CHECKOUT display, so it is the customer
+    // price - supplier fare plus our markup. supplierTotal keeps the amount
+    // TripJack is actually paid, which no display should use.
+    price: (lineTotal + markupAmount) / (people || 1),
     people: people || 1,
-    lineTotal: lineTotal || primaryLeg?.price || 0,
+    supplierTotal: lineTotal || primaryLeg?.price || 0,
+    markupAmount,
+    lineTotal: (lineTotal || primaryLeg?.price || 0) + markupAmount,
     adults: Number(passengerCounts?.adults || 0),
     children: Number(passengerCounts?.children || 0),
     infants: Number(passengerCounts?.infants || 0),
@@ -630,6 +636,7 @@ const mapFlightsFromResponse = (data) => {
 
 const FlightsScreen = ({ navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
+  const { markupFor } = useMarkup();
   const { scrolled, scrollProps } = useHeroHeader();
   const { addItemToCart } = useCart();
   const [tripType, setTripType] = useState('ONE_WAY');
@@ -658,6 +665,13 @@ const FlightsScreen = ({ navigation }) => {
     if (international) return round ? 'INTERNATIONAL_ROUND' : 'INTERNATIONAL_ONEWAY';
     return round ? 'DOMESTIC_ROUND' : 'DOMESTIC_ONEWAY';
   };
+
+  // Customer-facing price for a flight: supplier fare plus whatever markup
+  // applies to that airline and trip type. Used by every display below; the
+  // supplier amount is never shown.
+  const sell = (flight, base) =>
+    Number(base || 0) +
+    markupFor('FLIGHT', markupCategory(flight), Number(base || 0), 1, flight?.airlineCode);
   const [sortBy, setSortBy] = useState('BEST');
   const [stopsFilter, setStopsFilter] = useState('ALL');
 
@@ -1268,10 +1282,18 @@ const FlightsScreen = ({ navigation }) => {
         children: Number(children || 0),
         infants: Number(infants || 0),
       };
+      const reviewTotal = getReviewGrandTotal(data) || 0;
       const cartItem = buildFlightCartItem({
         flights: legs,
         reviewResponse: data,
         passengerCounts,
+        markupAmount: markupFor(
+          'FLIGHT',
+          markupCategory(legs[0]),
+          reviewTotal,
+          Number(adults || 0) + Number(children || 0) + Number(infants || 0),
+          legs[0]?.airlineCode,
+        ),
       });
 
       setReviewedFare({
@@ -1613,7 +1635,7 @@ const FlightsScreen = ({ navigation }) => {
                     {fare.fareType}
                   </Text>
                   <Text style={[styles.fareOptionChipPrice, active && styles.fareOptionChipPriceActive]}>
-                    ₹{fare.price.toLocaleString()}
+                    ₹{Math.round(sell(item, fare.price)).toLocaleString()}
                   </Text>
                   {fare.fareTags.length > 0 && (
                     <Text style={[styles.fareOptionChipTags, active && styles.fareOptionChipTagsActive]}>
@@ -1942,7 +1964,7 @@ const FlightsScreen = ({ navigation }) => {
           <>
             <View style={styles.compactSelectedFareBadge}>
               <Text style={styles.compactSelectedFareBadgeText} numberOfLines={1}>
-                {selectedFare.fareType} ₹{selectedFare.price.toLocaleString()}
+                {selectedFare.fareType} ₹{Math.round(sell(item, selectedFare.price)).toLocaleString()}
               </Text>
             </View>
             <View style={styles.compactFareList}>
@@ -1956,7 +1978,7 @@ const FlightsScreen = ({ navigation }) => {
                     onPress={() => chooseFareForFlight(item, index)}
                   >
                     <Text style={styles.compactFareListLabel} numberOfLines={1}>{fare.fareType}</Text>
-                    <Text style={styles.compactFareListPrice}>₹{fare.price.toLocaleString()}</Text>
+                    <Text style={styles.compactFareListPrice}>₹{Math.round(sell(item, fare.price)).toLocaleString()}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -2030,7 +2052,7 @@ const FlightsScreen = ({ navigation }) => {
                 <View style={styles.dualColumnTitleRow}>
                   <Ionicons name="airplane" size={14} color={Colors.accentBlue} />
                   <Text style={styles.dualColumnTitle}>
-                    Onward{selectedByGroup[groupKeys[0]] ? ` · ₹${selectedByGroup[groupKeys[0]].price.toLocaleString()}` : ''}
+                    Onward{selectedByGroup[groupKeys[0]] ? ` · ₹${Math.round(sell(selectedByGroup[groupKeys[0]], selectedByGroup[groupKeys[0]].price)).toLocaleString()}` : ''}
                   </Text>
                 </View>
                 <FlatList
@@ -2047,7 +2069,7 @@ const FlightsScreen = ({ navigation }) => {
                 <View style={styles.dualColumnTitleRow}>
                   <Ionicons name="airplane" size={14} color={Colors.accentBlue} style={{ transform: [{ scaleX: -1 }] }} />
                   <Text style={styles.dualColumnTitle}>
-                    Return{selectedByGroup[groupKeys[1]] ? ` · ₹${selectedByGroup[groupKeys[1]].price.toLocaleString()}` : ''}
+                    Return{selectedByGroup[groupKeys[1]] ? ` · ₹${Math.round(sell(selectedByGroup[groupKeys[1]], selectedByGroup[groupKeys[1]].price)).toLocaleString()}` : ''}
                   </Text>
                 </View>
                 <FlatList
@@ -3004,7 +3026,7 @@ const FlightsScreen = ({ navigation }) => {
                     style={[styles.legSelectionChipText, isActive && styles.legSelectionChipTextActive]}
                     numberOfLines={1}
                   >
-                    {buildJourneyLabel(key)}{selection ? `: ₹${selection.price.toLocaleString()}` : ''}
+                    {buildJourneyLabel(key)}{selection ? `: ₹${Math.round(sell(selection, selection.price)).toLocaleString()}` : ''}
                   </Text>
                 </TouchableOpacity>
               );
@@ -3108,7 +3130,7 @@ const FlightsScreen = ({ navigation }) => {
             </Text>
             <Text style={styles.stickyFooterSubtitle} numberOfLines={1}>
               {allLegsSelected
-                ? groupKeys.map((key) => `${buildJourneyLabel(key)} ₹${selectedByGroup[key].price.toLocaleString()}`).join('  •  ')
+                ? groupKeys.map((key) => `${buildJourneyLabel(key)} ₹${Math.round(sell(selectedByGroup[key], selectedByGroup[key].price)).toLocaleString()}`).join('  •  ')
                 : tripType === 'RETURN'
                 ? 'Select an onward and return flight'
                 : 'Tap a flight card above for each leg'}

@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import useResponsive from '../hooks/useResponsive';
+import MarkupPrice from '../components/MarkupPrice';
 import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -841,7 +842,12 @@ const HotelDetailScreen = ({ route, navigation }) => {
                   <View style={[styles.priceRow, styles.priceRowTotal]}>
                     <Text style={styles.priceRowTotalLabel}>Total</Text>
                     <Text style={styles.priceRowTotalValue}>
-                      {option.pricing?.currency} {Number(option.pricing?.totalPrice || 0).toLocaleString()}
+                      <MarkupPrice
+                        service="HOTEL"
+                        entityKey={tjHotelId}
+                        baseAmount={option.pricing?.totalPrice || 0}
+                        prefix={`${option.pricing?.currency || ''} `}
+                      />
                     </Text>
                   </View>
                 </View>
@@ -901,7 +907,12 @@ const HotelDetailScreen = ({ route, navigation }) => {
                     <Text style={styles.reviewResultRow}>Booking ID: {reviewResult.bookingId}</Text>
                     <Text style={styles.reviewResultRow}>
                       Confirmed total: {reviewResult.option?.pricing?.currency}{' '}
-                      {Number(reviewResult.option?.pricing?.totalPrice || 0).toLocaleString()}
+                      <MarkupPrice
+                        service="HOTEL"
+                        entityKey={tjHotelId}
+                        baseAmount={reviewResult.option?.pricing?.totalPrice || 0}
+                        prefix=""
+                      />
                     </Text>
                     {reviewResult.option?.deadlineDateTime && (
                       <Text style={styles.reviewResultRow}>

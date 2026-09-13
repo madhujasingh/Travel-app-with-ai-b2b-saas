@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,  StatusBar } from 'react-native';
 import useResponsive from '../hooks/useResponsive';
+import MarkupPrice from '../components/MarkupPrice';
 import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -170,7 +171,7 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
         <View style={styles.cardFooter}>
           <View>
             {fare != null ? (
-              <Text style={styles.fareValue}>₹{fare.toLocaleString()}</Text>
+              <MarkupPrice service="INSURANCE" baseAmount={fare} priceStyle={styles.fareValue} />
             ) : (
               <Text style={styles.farePending}>Price on next step</Text>
             )}
