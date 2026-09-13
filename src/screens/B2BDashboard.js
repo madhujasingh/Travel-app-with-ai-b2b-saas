@@ -79,6 +79,14 @@ const B2BDashboard = ({ navigation }) => {
   const [wallet, setWallet] = useState(null);
   const [walletLoading, setWalletLoading] = useState(true);
 
+  // What could actually fund a booking: the wallet plus any unused credit.
+  // A booking debits this, so when it is near zero bookings fail - which has
+  // already happened once in production.
+  const LOW_BALANCE_THRESHOLD = 5000;
+  const spendableBalance =
+    Number(wallet?.walletBalance || 0) + Number(wallet?.creditBalance || 0);
+  const walletIsLow = !!wallet && spendableBalance < LOW_BALANCE_THRESHOLD;
+
   useEffect(() => {
     let active = true;
     (async () => {
@@ -451,10 +459,30 @@ const B2BDashboard = ({ navigation }) => {
                 <Text style={styles.walletAmount}>
                   ₹{Number(wallet.walletBalance || 0).toLocaleString('en-IN')}
                 </Text>
-                {wallet.totalOutStanding ? (
+
+                <View style={styles.walletMetaRow}>
+                  {/* Null means TripJack has not extended a credit line at all,
+                      which is different from a line that is used up - so the two
+                      read differently rather than both showing zero. */}
                   <Text style={styles.walletSubtext}>
-                    Outstanding: ₹{Number(wallet.totalOutStanding).toLocaleString('en-IN')}
+                    {wallet.creditBalance == null
+                      ? 'No credit line'
+                      : `Credit: ₹${Number(wallet.creditBalance).toLocaleString('en-IN')}`}
                   </Text>
+                  {wallet.totalOutStanding ? (
+                    <Text style={styles.walletSubtext}>
+                      Outstanding: ₹{Number(wallet.totalOutStanding).toLocaleString('en-IN')}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {walletIsLow ? (
+                  <View style={styles.walletWarning}>
+                    <Ionicons name="warning-outline" size={14} color="#8A4B00" />
+                    <Text style={styles.walletWarningText}>
+                      Too low to book. Bookings fail on an empty balance - top up before selling.
+                    </Text>
+                  </View>
                 ) : null}
               </>
             ) : (
@@ -648,6 +676,30 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     marginTop: 2,
   },
+  walletMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 2,
+  },
+  walletWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+    marginTop: 9,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#FFF3CD',
+  },
+  walletWarningText: {
+    flex: 1,
+    fontSize: 11.5,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#8A4B00',
+  },
+
   walletSubtext: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.85)',
