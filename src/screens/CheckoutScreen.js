@@ -7,6 +7,7 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
@@ -16,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { digitsOnly } from '../utils/inputSanitizers';
 import API_CONFIG from '../config/api';
+import { useAuth } from '../context/AuthContext';
 
 // Digits only, auto-inserts the "/" after MM so typing/pasting letters
 // can't corrupt the MM/YY format.
@@ -42,6 +44,68 @@ const CheckoutScreen = ({ route, navigation }) => {
   const [cvv, setCvv] = useState('');
   const [cardName, setCardName] = useState('');
   const [convenienceFee, setConvenienceFee] = useState(DEFAULT_CONVENIENCE_FEE);
+  const { token } = useAuth();
+
+  // Coupon. The server prices the code - this screen only sends it and the
+  // order total, and shows whatever discount comes back.
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponChecking, setCouponChecking] = useState(false);
+  const [couponError, setCouponError] = useState('');
+
+  // Which rules apply. A mixed cart has no single answer, so the biggest line
+  // decides - the one a coupon is most likely meant for.
+  const checkoutProductType = (() => {
+    if (!cartItems.length) return 'PACKAGE';
+    const byType = {};
+    cartItems.forEach((item) => {
+      const type = item.productType || 'PACKAGE';
+      byType[type] = (byType[type] || 0) + (item.lineTotal || item.price * item.people || 0);
+    });
+    return Object.entries(byType).sort((a, b) => b[1] - a[1])[0][0];
+  })();
+
+  const applyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) {
+      setCouponError('Enter a coupon code.');
+      return;
+    }
+    try {
+      setCouponChecking(true);
+      setCouponError('');
+      const response = await fetch(`${API_CONFIG.BASE_URL}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          code,
+          orderAmount: total + convenienceFee,
+          productType: checkoutProductType,
+        }),
+      });
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (!response.ok || !data) {
+        setCouponError(data?.message || 'Unable to check that code right now.');
+        return;
+      }
+      if (!data.valid) {
+        setCouponError(data.message || "This coupon code isn't valid.");
+        return;
+      }
+      setAppliedCoupon(data);
+      setCouponCode('');
+    } catch (error) {
+      setCouponError('Unable to check that code right now.');
+    } finally {
+      setCouponChecking(false);
+    }
+  };
 
   // Reached either from CartScreen or directly via FlightsScreen's
   // "Continue" shortcut (which skips CartScreen entirely) - fetch
@@ -60,7 +124,8 @@ const CheckoutScreen = ({ route, navigation }) => {
     })();
   }, []);
 
-  const grandTotal = total + convenienceFee;
+  const discount = Number(appliedCoupon?.discountAmount || 0);
+  const grandTotal = Math.max(total + convenienceFee - discount, 0);
 
   const paymentMethods = [
     { id: 'card', name: 'Credit/Debit Card', icon: 'card-outline' },
@@ -138,6 +203,16 @@ const CheckoutScreen = ({ route, navigation }) => {
                 ₹{Math.round(convenienceFee).toLocaleString()}
               </Text>
             </View>
+            {appliedCoupon ? (
+              <View style={styles.priceRow}>
+                <Text style={[styles.priceLabel, styles.discountLabel]}>
+                  Discount ({appliedCoupon.code})
+                </Text>
+                <Text style={[styles.priceValue, styles.discountValue]}>
+                  -₹{Math.round(discount).toLocaleString()}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.divider} />
             <View style={styles.priceRow}>
               <Text style={styles.totalLabel}>Total Amount</Text>
@@ -146,6 +221,52 @@ const CheckoutScreen = ({ route, navigation }) => {
               </Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Coupon</Text>
+          {appliedCoupon ? (
+            <View style={styles.couponApplied}>
+              <Ionicons name="checkmark-circle" size={18} color={Colors.success} />
+              <View style={styles.couponAppliedCopy}>
+                <Text style={styles.couponAppliedCode}>{appliedCoupon.code}</Text>
+                {!!appliedCoupon.description && (
+                  <Text style={styles.couponAppliedText}>{appliedCoupon.description}</Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={() => setAppliedCoupon(null)}>
+                <Text style={styles.couponRemove}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.couponRow}>
+                <TextInput
+                  style={styles.couponInput}
+                  placeholder="Enter code"
+                  placeholderTextColor={Colors.textMuted}
+                  value={couponCode}
+                  onChangeText={(value) =>
+                    setCouponCode(value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))
+                  }
+                  autoCapitalize="characters"
+                  maxLength={40}
+                />
+                <TouchableOpacity
+                  style={styles.couponApplyButton}
+                  onPress={applyCoupon}
+                  disabled={couponChecking}
+                >
+                  {couponChecking ? (
+                    <ActivityIndicator color={Colors.primary} size="small" />
+                  ) : (
+                    <Text style={styles.couponApplyText}>Apply</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+              {!!couponError && <Text style={styles.couponError}>{couponError}</Text>}
+            </>
+          )}
         </View>
 
         {/* Payment Methods */}
@@ -348,6 +469,49 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.primary,
   },
+  couponRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  couponInput: {
+    flex: 1,
+    height: 46,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: Colors.text,
+    outlineStyle: 'none',
+  },
+  couponApplyButton: {
+    paddingHorizontal: 20,
+    height: 46,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  couponApplyText: { fontSize: 14, fontWeight: '800', color: Colors.primary },
+  couponError: { marginTop: 8, fontSize: 12.5, fontWeight: '600', color: Colors.error },
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#EAF7EC',
+    borderWidth: 1,
+    borderColor: Colors.success,
+  },
+  couponAppliedCopy: { flex: 1, gap: 2 },
+  couponAppliedCode: { fontSize: 14, fontWeight: '800', color: Colors.text, letterSpacing: 0.8 },
+  couponAppliedText: { fontSize: 12, color: Colors.textLight },
+  couponRemove: { fontSize: 12.5, fontWeight: '700', color: Colors.error },
+  discountLabel: { color: Colors.success, fontWeight: '700' },
+  discountValue: { color: Colors.success, fontWeight: '800' },
+
   priceCard: {
     backgroundColor: Colors.card,
     borderRadius: 16,

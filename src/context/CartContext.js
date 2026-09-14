@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useState } from 'react';
+import { isExpired } from '../utils/cartItems';
 
 const CartContext = createContext();
 
@@ -38,6 +39,20 @@ export const CartProvider = ({ children }) => {
     setCartItems([]);
   };
 
+  // Supplier quotes are time-limited, so a saved line eventually stops being
+  // bookable. Dropping those is better than keeping a price that can no longer
+  // be honoured - the caller gets the count back so it can say what happened
+  // rather than letting items vanish silently.
+  const removeExpiredItems = useCallback(() => {
+    let removed = 0;
+    setCartItems((prevItems) => {
+      const live = prevItems.filter((item) => !isExpired(item));
+      removed = prevItems.length - live.length;
+      return removed ? live : prevItems;
+    });
+    return removed;
+  }, []);
+
   const getCartTotal = () => {
     return cartItems.reduce(
       (total, item) => total + (item.lineTotal || item.price * item.people),
@@ -56,6 +71,7 @@ export const CartProvider = ({ children }) => {
     clearCart,
     getCartTotal,
     getCartItemCount,
+    removeExpiredItems,
     isLoading,
   };
 

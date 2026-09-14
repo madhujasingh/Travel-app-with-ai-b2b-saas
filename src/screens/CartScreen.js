@@ -33,7 +33,8 @@ const CartScreen = ({ route, navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
   const { scrolled, scrollProps } = useHeroHeader();
   const canGoBack = navigation.canGoBack();
-  const { cartItems, addItemToCart, removeItemFromCart, getCartTotal, getCartItemCount } = useCart();
+  const { cartItems, addItemToCart, removeItemFromCart, getCartTotal, getCartItemCount, removeExpiredItems } =
+    useCart();
   const { token } = useAuth();
   const [convenienceFee, setConvenienceFee] = React.useState(DEFAULT_CONVENIENCE_FEE);
 
@@ -136,12 +137,7 @@ const CartScreen = ({ route, navigation }) => {
           <Text style={styles.itemImage}>{item.image}</Text>
         )}
         <View style={styles.itemInfo}>
-          <Text style={[styles.itemTitle, isExpired(item) && styles.itemExpiredText]}>
-            {item.title}
-          </Text>
-          {isExpired(item) ? (
-            <Text style={styles.itemExpiredTag}>Quote expired — search again to rebook</Text>
-          ) : null}
+          <Text style={styles.itemTitle}>{item.title}</Text>
           <Text style={styles.itemDestination}>{item.destination}</Text>
           <Text style={styles.itemDuration}>{item.duration}</Text>
         </View>
@@ -181,11 +177,16 @@ const CartScreen = ({ route, navigation }) => {
   // A mixed cart has no single right answer - the discount and the available
   // margin both differ per product - so the highest-value line decides, and
   // that is the one a coupon is most likely meant for.
-  // Supplier quotes expire (a hotel session in about 15 minutes, a HotelBeds
-  // rateKey in 30), so a saved line stops being bookable. Expired lines are
-  // shown struck through and excluded from every total.
+  // Expired lines are removed rather than shown dead, but the customer is told
+  // - items disappearing on their own is worse than a stale price.
+  const [expiredRemoved, setExpiredRemoved] = React.useState(0);
+
+  React.useEffect(() => {
+    const removed = removeExpiredItems();
+    if (removed) setExpiredRemoved((current) => current + removed);
+  }, [removeExpiredItems]);
+
   const liveItems = cartItems.filter((item) => !isExpired(item));
-  const expiredCount = cartItems.length - liveItems.length;
   const liveTotal = liveItems.reduce(
     (sum, item) => sum + (item.lineTotal || item.price * item.people || 0),
     0,
@@ -328,9 +329,9 @@ const CartScreen = ({ route, navigation }) => {
             {/* Price Summary */}
             <View style={styles.summarySection}>
               <Text style={styles.summaryTitle}>Price Summary</Text>
-              {expiredCount > 0 ? (
+              {expiredRemoved > 0 ? (
                 <Text style={styles.expiredNotice}>
-                  {expiredCount} item{expiredCount === 1 ? '' : 's'} expired and {expiredCount === 1 ? 'is' : 'are'} not included.
+                  {expiredRemoved} item{expiredRemoved === 1 ? '' : 's'} removed — the supplier's price expired. Search again to rebook.
                 </Text>
               ) : null}
               <View style={styles.summaryCard}>
