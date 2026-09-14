@@ -12,8 +12,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import useResponsive from '../hooks/useResponsive';
+import useResponsive, { CONTENT_MAX_WIDTH } from '../hooks/useResponsive';
 import WebHero from '../components/web/WebHero';
+import WebField from '../components/web/WebField';
+import DatePickerModal from '../components/DatePickerModal';
 import useHeroHeader from '../hooks/useHeroHeader';
 import WebStickyHeader from '../components/web/WebStickyHeader';
 
@@ -56,32 +58,91 @@ const categoryCards = [
   },
 ];
 
+// Themes the chip row filters by. Tagged against the destinations we already
+// list, so a chip narrows a real set rather than being decoration.
+const THEMES = [
+  { id: 'all', label: 'All Packages', icon: 'triangle-outline' },
+  { id: 'beach', label: 'Beach', icon: 'umbrella-outline' },
+  { id: 'city', label: 'City Breaks', icon: 'business-outline' },
+  { id: 'hills', label: 'Hills & Nature', icon: 'trail-sign-outline' },
+  { id: 'adventure', label: 'Adventure', icon: 'compass-outline' },
+  { id: 'spiritual', label: 'Spiritual', icon: 'flower-outline' },
+  { id: 'family', label: 'Family', icon: 'people-outline' },
+  { id: 'honeymoon', label: 'Honeymoon', icon: 'heart-outline' },
+  { id: 'international', label: 'International', icon: 'earth-outline' },
+];
+
 const internationalDestinations = [
-  { id: 1, name: 'Paris', country: 'France', image: 'business-outline', popular: true },
-  { id: 2, name: 'Tokyo', country: 'Japan', image: 'navigate-outline', popular: true },
-  { id: 3, name: 'Dubai', country: 'UAE', image: 'business', popular: true },
-  { id: 4, name: 'Bali', country: 'Indonesia', image: 'sunny', popular: true },
-  { id: 5, name: 'Maldives', country: 'Maldives', image: 'water-outline', popular: true },
-  { id: 6, name: 'Singapore', country: 'Singapore', image: 'leaf-outline', popular: false },
-  { id: 7, name: 'Thailand', country: 'Thailand', image: 'flower-outline', popular: false },
-  { id: 8, name: 'Switzerland', country: 'Switzerland', image: 'trail-sign', popular: false },
+  { id: 1, name: 'Paris', country: 'France', image: 'business-outline', popular: true, themes: ['city', 'honeymoon'] },
+  { id: 2, name: 'Tokyo', country: 'Japan', image: 'navigate-outline', popular: true, themes: ['city', 'family'] },
+  { id: 3, name: 'Dubai', country: 'UAE', image: 'business', popular: true, themes: ['city', 'family', 'adventure'] },
+  { id: 4, name: 'Bali', country: 'Indonesia', image: 'sunny', popular: true, themes: ['beach', 'honeymoon'] },
+  { id: 5, name: 'Maldives', country: 'Maldives', image: 'water-outline', popular: true, themes: ['beach', 'honeymoon'] },
+  { id: 6, name: 'Singapore', country: 'Singapore', image: 'leaf-outline', popular: false, themes: ['city', 'family'] },
+  { id: 7, name: 'Thailand', country: 'Thailand', image: 'flower-outline', popular: false, themes: ['beach', 'adventure'] },
+  { id: 8, name: 'Switzerland', country: 'Switzerland', image: 'trail-sign', popular: false, themes: ['hills', 'honeymoon'] },
 ];
 
 const indianDestinations = [
-  { id: 1, name: 'Jaipur', state: 'Rajasthan', image: 'business', popular: true },
-  { id: 2, name: 'Goa', state: 'Goa', image: 'sunny', popular: true },
-  { id: 3, name: 'Kerala', state: 'Kerala', image: 'leaf', popular: true },
-  { id: 4, name: 'Manali', state: 'Himachal Pradesh', image: 'trail-sign', popular: true },
-  { id: 5, name: 'Varanasi', state: 'Uttar Pradesh', image: 'flower', popular: true },
-  { id: 6, name: 'Udaipur', state: 'Rajasthan', image: 'business-outline', popular: false },
-  { id: 7, name: 'Shimla', state: 'Himachal Pradesh', image: 'trail-sign-outline', popular: false },
-  { id: 8, name: 'Agra', state: 'Uttar Pradesh', image: 'location', popular: false },
+  { id: 1, name: 'Jaipur', state: 'Rajasthan', image: 'business', popular: true, themes: ['city', 'family'] },
+  { id: 2, name: 'Goa', state: 'Goa', image: 'sunny', popular: true, themes: ['beach', 'honeymoon'] },
+  { id: 3, name: 'Kerala', state: 'Kerala', image: 'leaf', popular: true, themes: ['hills', 'honeymoon', 'family'] },
+  { id: 4, name: 'Manali', state: 'Himachal Pradesh', image: 'trail-sign', popular: true, themes: ['hills', 'adventure'] },
+  { id: 5, name: 'Varanasi', state: 'Uttar Pradesh', image: 'flower', popular: true, themes: ['spiritual'] },
+  { id: 6, name: 'Udaipur', state: 'Rajasthan', image: 'business-outline', popular: false, themes: ['city', 'honeymoon'] },
+  { id: 7, name: 'Shimla', state: 'Himachal Pradesh', image: 'trail-sign-outline', popular: false, themes: ['hills', 'family'] },
+  { id: 8, name: 'Agra', state: 'Uttar Pradesh', image: 'location', popular: false, themes: ['spiritual', 'city'] },
 ];
 
 const LandPackageScreen = ({ navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
   const { scrolled, scrollProps } = useHeroHeader();
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTheme, setActiveTheme] = useState('all');
+  const [travelDates, setTravelDates] = useState({ from: '', to: '' });
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [travellers, setTravellers] = useState({ adults: 2, children: 0 });
+
+  // Everything we list, so the desktop landing page can show destinations and
+  // themes before a market has been picked.
+  const allDestinations = useMemo(
+    () => [
+      ...indianDestinations.map((d) => ({ ...d, market: 'india' })),
+      ...internationalDestinations.map((d) => ({ ...d, market: 'international' })),
+    ],
+    [],
+  );
+
+  const themedDestinations = useMemo(() => {
+    let list = allDestinations;
+    if (activeTheme === 'international') {
+      list = list.filter((d) => d.market === 'international');
+    } else if (activeTheme !== 'all') {
+      list = list.filter((d) => (d.themes || []).includes(activeTheme));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        (d) =>
+          d.name.toLowerCase().includes(q) ||
+          (d.country || '').toLowerCase().includes(q) ||
+          (d.state || '').toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [allDestinations, activeTheme, searchQuery]);
+
+  const travellerLabel = `${travellers.adults} Adult${travellers.adults === 1 ? '' : 's'}, ${travellers.children} Child${travellers.children === 1 ? '' : 'ren'}`;
+  const dateLabel =
+    travelDates.from && travelDates.to ? `${travelDates.from} → ${travelDates.to}` : '';
+
+  const openDestination = (destination) =>
+    navigation.navigate('ItineraryList', {
+      type: destination.market,
+      destination: destination.name,
+      travelDates,
+      travellers,
+    });
   const [selectedCategory, setSelectedCategory] = useState(null);
   const ctaScale = useRef(new Animated.Value(1)).current;
 
@@ -135,6 +196,126 @@ const LandPackageScreen = ({ navigation }) => {
       bounciness: 6,
     }).start();
   };
+
+
+  // Desktop landing: theme chips, the two market cards, then destinations.
+  // The phone keeps its two-step picker, which suits a narrow screen better.
+  const renderWebLanding = () => (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.webScroll}
+      {...scrollProps}
+    >
+      <View style={styles.webBody}>
+        <View style={styles.themeRow}>
+          {THEMES.map((theme) => {
+            const active = activeTheme === theme.id;
+            return (
+              <TouchableOpacity
+                key={theme.id}
+                style={[styles.themeChip, active && styles.themeChipActive]}
+                onPress={() => setActiveTheme(theme.id)}
+              >
+                <View style={[styles.themeIcon, active && styles.themeIconActive]}>
+                  <Ionicons
+                    name={theme.icon}
+                    size={18}
+                    color={active ? Colors.primary : Colors.accentBlue}
+                  />
+                </View>
+                <Text style={[styles.themeLabel, active && styles.themeLabelActive]}>
+                  {theme.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={styles.marketRow}>
+          {categoryCards.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={styles.marketCard}
+              activeOpacity={0.9}
+              onPress={() => {
+                setSelectedCategory(category.id);
+                navigation.navigate('ItineraryList', {
+                  type: category.id,
+                  travelDates,
+                  travellers,
+                });
+              }}
+            >
+              <ImageBackground
+                source={{ uri: category.image }}
+                style={styles.marketImage}
+                imageStyle={styles.marketImageInner}
+              >
+                <LinearGradient
+                  colors={['rgba(10,20,40,0.85)', 'rgba(10,20,40,0.25)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.marketScrim}
+                />
+                <View style={styles.marketCopy}>
+                  <Text style={styles.marketEyebrow}>{category.eyebrow.toUpperCase()}</Text>
+                  <Text style={styles.marketTitle}>{category.title}</Text>
+                  <Text style={styles.marketText}>{category.description}</Text>
+                  <View style={styles.marketButton}>
+                    <Text style={styles.marketButtonText}>Explore Packages</Text>
+                    <Ionicons name="arrow-forward" size={15} color={Colors.secondary} />
+                  </View>
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.destSection}>
+          <View style={styles.destHeader}>
+            <Text style={styles.destHeading}>Popular Destinations</Text>
+            <Text style={styles.destCount}>
+              {themedDestinations.length} destination{themedDestinations.length === 1 ? '' : 's'}
+            </Text>
+          </View>
+
+          {themedDestinations.length === 0 ? (
+            <Text style={styles.destEmpty}>
+              Nothing matches that theme yet — try another one.
+            </Text>
+          ) : (
+            <View style={styles.destGrid}>
+              {themedDestinations.map((destination) => (
+                <TouchableOpacity
+                  key={`${destination.market}-${destination.id}`}
+                  style={styles.destCard}
+                  activeOpacity={0.88}
+                  onPress={() => openDestination(destination)}
+                >
+                  {/* No destination photography yet, so the card leads with the
+                      brand gradient and its icon rather than a broken image. */}
+                  <LinearGradient
+                    colors={[Colors.accentBlue, Colors.accentBlueDark]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.destImage}
+                  >
+                    <Ionicons name={destination.image} size={26} color="rgba(255,255,255,0.75)" />
+                  </LinearGradient>
+                  <View style={styles.destCopy}>
+                    <Text style={styles.destName}>{destination.name}</Text>
+                    <Text style={styles.destMeta}>
+                      {destination.country || destination.state}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      </View>
+    </ScrollView>
+  );
 
   const renderCategorySelection = () => (
     <ScrollView contentContainerStyle={[styles.selectionContent, centeredContent]} showsVerticalScrollIndicator={false} {...scrollProps}>
@@ -295,10 +476,58 @@ const LandPackageScreen = ({ navigation }) => {
 
       {isDesktop ? (
         <WebHero
+          image={require('../../assets/packages/hero-sunset.jpg')}
+          align="left"
+          eyebrow="Explore more together"
           title="Holiday Packages"
           subtitle="Curated trips by theme and destination, priced end to end."
           activeProduct="packages"
-        />
+        >
+          {/* Search bar sits on the hero, the way every package site opens. */}
+          <View style={styles.webSearchBar}>
+            <WebField
+              tone="onLight"
+              label="Destination"
+              icon="location-outline"
+              flex={2}
+              minWidth={240}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Where do you want to go?"
+            />
+            <WebField
+              tone="onLight"
+              label="Travel Dates"
+              icon="calendar-outline"
+              flex={1.4}
+              value={dateLabel}
+              placeholder="Select dates"
+              onPress={() => setDatePickerVisible(true)}
+            />
+            <WebField
+              tone="onLight"
+              label="Travellers"
+              icon="people-outline"
+              flex={1.3}
+              value={travellerLabel}
+              onPress={() =>
+                setTravellers((current) => ({
+                  ...current,
+                  adults: current.adults >= 6 ? 1 : current.adults + 1,
+                }))
+              }
+            />
+            <TouchableOpacity
+              style={styles.webSearchButton}
+              onPress={() => {
+                const match = themedDestinations[0];
+                if (match) openDestination(match);
+              }}
+            >
+              <Ionicons name="search" size={22} color={Colors.secondary} />
+            </TouchableOpacity>
+          </View>
+        </WebHero>
       ) : (
       <View style={styles.header}>
         <TouchableOpacity style={styles.floatingButton} onPress={() => navigation.goBack()}>
@@ -311,7 +540,11 @@ const LandPackageScreen = ({ navigation }) => {
       </View>
       )}
 
-      {selectedCategory ? renderDestinationSelection() : renderCategorySelection()}
+      {isDesktop
+        ? renderWebLanding()
+        : selectedCategory
+          ? renderDestinationSelection()
+          : renderCategorySelection()}
 
       <View style={styles.floatingCtaWrap}>
         <Animated.View style={{ transform: [{ scale: ctaScale }] }}>
@@ -335,12 +568,145 @@ const LandPackageScreen = ({ navigation }) => {
           </TouchableOpacity>
         </Animated.View>
       </View>
+      <DatePickerModal
+        visible={datePickerVisible}
+        rangeMode
+        minDate={new Date()}
+        onSelectRange={(from, to) => {
+          const fmt = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+          setTravelDates({ from: fmt(from), to: fmt(to) });
+          setDatePickerVisible(false);
+        }}
+        onClose={() => setDatePickerVisible(false)}
+      />
+
       {isDesktop && <WebStickyHeader visible={scrolled} />}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  // --- Desktop packages landing --------------------------------------------
+  webSearchBar: {
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 32,
+  },
+  webSearchButton: {
+    width: 60,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  webScroll: { paddingBottom: 48 },
+  webBody: {
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    gap: 34,
+  },
+
+  themeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 28,
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  themeChip: {
+    alignItems: 'center',
+    gap: 7,
+    flexGrow: 1,
+    minWidth: 96,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  themeChipActive: { backgroundColor: Colors.primarySoft },
+  themeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.accentBlueSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeIconActive: { backgroundColor: Colors.primarySurface },
+  themeLabel: { fontSize: 12.5, fontWeight: '700', color: Colors.textLight },
+  themeLabelActive: { color: Colors.primaryDark },
+
+  marketRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 20 },
+  marketCard: {
+    flex: 1,
+    minWidth: 320,
+    height: 270,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  marketImage: { flex: 1, justifyContent: 'flex-end' },
+  marketImageInner: { resizeMode: 'cover' },
+  marketScrim: { ...StyleSheet.absoluteFillObject },
+  marketCopy: { padding: 22, gap: 7, maxWidth: 380 },
+  marketEyebrow: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 1.3,
+    color: Colors.primaryLight,
+  },
+  marketTitle: { fontSize: 30, fontWeight: '800', color: '#FFFFFF' },
+  marketText: { fontSize: 13.5, lineHeight: 19, color: 'rgba(255,255,255,0.88)' },
+  marketButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
+  },
+  marketButtonText: { fontSize: 13.5, fontWeight: '800', color: Colors.secondary },
+
+  destSection: { gap: 16 },
+  destHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  destHeading: { fontSize: 26, fontWeight: '800', color: Colors.accentBlueDark },
+  destCount: { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
+  destEmpty: { fontSize: 13.5, color: Colors.textMuted, paddingVertical: 20 },
+  destGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  destCard: {
+    flexGrow: 1,
+    minWidth: 160,
+    maxWidth: 220,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  destImage: { height: 120, alignItems: 'center', justifyContent: 'center' },
+  destCopy: { padding: 13, gap: 3 },
+  destName: { fontSize: 15, fontWeight: '800', color: Colors.text },
+  destMeta: { fontSize: 12, color: Colors.textMuted },
+
   container: {
     flex: 1,
     backgroundColor: '#5B2310',
