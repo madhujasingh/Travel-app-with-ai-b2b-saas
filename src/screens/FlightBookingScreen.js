@@ -339,6 +339,10 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const { token, user } = useAuth();
   const { markupFor } = useMarkup();
   const [appliedCoupon, setAppliedCoupon] = useState(null);
+  // Staff see the fare broken into supplier fare, convenience fee and markup.
+  // Customers see one all-in fare - those two are our margin, not a supplier
+  // line, and itemising them just invites "what is this charge?".
+  const isStaffViewer = !!user?.role && user.role !== 'CUSTOMER';
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId, openCancel } = route.params || {};
   const isResume = !reviewResponse;
   const autoCancelHandled = useRef(false);
@@ -2273,7 +2277,13 @@ const FlightBookingScreen = ({ route, navigation }) => {
               </View>
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Flight Fare</Text>
-                <Text style={styles.metaValue}>₹{Math.round(totalFare).toLocaleString()}</Text>
+                <Text style={styles.metaValue}>
+                  {/* Folded rather than hidden: dropping the rows on their own
+                      would leave the breakdown not adding up to the total. */}
+                  ₹{Math.round(
+                    isStaffViewer ? totalFare : totalFare + convenienceFee + markupAmount,
+                  ).toLocaleString()}
+                </Text>
               </View>
               {computeBaggageAmount() > 0 ? (
                 <View style={styles.metaRow}>
@@ -2299,19 +2309,23 @@ const FlightBookingScreen = ({ route, navigation }) => {
                   <Text style={styles.metaValue}>₹{Math.round(insuranceAmount).toLocaleString()}</Text>
                 </View>
               ) : null}
-              <View style={styles.metaRow}>
-                <Text style={styles.metaLabel}>Convenience Fee</Text>
-                <Text style={styles.metaValue}>₹{Math.round(convenienceFee).toLocaleString()}</Text>
-              </View>
-              {markupAmount > 0 ? (
-                <View style={styles.metaRow}>
-                  {/* Staff see this broken out; to a customer it is simply part
-                      of the service charge, not a separate supplier line. */}
-                  <Text style={styles.metaLabel}>
-                    {user?.role && user.role !== 'CUSTOMER' ? 'Markup (yours)' : 'Service Charge'}
-                  </Text>
-                  <Text style={styles.metaValue}>₹{Math.round(markupAmount).toLocaleString()}</Text>
-                </View>
+              {isStaffViewer ? (
+                <>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Convenience Fee</Text>
+                    <Text style={styles.metaValue}>
+                      ₹{Math.round(convenienceFee).toLocaleString()}
+                    </Text>
+                  </View>
+                  {markupAmount > 0 ? (
+                    <View style={styles.metaRow}>
+                      <Text style={styles.metaLabel}>Markup (yours)</Text>
+                      <Text style={styles.metaValue}>
+                        ₹{Math.round(markupAmount).toLocaleString()}
+                      </Text>
+                    </View>
+                  ) : null}
+                </>
               ) : null}
               <View style={styles.couponBlock}>
                 <CouponField
