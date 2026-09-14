@@ -64,6 +64,27 @@ const categoryCards = [
 // list, so a chip narrows a real set rather than being decoration.
 const DESTINATION_PREVIEW_COUNT = 6;
 
+// Public-domain (CC0 / PDM) destination photography, bundled rather than
+// hotlinked. Provenance is recorded in assets/destinations/CREDITS.json.
+const DESTINATION_PHOTOS = {
+  Paris: require('../../assets/destinations/paris.jpg'),
+  Tokyo: require('../../assets/destinations/tokyo.jpg'),
+  Dubai: require('../../assets/destinations/dubai.jpg'),
+  Bali: require('../../assets/destinations/bali.jpg'),
+  Maldives: require('../../assets/destinations/maldives.jpg'),
+  Singapore: require('../../assets/destinations/singapore.jpg'),
+  Thailand: require('../../assets/destinations/thailand.jpg'),
+  Switzerland: require('../../assets/destinations/switzerland.jpg'),
+  Jaipur: require('../../assets/destinations/jaipur.jpg'),
+  Goa: require('../../assets/destinations/goa.jpg'),
+  Kerala: require('../../assets/destinations/kerala.jpg'),
+  Manali: require('../../assets/destinations/manali.jpg'),
+  Varanasi: require('../../assets/destinations/varanasi.jpg'),
+  Udaipur: require('../../assets/destinations/udaipur.jpg'),
+  Shimla: require('../../assets/destinations/shimla.jpg'),
+  Agra: require('../../assets/destinations/agra.jpg'),
+};
+
 const THEMES = [
   { id: 'all', label: 'All Packages', icon: 'triangle-outline' },
   { id: 'beach', label: 'Beach', icon: 'umbrella-outline' },
@@ -369,16 +390,29 @@ const LandPackageScreen = ({ navigation }) => {
                   activeOpacity={0.88}
                   onPress={() => openDestination(destination)}
                 >
-                  {/* No destination photography yet, so the card leads with the
-                      brand gradient and its icon rather than a broken image. */}
-                  <LinearGradient
-                    colors={[Colors.accentBlue, Colors.accentBlueDark]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.destImage}
-                  >
-                    <Ionicons name={destination.image} size={26} color="rgba(255,255,255,0.75)" />
-                  </LinearGradient>
+                  {/* Falls back to the gradient and the destination's icon if a
+                      photo is ever missing, rather than a blank box. */}
+                  {DESTINATION_PHOTOS[destination.name] ? (
+                    <ImageBackground
+                      source={DESTINATION_PHOTOS[destination.name]}
+                      style={styles.destImage}
+                      imageStyle={styles.destImageInner}
+                    >
+                      <LinearGradient
+                        colors={['transparent', 'rgba(10,20,40,0.55)']}
+                        style={styles.destImageScrim}
+                      />
+                    </ImageBackground>
+                  ) : (
+                    <LinearGradient
+                      colors={[Colors.accentBlue, Colors.accentBlueDark]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.destImage}
+                    >
+                      <Ionicons name={destination.image} size={26} color="rgba(255,255,255,0.75)" />
+                    </LinearGradient>
+                  )}
                   <View style={styles.destCopy}>
                     <Text style={styles.destName}>{destination.name}</Text>
                     <Text style={styles.destMeta}>
@@ -728,7 +762,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  destImage: { height: 120, alignItems: 'center', justifyContent: 'center' },
+  destImage: { height: 130, alignItems: 'center', justifyContent: 'flex-end' },
+  destImageInner: { resizeMode: 'cover' },
+  destImageScrim: { height: '55%', width: '100%' },
   destCopy: { padding: 13, gap: 3 },
   destName: { fontSize: 15, fontWeight: '800', color: Colors.text },
   destMeta: { fontSize: 12, color: Colors.textMuted },
