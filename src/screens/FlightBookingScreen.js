@@ -15,6 +15,7 @@ import {
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
 import { useMarkup } from '../context/MarkupContext';
+import CouponField from '../components/CouponField';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -337,6 +338,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
   const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
   const { markupFor } = useMarkup();
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
   const { flights, reviewResponse, passengerCounts, bookingId: resumeBookingId, openCancel } = route.params || {};
   const isResume = !reviewResponse;
   const autoCancelHandled = useRef(false);
@@ -661,7 +663,13 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // paymentInfos.amount for Instant Book / Confirm & Pay (it must equal the
   // reviewed fare + SSR exactly, or TripJack 400s with errCode 1015). It
   // only affects what's DISPLAYED to the customer as their total.
-  const customerTotal = totalWithSsr + convenienceFee + insuranceAmount + markupAmount;
+  // The discount comes off what the customer pays. totalWithSsr - the amount
+  // TripJack is sent - is untouched by it.
+  const couponDiscount = Number(appliedCoupon?.discountAmount || 0);
+  const customerTotal = Math.max(
+    totalWithSsr + convenienceFee + insuranceAmount + markupAmount - couponDiscount,
+    0,
+  );
 
   // Departure/arrival dates for the insurance search, derived straight from
   // the flight legs already in hand - no separate date picker needed. Round
@@ -2305,6 +2313,27 @@ const FlightBookingScreen = ({ route, navigation }) => {
                   <Text style={styles.metaValue}>₹{Math.round(markupAmount).toLocaleString()}</Text>
                 </View>
               ) : null}
+              <View style={styles.couponBlock}>
+                <CouponField
+                  productType="FLIGHT"
+                  orderAmount={totalWithSsr + convenienceFee + insuranceAmount + markupAmount}
+                  applied={appliedCoupon}
+                  onApplied={setAppliedCoupon}
+                  onRemoved={() => setAppliedCoupon(null)}
+                />
+              </View>
+
+              {couponDiscount > 0 ? (
+                <View style={styles.metaRow}>
+                  <Text style={[styles.metaLabel, { color: Colors.success }]}>
+                    Discount ({appliedCoupon.code})
+                  </Text>
+                  <Text style={[styles.metaValue, { color: Colors.success }]}>
+                    -₹{Math.round(couponDiscount).toLocaleString()}
+                  </Text>
+                </View>
+              ) : null}
+
               <View style={styles.ticketDivider} />
               <View style={styles.metaRow}>
                 <Text style={styles.metaLabel}>Total</Text>
@@ -3189,6 +3218,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.primaryDark,
   },
+  couponBlock: { marginTop: 12, marginBottom: 4 },
+
   ticketDivider: {
     borderStyle: 'dashed',
     borderTopWidth: 1.5,

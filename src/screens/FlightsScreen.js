@@ -29,7 +29,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
-import { useCart } from '../context/CartContext';
 import { AIRPORT_OPTIONS } from '../data/airports';
 import { AIRLINE_LOGOS } from '../data/airlineLogos';
 import { parseTripJackError } from '../utils/tripjackErrors';
@@ -641,7 +640,6 @@ const FlightsScreen = ({ navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
   const { markupFor } = useMarkup();
   const { scrolled, scrollProps } = useHeroHeader();
-  const { addItemToCart } = useCart();
   const [tripType, setTripType] = useState('ONE_WAY');
   const [routes, setRoutes] = useState([createEmptyRoute('', '', '')]);
   const [returnDate, setReturnDate] = useState('');
@@ -1457,15 +1455,6 @@ const FlightsScreen = ({ navigation }) => {
     }
 
     runReview(groupKeys.map((key) => selectedByGroup[key]));
-  };
-
-  const addReviewedFareToCart = () => {
-    if (!reviewedFare?.cartItem) {
-      return;
-    }
-
-    addItemToCart(reviewedFare.cartItem);
-    appAlert('Added to cart', `${reviewedFare.cartItem.title} is ready in your cart.`);
   };
 
   const continueReviewedFareToCheckout = () => {
@@ -3280,9 +3269,6 @@ const FlightsScreen = ({ navigation }) => {
                 <Text style={styles.reviewHelper}>Or manage this fare as a regular cart item instead:</Text>
 
                 <View style={styles.reviewActions}>
-                  <TouchableOpacity style={styles.reviewSecondaryButton} onPress={addReviewedFareToCart}>
-                    <Text style={styles.reviewSecondaryButtonText}>Add to Cart</Text>
-                  </TouchableOpacity>
                   <TouchableOpacity style={styles.reviewTertiaryButton} onPress={continueReviewedFareToCheckout}>
                     <Text style={styles.reviewTertiaryButtonText}>Continue</Text>
                   </TouchableOpacity>

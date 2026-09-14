@@ -12,6 +12,7 @@ import {
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
 import { useMarkup } from '../context/MarkupContext';
+import CouponField from '../components/CouponField';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -104,6 +105,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const { centeredForm } = useResponsive();
   const { token } = useAuth();
   const { markupFor } = useMarkup();
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
   const { hotelName, searchContext, reviewResult } = route.params;
   const option = reviewResult.option;
 
@@ -111,7 +113,9 @@ const HotelBookingScreen = ({ route, navigation }) => {
   // exactly (paymentInfos below is untouched).
   const supplierTotal = Number(option?.pricing?.totalPrice || 0);
   const markupAmount = markupFor('HOTEL', 'DEFAULT', supplierTotal, 1);
-  const customerTotal = supplierTotal + markupAmount;
+  const couponDiscount = Number(appliedCoupon?.discountAmount || 0);
+  // paymentInfos still carries the reviewed rate; only the customer's total moves.
+  const customerTotal = Math.max(supplierTotal + markupAmount - couponDiscount, 0);
   const panRequired = Boolean(option?.compliance?.panRequired);
   const passportRequired = Boolean(option?.compliance?.passportRequired);
   const gstType = option?.compliance?.gstType;
@@ -553,7 +557,17 @@ const HotelBookingScreen = ({ route, navigation }) => {
               </Text>
             </View>
 
-            <TouchableOpacity style={styles.submitButton} onPress={submitBooking} disabled={submitting}>
+                        <View style={styles.couponBlock}>
+              <CouponField
+                productType="HOTEL"
+                orderAmount={supplierTotal + markupAmount}
+                applied={appliedCoupon}
+                onApplied={setAppliedCoupon}
+                onRemoved={() => setAppliedCoupon(null)}
+              />
+            </View>
+
+<TouchableOpacity style={styles.submitButton} onPress={submitBooking} disabled={submitting}>
               {submitting ? (
                 <ActivityIndicator color={Colors.secondary} />
               ) : (
@@ -847,6 +861,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+  couponBlock: { marginTop: 14, marginBottom: 6 },
+
   confirmButton: {
     marginTop: 16,
     backgroundColor: Colors.success,

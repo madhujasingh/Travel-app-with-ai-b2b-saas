@@ -13,8 +13,7 @@ import {
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
 import { useMarkup } from '../context/MarkupContext';
-import { useCart } from '../context/CartContext';
-import { buildCabCartItem } from '../utils/cartItems';
+import CouponField from '../components/CouponField';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,7 +54,7 @@ const CabBookingScreen = ({ route, navigation }) => {
   const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
   const { markupFor } = useMarkup();
-  const { addItemToCart } = useCart();
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
   // sourceBookingId is set when this cab is being added as an add-on to an
   // already-successful FLIGHT booking (see FlightBookingScreen's "Add an
   // Airport Transfer" prompt, and cabs-api/cab-api-doc.txt's Embedded API
@@ -91,7 +90,10 @@ const CabBookingScreen = ({ route, navigation }) => {
   // remitted payableTotal exactly (TripJack rejects anything else - the Cabs
   // API's own "Net Payable Amount is ..." error).
   const markupAmount = markupFor('CAB', 'DEFAULT', payableTotal, 1);
-  const customerTotal = payableTotal + markupAmount;
+  // The discount reduces what the customer pays; payableTotal - what TripJack
+  // is sent - is untouched.
+  const couponDiscount = Number(appliedCoupon?.discountAmount || 0);
+  const customerTotal = Math.max(payableTotal + markupAmount - couponDiscount, 0);
   const routeSummary = `${routeDetails?.origin?.displayAddress || ''} → ${routeDetails?.destination?.displayAddress || ''}`;
 
   const validate = () => {
@@ -535,33 +537,18 @@ const CabBookingScreen = ({ route, navigation }) => {
               />
             </View>
 
+            <View style={styles.couponBlock}>
+              <CouponField
+                productType="CAB"
+                orderAmount={payableTotal + markupAmount}
+                applied={appliedCoupon}
+                onApplied={setAppliedCoupon}
+                onRemoved={() => setAppliedCoupon(null)}
+              />
+            </View>
+
             <TouchableOpacity style={styles.primaryButton} onPress={handleBookAndPay} disabled={busy}>
               <Text style={styles.primaryButtonText}>Book & Pay ₹{Math.round(customerTotal).toLocaleString()}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.addToCartButton}
-              onPress={() => {
-                addItemToCart(
-                  buildCabCartItem({
-                    routeSummary,
-                    vehicleLabel: group?.vehicleName || group?.category || 'Cab',
-                    distance: journeyInfo?.distance,
-                    // Cart lines are what the customer pays.
-                    total: customerTotal,
-                    passengers: Number(route.params?.passengers || 1),
-                    quote,
-                    routeDetails,
-                    journeyInfo,
-                    journeyType,
-                    group,
-                  }),
-                );
-                appAlert('Added to cart', 'This cab is in your cart.');
-              }}
-            >
-              <Ionicons name="cart-outline" size={16} color={Colors.primary} />
-              <Text style={styles.addToCartButtonText}>Add to Cart</Text>
             </TouchableOpacity>
           </>
         ) : null}
@@ -745,6 +732,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   addToCartButtonText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+
+  couponBlock: { marginTop: 14, marginBottom: 6 },
 
   primaryButton: {
     backgroundColor: Colors.primary,

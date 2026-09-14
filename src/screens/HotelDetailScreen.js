@@ -14,9 +14,7 @@ import {
 } from 'react-native';
 import useResponsive from '../hooks/useResponsive';
 import MarkupPrice from '../components/MarkupPrice';
-import { useCart } from '../context/CartContext';
 import { useMarkup } from '../context/MarkupContext';
-import { buildHotelCartItem } from '../utils/cartItems';
 import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -216,7 +214,6 @@ const cancellationSummary = (cancellation) => {
 const HotelDetailScreen = ({ route, navigation }) => {
   const { centeredContent } = useResponsive();
   const { tjHotelId, hotelName } = route.params;
-  const { addItemToCart } = useCart();
   const { markupFor } = useMarkup();
 
   // Held in state (not just destructured from route.params) because changing
@@ -967,31 +964,6 @@ const HotelDetailScreen = ({ route, navigation }) => {
                       <Ionicons name="chevron-forward" size={16} color={Colors.secondary} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.addToCartButton}
-                      onPress={() => {
-                        const supplier = Number(reviewResult.option?.pricing?.totalPrice || 0);
-                        addItemToCart(
-                          buildHotelCartItem({
-                            hotelName: detail.hotelName || hotelName,
-                            cityName: searchContext?.cityName || searchContext?.destinationLabel,
-                            checkIn: searchContext?.checkIn,
-                            checkOut: searchContext?.checkOut,
-                            nights: searchContext?.nights,
-                            rooms: searchContext?.rooms?.length,
-                            // Cart lines are what the customer pays.
-                            total: supplier + markupFor('HOTEL', 'DEFAULT', supplier, 1, tjHotelId),
-                            tjHotelId,
-                            reviewResult,
-                            searchContext,
-                          }),
-                        );
-                        appAlert('Added to cart', `${detail.hotelName || hotelName} is in your cart.`);
-                      }}
-                    >
-                      <Ionicons name="cart-outline" size={16} color={Colors.primary} />
-                      <Text style={styles.addToCartButtonText}>Add to Cart</Text>
-                    </TouchableOpacity>
                   </View>
                 )}
               </View>

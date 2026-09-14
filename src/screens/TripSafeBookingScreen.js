@@ -12,6 +12,7 @@ import {
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
 import { useMarkup } from '../context/MarkupContext';
+import CouponField from '../components/CouponField';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,6 +73,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
   const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
   const { markupFor } = useMarkup();
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
   // viewBookingId is set when opened from Profile > Bookings to view an
   // already-completed policy (see CustomerProfileScreen) - in that mode
   // there's no plan/product/fare from a fresh search+review, only the
@@ -81,7 +83,9 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
   // Markup is charged on top of the premium; TripJack is still paid the exact
   // fare via paymentInfos below.
   const markupAmount = markupFor('INSURANCE', 'DEFAULT', Number(fare || 0), 1);
-  const customerTotal = Number(fare || 0) + markupAmount;
+  const couponDiscount = Number(appliedCoupon?.discountAmount || 0);
+  // TripJack is still paid the exact premium via paymentInfos.
+  const customerTotal = Math.max(Number(fare || 0) + markupAmount - couponDiscount, 0);
   const isViewMode = Boolean(viewBookingId);
   // tripsafe-api/08-student-api-integration.txt - Student bookings need an
   // extra "sc" (student course/sponsor) object per traveller; AMT/Standalone
@@ -686,6 +690,16 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
               />
             </View>
 
+            <View style={styles.couponBlock}>
+              <CouponField
+                productType="INSURANCE"
+                orderAmount={Number(fare || 0) + markupAmount}
+                applied={appliedCoupon}
+                onApplied={setAppliedCoupon}
+                onRemoved={() => setAppliedCoupon(null)}
+              />
+            </View>
+
             <TouchableOpacity style={styles.primaryButton} onPress={handleBookAndPay} disabled={busy}>
               <Text style={styles.primaryButtonText}>
                 Book & Pay {fare != null ? `₹${Math.round(customerTotal).toLocaleString()}` : ''}
@@ -912,6 +926,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 6,
   },
+  couponBlock: { marginTop: 14, marginBottom: 6 },
+
   primaryButton: {
     backgroundColor: Colors.primary,
     borderRadius: 12,

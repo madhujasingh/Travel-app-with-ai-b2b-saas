@@ -12,8 +12,7 @@ import {
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
 import { useMarkup } from '../context/MarkupContext';
-import { useCart } from '../context/CartContext';
-import { buildActivityCartItem } from '../utils/cartItems';
+import CouponField from '../components/CouponField';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,7 +47,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   const { centeredForm } = useResponsive();
   const { token } = useAuth();
   const { markupFor } = useMarkup();
-  const { addItemToCart } = useCart();
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
   const {
     activityCode,
     name,
@@ -653,40 +652,24 @@ const ActivityBookingScreen = ({ route, navigation }) => {
           });
         })()}
 
+        <View style={styles.couponBlock}>
+          <CouponField
+            productType="ACTIVITY"
+            orderAmount={
+              Number(price || 0) + markupFor('ACTIVITY', 'DEFAULT', Number(price || 0), 1)
+            }
+            applied={appliedCoupon}
+            onApplied={setAppliedCoupon}
+            onRemoved={() => setAppliedCoupon(null)}
+          />
+        </View>
+
         <TouchableOpacity style={styles.confirmButton} onPress={submitBooking} disabled={submitting}>
           {submitting ? (
             <ActivityIndicator color={Colors.secondary} />
           ) : (
             <Text style={styles.confirmButtonText}>Confirm Booking</Text>
           )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.addToCartButton}
-          onPress={() => {
-            const supplier = Number(price || 0);
-            addItemToCart(
-              buildActivityCartItem({
-                name,
-                destinationLabel: sessionName,
-                from,
-                to,
-                total: supplier + markupFor('ACTIVITY', 'DEFAULT', supplier, 1),
-                adults,
-                activityCode,
-                rateKey,
-                currency,
-                questions,
-                paxAmounts,
-                sessionName,
-                childAges,
-              }),
-            );
-            appAlert('Added to cart', `${name || 'This activity'} is in your cart.`);
-          }}
-        >
-          <Ionicons name="cart-outline" size={16} color={Colors.primary} />
-          <Text style={styles.addToCartButtonText}>Add to Cart</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -820,6 +803,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   addToCartButtonText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+
+  couponBlock: { marginTop: 14, marginBottom: 6 },
 
   confirmButton: {
     backgroundColor: Colors.primary,
