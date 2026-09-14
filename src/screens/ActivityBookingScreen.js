@@ -12,6 +12,8 @@ import {
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
 import { useMarkup } from '../context/MarkupContext';
+import { useCart } from '../context/CartContext';
+import { buildActivityCartItem } from '../utils/cartItems';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +48,7 @@ const ActivityBookingScreen = ({ route, navigation }) => {
   const { centeredForm } = useResponsive();
   const { token } = useAuth();
   const { markupFor } = useMarkup();
+  const { addItemToCart } = useCart();
   const {
     activityCode,
     name,
@@ -657,6 +660,34 @@ const ActivityBookingScreen = ({ route, navigation }) => {
             <Text style={styles.confirmButtonText}>Confirm Booking</Text>
           )}
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.addToCartButton}
+          onPress={() => {
+            const supplier = Number(price || 0);
+            addItemToCart(
+              buildActivityCartItem({
+                name,
+                destinationLabel: sessionName,
+                from,
+                to,
+                total: supplier + markupFor('ACTIVITY', 'DEFAULT', supplier, 1),
+                adults,
+                activityCode,
+                rateKey,
+                currency,
+                questions,
+                paxAmounts,
+                sessionName,
+                childAges,
+              }),
+            );
+            appAlert('Added to cart', `${name || 'This activity'} is in your cart.`);
+          }}
+        >
+          <Ionicons name="cart-outline" size={16} color={Colors.primary} />
+          <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -777,6 +808,19 @@ const styles = StyleSheet.create({
   rowInputSmall: {
     width: 100,
   },
+  addToCartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  addToCartButtonText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+
   confirmButton: {
     backgroundColor: Colors.primary,
     borderRadius: 999,

@@ -13,6 +13,8 @@ import {
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
 import { useMarkup } from '../context/MarkupContext';
+import { useCart } from '../context/CartContext';
+import { buildCabCartItem } from '../utils/cartItems';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,6 +55,7 @@ const CabBookingScreen = ({ route, navigation }) => {
   const { centeredForm } = useResponsive();
   const { token, user } = useAuth();
   const { markupFor } = useMarkup();
+  const { addItemToCart } = useCart();
   // sourceBookingId is set when this cab is being added as an add-on to an
   // already-successful FLIGHT booking (see FlightBookingScreen's "Add an
   // Airport Transfer" prompt, and cabs-api/cab-api-doc.txt's Embedded API
@@ -535,6 +538,31 @@ const CabBookingScreen = ({ route, navigation }) => {
             <TouchableOpacity style={styles.primaryButton} onPress={handleBookAndPay} disabled={busy}>
               <Text style={styles.primaryButtonText}>Book & Pay ₹{Math.round(customerTotal).toLocaleString()}</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addToCartButton}
+              onPress={() => {
+                addItemToCart(
+                  buildCabCartItem({
+                    routeSummary,
+                    vehicleLabel: group?.vehicleName || group?.category || 'Cab',
+                    distance: journeyInfo?.distance,
+                    // Cart lines are what the customer pays.
+                    total: customerTotal,
+                    passengers: Number(route.params?.passengers || 1),
+                    quote,
+                    routeDetails,
+                    journeyInfo,
+                    journeyType,
+                    group,
+                  }),
+                );
+                appAlert('Added to cart', 'This cab is in your cart.');
+              }}
+            >
+              <Ionicons name="cart-outline" size={16} color={Colors.primary} />
+              <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+            </TouchableOpacity>
           </>
         ) : null}
 
@@ -705,6 +733,19 @@ const styles = StyleSheet.create({
     minHeight: 70,
     textAlignVertical: 'top',
   },
+  addToCartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  addToCartButtonText: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+
   primaryButton: {
     backgroundColor: Colors.primary,
     borderRadius: 12,

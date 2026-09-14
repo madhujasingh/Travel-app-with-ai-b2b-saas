@@ -22,6 +22,7 @@ import { Colors } from '../constants/Colors';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
+import { isExpired } from '../utils/cartItems';
 
 // Falls back to the platform default (see backend PlatformSettings) if the
 // live value can't be fetched, rather than showing ₹0 while loading or on a
@@ -135,7 +136,12 @@ const CartScreen = ({ route, navigation }) => {
           <Text style={styles.itemImage}>{item.image}</Text>
         )}
         <View style={styles.itemInfo}>
-          <Text style={styles.itemTitle}>{item.title}</Text>
+          <Text style={[styles.itemTitle, isExpired(item) && styles.itemExpiredText]}>
+            {item.title}
+          </Text>
+          {isExpired(item) ? (
+            <Text style={styles.itemExpiredTag}>Quote expired — search again to rebook</Text>
+          ) : null}
           <Text style={styles.itemDestination}>{item.destination}</Text>
           <Text style={styles.itemDuration}>{item.duration}</Text>
         </View>
@@ -175,10 +181,20 @@ const CartScreen = ({ route, navigation }) => {
   // A mixed cart has no single right answer - the discount and the available
   // margin both differ per product - so the highest-value line decides, and
   // that is the one a coupon is most likely meant for.
+  // Supplier quotes expire (a hotel session in about 15 minutes, a HotelBeds
+  // rateKey in 30), so a saved line stops being bookable. Expired lines are
+  // shown struck through and excluded from every total.
+  const liveItems = cartItems.filter((item) => !isExpired(item));
+  const expiredCount = cartItems.length - liveItems.length;
+  const liveTotal = liveItems.reduce(
+    (sum, item) => sum + (item.lineTotal || item.price * item.people || 0),
+    0,
+  );
+
   const cartProductType = (() => {
-    if (!cartItems.length) return 'PACKAGE';
+    if (!liveItems.length) return 'PACKAGE';
     const byType = {};
-    cartItems.forEach((item) => {
+    liveItems.forEach((item) => {
       const type = item.productType || 'PACKAGE';
       byType[type] = (byType[type] || 0) + (item.lineTotal || item.price * item.people || 0);
     });
@@ -200,7 +216,7 @@ const CartScreen = ({ route, navigation }) => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           code,
-          orderAmount: getCartTotal() + convenienceFee,
+          orderAmount: liveTotal + convenienceFee,
           productType: cartProductType,
         }),
       });
@@ -233,7 +249,7 @@ const CartScreen = ({ route, navigation }) => {
 
   // Display only - the server recomputes the discount when the booking is
   // actually made, so a tampered value here buys nothing.
-  const orderTotal = getCartTotal() + convenienceFee;
+  const orderTotal = liveTotal + convenienceFee;
   const payableTotal = Math.max(orderTotal - (appliedCoupon?.discountAmount || 0), 0);
 
   React.useEffect(() => {
@@ -312,11 +328,16 @@ const CartScreen = ({ route, navigation }) => {
             {/* Price Summary */}
             <View style={styles.summarySection}>
               <Text style={styles.summaryTitle}>Price Summary</Text>
+              {expiredCount > 0 ? (
+                <Text style={styles.expiredNotice}>
+                  {expiredCount} item{expiredCount === 1 ? '' : 's'} expired and {expiredCount === 1 ? 'is' : 'are'} not included.
+                </Text>
+              ) : null}
               <View style={styles.summaryCard}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Subtotal</Text>
                   <Text style={styles.summaryValue}>
-                    ₹{getCartTotal().toLocaleString()}
+                    ₹{Math.round(liveTotal).toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
@@ -514,6 +535,17 @@ const styles = StyleSheet.create({
   itemInfo: {
     flex: 1,
   },
+  itemExpiredText: {
+    textDecorationLine: 'line-through',
+    color: Colors.textMuted,
+  },
+  itemExpiredTag: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: Colors.error,
+    marginTop: 2,
+  },
+
   itemTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -562,6 +594,13 @@ const styles = StyleSheet.create({
   summarySection: {
     padding: 15,
   },
+  expiredNotice: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.error,
+    marginBottom: 6,
+  },
+
   summaryTitle: {
     fontSize: 18,
     fontWeight: 'bold',
