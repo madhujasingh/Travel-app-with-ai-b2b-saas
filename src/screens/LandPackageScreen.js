@@ -20,14 +20,16 @@ import useHeroHeader from '../hooks/useHeroHeader';
 import WebStickyHeader from '../components/web/WebStickyHeader';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 
+// Bundled rather than hotlinked from Unsplash - the cards used to depend on a
+// third party staying up, and on the customer having a connection good enough
+// to fetch them.
 const CATEGORY_ART = {
-  international:
-    'https://images.unsplash.com/photo-1431274172761-fca41d930114?auto=format&fit=crop&w=1200&q=80',
-  india:
-    'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=1200&q=80',
+  international: require('../../assets/packages/international.jpg'),
+  india: require('../../assets/packages/india.jpg'),
 };
 
 const GLOW_COLORS = {
@@ -247,7 +249,7 @@ const LandPackageScreen = ({ navigation }) => {
               }}
             >
               <ImageBackground
-                source={{ uri: category.image }}
+                source={category.image}
                 style={styles.marketImage}
                 imageStyle={styles.marketImageInner}
               >
@@ -345,7 +347,7 @@ const LandPackageScreen = ({ navigation }) => {
                 pressed && styles.categoryShellPressed,
               ]}
             >
-              <ImageBackground source={{ uri: category.image }} style={styles.categoryImage} imageStyle={styles.categoryImageInner}>
+              <ImageBackground source={category.image} style={styles.categoryImage} imageStyle={styles.categoryImageInner}>
                 <View style={[styles.categoryGlow, { backgroundColor: GLOW_COLORS[category.id] }]} />
                 <View style={styles.categoryOverlay}>
                   <View style={styles.categoryTopRow}>
