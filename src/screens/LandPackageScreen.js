@@ -62,6 +62,8 @@ const categoryCards = [
 
 // Themes the chip row filters by. Tagged against the destinations we already
 // list, so a chip narrows a real set rather than being decoration.
+const DESTINATION_PREVIEW_COUNT = 6;
+
 const THEMES = [
   { id: 'all', label: 'All Packages', icon: 'triangle-outline' },
   { id: 'beach', label: 'Beach', icon: 'umbrella-outline' },
@@ -104,6 +106,7 @@ const LandPackageScreen = ({ navigation }) => {
   const [travelDates, setTravelDates] = useState({ from: '', to: '' });
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [travellers, setTravellers] = useState({ adults: 2, children: 0 });
+  const [showAllDestinations, setShowAllDestinations] = useState(false);
 
   // Everything we list, so the desktop landing page can show destinations and
   // themes before a market has been picked.
@@ -133,6 +136,12 @@ const LandPackageScreen = ({ navigation }) => {
     }
     return list;
   }, [allDestinations, activeTheme, searchQuery]);
+
+  // One row's worth by default - the full sixteen pushed everything else off
+  // the page.
+  const visibleDestinations = showAllDestinations
+    ? themedDestinations
+    : themedDestinations.slice(0, DESTINATION_PREVIEW_COUNT);
 
   const travellerLabel = `${travellers.adults} Adult${travellers.adults === 1 ? '' : 's'}, ${travellers.children} Child${travellers.children === 1 ? '' : 'ren'}`;
   const dateLabel =
@@ -330,9 +339,21 @@ const LandPackageScreen = ({ navigation }) => {
         <View style={styles.destSection}>
           <View style={styles.destHeader}>
             <Text style={styles.destHeading}>Popular Destinations</Text>
-            <Text style={styles.destCount}>
-              {themedDestinations.length} destination{themedDestinations.length === 1 ? '' : 's'}
-            </Text>
+            {themedDestinations.length > DESTINATION_PREVIEW_COUNT ? (
+              <TouchableOpacity
+                style={styles.destViewAll}
+                onPress={() => setShowAllDestinations((current) => !current)}
+              >
+                <Text style={styles.destViewAllText}>
+                  {showAllDestinations ? 'Show less' : 'View all'}
+                </Text>
+                <Ionicons
+                  name={showAllDestinations ? 'chevron-up' : 'arrow-forward'}
+                  size={15}
+                  color={Colors.primary}
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {themedDestinations.length === 0 ? (
@@ -341,7 +362,7 @@ const LandPackageScreen = ({ navigation }) => {
             </Text>
           ) : (
             <View style={styles.destGrid}>
-              {themedDestinations.map((destination) => (
+              {visibleDestinations.map((destination) => (
                 <TouchableOpacity
                   key={`${destination.market}-${destination.id}`}
                   style={styles.destCard}
@@ -693,7 +714,8 @@ const styles = StyleSheet.create({
   destSection: { gap: 16 },
   destHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   destHeading: { fontSize: 26, fontWeight: '800', color: Colors.accentBlueDark },
-  destCount: { fontSize: 13, fontWeight: '600', color: Colors.textMuted },
+  destViewAll: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  destViewAllText: { fontSize: 13.5, fontWeight: '700', color: Colors.primary },
   destEmpty: { fontSize: 13.5, color: Colors.textMuted, paddingVertical: 20 },
   destGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   destCard: {
