@@ -208,6 +208,60 @@ const LandPackageScreen = ({ navigation }) => {
       contentContainerStyle={styles.webScroll}
       {...scrollProps}
     >
+        <WebHero
+          image={require('../../assets/packages/hero-sunset.jpg')}
+          align="left"
+          eyebrow="Explore more together"
+          title="Holiday Packages"
+          subtitle="Curated trips by theme and destination, priced end to end."
+          activeProduct="packages"
+        >
+          {/* Search bar sits on the hero, the way every package site opens. */}
+          <View style={styles.webSearchBar}>
+            <WebField
+              tone="onLight"
+              label="Destination"
+              icon="location-outline"
+              flex={2}
+              minWidth={240}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Where do you want to go?"
+            />
+            <WebField
+              tone="onLight"
+              label="Travel Dates"
+              icon="calendar-outline"
+              flex={1.4}
+              value={dateLabel}
+              placeholder="Select dates"
+              onPress={() => setDatePickerVisible(true)}
+            />
+            <WebField
+              tone="onLight"
+              label="Travellers"
+              icon="people-outline"
+              flex={1.3}
+              value={travellerLabel}
+              onPress={() =>
+                setTravellers((current) => ({
+                  ...current,
+                  adults: current.adults >= 6 ? 1 : current.adults + 1,
+                }))
+              }
+            />
+            <TouchableOpacity
+              style={styles.webSearchButton}
+              onPress={() => {
+                const match = themedDestinations[0];
+                if (match) openDestination(match);
+              }}
+            >
+              <Ionicons name="search" size={22} color={Colors.secondary} />
+            </TouchableOpacity>
+          </View>
+        </WebHero>
+
       <View style={styles.webBody}>
         <View style={styles.themeRow}>
           {THEMES.map((theme) => {
@@ -476,61 +530,7 @@ const LandPackageScreen = ({ navigation }) => {
         <View style={styles.blurOrbTwo} />
       </View>}
 
-      {isDesktop ? (
-        <WebHero
-          image={require('../../assets/packages/hero-sunset.jpg')}
-          align="left"
-          eyebrow="Explore more together"
-          title="Holiday Packages"
-          subtitle="Curated trips by theme and destination, priced end to end."
-          activeProduct="packages"
-        >
-          {/* Search bar sits on the hero, the way every package site opens. */}
-          <View style={styles.webSearchBar}>
-            <WebField
-              tone="onLight"
-              label="Destination"
-              icon="location-outline"
-              flex={2}
-              minWidth={240}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Where do you want to go?"
-            />
-            <WebField
-              tone="onLight"
-              label="Travel Dates"
-              icon="calendar-outline"
-              flex={1.4}
-              value={dateLabel}
-              placeholder="Select dates"
-              onPress={() => setDatePickerVisible(true)}
-            />
-            <WebField
-              tone="onLight"
-              label="Travellers"
-              icon="people-outline"
-              flex={1.3}
-              value={travellerLabel}
-              onPress={() =>
-                setTravellers((current) => ({
-                  ...current,
-                  adults: current.adults >= 6 ? 1 : current.adults + 1,
-                }))
-              }
-            />
-            <TouchableOpacity
-              style={styles.webSearchButton}
-              onPress={() => {
-                const match = themedDestinations[0];
-                if (match) openDestination(match);
-              }}
-            >
-              <Ionicons name="search" size={22} color={Colors.secondary} />
-            </TouchableOpacity>
-          </View>
-        </WebHero>
-      ) : (
+      {!isDesktop ? (
       <View style={styles.header}>
         <TouchableOpacity style={styles.floatingButton} onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={22} color={Colors.secondary} />
@@ -540,7 +540,7 @@ const LandPackageScreen = ({ navigation }) => {
           <Ionicons name="person-circle-outline" size={22} color={Colors.secondary} />
         </TouchableOpacity>
       </View>
-      )}
+      ) : null}
 
       {isDesktop
         ? renderWebLanding()
@@ -548,7 +548,9 @@ const LandPackageScreen = ({ navigation }) => {
           ? renderDestinationSelection()
           : renderCategorySelection()}
 
-      <View style={styles.floatingCtaWrap}>
+      {/* Phone-only: on the desktop landing there is no selected category, so
+          this sat pinned over the content permanently disabled. */}
+      {!isDesktop && <View style={styles.floatingCtaWrap}>
         <Animated.View style={{ transform: [{ scale: ctaScale }] }}>
           <TouchableOpacity
             style={[styles.floatingCta, !selectedCategory && styles.floatingCtaDisabled]}
@@ -569,7 +571,7 @@ const LandPackageScreen = ({ navigation }) => {
             </View>
           </TouchableOpacity>
         </Animated.View>
-      </View>
+      </View>}
       <DatePickerModal
         visible={datePickerVisible}
         rangeMode
