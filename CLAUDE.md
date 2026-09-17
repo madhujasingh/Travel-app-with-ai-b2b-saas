@@ -80,10 +80,11 @@ Standard layered Spring Boot structure: `controller/` -> `service/` -> `reposito
 
 Roles: `CUSTOMER`, `ADMIN`, `SUPPLIER`, `AGENT`. `CUSTOMER` routes to the bottom-tab `CustomerTabs`; `ADMIN`/`SUPPLIER` route to `B2BDashboard`. Admin registration is gated by `AUTH_MAX_ADMIN_COUNT` and an `AUTHORIZED_ADMIN_EMAILS` allowlist (see `AuthController`/`application.properties`). Google OAuth is supported via `expo-auth-session` on the frontend and Google API Client token verification on the backend.
 
-Demo credentials seeded by `DataSeederConfig` (local/dev only):
-- Customer: `customer@itinera.com` / `Customer@123`
-- Supplier: `supplier@itinera.com` / `Supplier@123`
-- Admin: `admin@itinera.com` / `Admin@123`
+`DataSeederConfig` seeds demo accounts on first startup when `SEED_DEMO_USERS`
+is enabled. Passwords are deliberately not listed here - this repository is
+public, and the same accounts existed on the live backend. Read them from
+`DataSeederConfig`, and never rely on seeded accounts against a deployed
+environment.
 
 ## Environment variables
 

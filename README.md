@@ -485,15 +485,13 @@ Base URL: `http://localhost:8000`
 
 ## Demo Credentials
 
-Seeded automatically on first backend startup.
+`DataSeederConfig` seeds demo accounts on first startup, for local development
+only. Their passwords are intentionally not published here: this repository is
+public, and these accounts were reachable on the deployed backend. See
+`DataSeederConfig` for the values.
 
-| Role | Email | Password |
-|---|---|---|
-| Customer | `customer@itinera.com` | `Customer@123` |
-| Supplier | `supplier@itinera.com` | `Supplier@123` |
-| Admin | `admin@itinera.com` | `Admin@123` |
-
-The login screen includes one-tap role switching between these accounts for development convenience.
+Keep `SEED_DEMO_USERS=false` on any deployed environment, and change the
+passwords of any seeded account that has ever run against one.
 
 ---
 
