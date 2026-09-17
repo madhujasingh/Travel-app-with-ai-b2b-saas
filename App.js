@@ -310,7 +310,7 @@ export default function App() {
     <SafeAreaProvider>
     <AuthContext.Provider value={authContextValue}>
       <MarkupProvider token={authState.token}>
-      <CartProvider>
+      <CartProvider userId={authState.user?.id ?? null}>
         {/* Without an explicit flex here, react-native-web lets the whole tree
             grow to fit content instead of being capped at the viewport, so
             nothing anywhere ever scrolls - it just clips at body's edge. */}

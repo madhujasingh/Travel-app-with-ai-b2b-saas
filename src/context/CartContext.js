@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { isExpired } from '../utils/cartItems';
 
 const CartContext = createContext();
@@ -11,9 +11,22 @@ export const useCart = () => {
   return context;
 };
 
-export const CartProvider = ({ children }) => {
+export const CartProvider = ({ children, userId = null }) => {
   const [cartItems, setCartItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // The cart lives in memory above the auth switch, so signing out doesn't
+  // unmount it - without this, the next person to sign in on the same device
+  // inherits the previous one's items until the page is reloaded. Keyed on the
+  // user rather than on logout alone so switching accounts directly is covered
+  // too. Skipped on first render, which would only ever clear an empty cart.
+  const lastUserId = useRef(userId);
+  useEffect(() => {
+    if (lastUserId.current !== userId) {
+      lastUserId.current = userId;
+      setCartItems([]);
+    }
+  }, [userId]);
 
   const addItemToCart = (item) => {
     setCartItems(prevItems => {
