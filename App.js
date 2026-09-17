@@ -206,6 +206,30 @@ export default function App() {
   const [isHydratingAuth, setIsHydratingAuth] = useState(true);
   const { isDesktop } = useResponsive();
 
+  // Render's free tier spins the backend down when idle, so the first request
+  // after a quiet spell waits ~50s for it to boot. Nudge it awake as soon as
+  // the app opens: the wake-up then overlaps with the visitor reading the home
+  // page instead of landing on them when they hit Search.
+  //
+  // No branch on "is it already running" - asking is the only way to find out,
+  // and a warm backend answers this in milliseconds. Deliberately silent: it's
+  // an optimisation, and nothing on screen depends on it.
+  useEffect(() => {
+    const controller = new AbortController();
+    // Long enough to cover a cold boot; the request is abandoned after that
+    // rather than left hanging for the life of the session.
+    const timeout = setTimeout(() => controller.abort(), 70000);
+
+    fetch(`${API_CONFIG.BASE_URL}/health`, { signal: controller.signal })
+      .catch(() => {})
+      .finally(() => clearTimeout(timeout));
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+
   useEffect(() => {
     const restoreAuthState = async () => {
       try {
