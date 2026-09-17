@@ -32,7 +32,9 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "MyItineri",
+      "shortName": "MyItineri"
     },
     "extra": {
       "eas": {
