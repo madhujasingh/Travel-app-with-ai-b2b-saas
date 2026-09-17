@@ -41,7 +41,7 @@ const PROFILE_TABS = [
 const CustomerProfileScreen = ({ navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
   const { scrolled, scrollProps } = useHeroHeader();
-  const { user, token, login, logout } = useAuth();
+  const { user, token, login, logout, requireAuth } = useAuth();
   // Admins and suppliers can browse the storefront without logging out.
   const isStaff = !!user?.role && user.role !== 'CUSTOMER';
   const [activeTab, setActiveTab] = useState('preferences');
@@ -629,6 +629,54 @@ const CustomerProfileScreen = ({ navigation }) => {
     }
   };
 
+  // Browsing is open to everyone, so this screen is reachable with nobody
+  // signed in. Show an invitation rather than a profile: the placeholder
+  // identity that used to render here looked like a real account, and its
+  // fields were editable and its Logout live, for a visitor who had never
+  // logged in.
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+
+        {isDesktop ? (
+          <WebHero compact title="My Account" subtitle="Sign in to see your bookings and saved trips." />
+        ) : (
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={24} color={Colors.secondary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Account</Text>
+            <View style={{ width: 24 }} />
+          </View>
+        )}
+
+        <ScrollView contentContainerStyle={[styles.guestWrap, centeredContent]}>
+          <View style={styles.guestAvatar}>
+            <Ionicons name="person-outline" size={40} color={Colors.primary} />
+          </View>
+          <Text style={styles.guestTitle}>Guest</Text>
+          <Text style={styles.guestBody}>
+            You are browsing as a guest. Sign in to see your bookings, saved trips
+            and travel preferences, and to book faster next time.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.guestButton}
+            onPress={() => requireAuth(() => {}, 'Sign in to your MyItineri account.')}
+          >
+            <Ionicons name="log-in-outline" size={19} color="#FFFFFF" />
+            <Text style={styles.guestButtonText}>Sign In or Create Account</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.guestBrowse} onPress={() => navigation.navigate('CustomerTabs', { screen: 'HomeTab' })}>
+            <Text style={styles.guestBrowseText}>Keep browsing</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
@@ -659,9 +707,9 @@ const CustomerProfileScreen = ({ navigation }) => {
               <Ionicons name="pencil" size={16} color={Colors.secondary} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.userName}>{user?.name || 'John Doe'}</Text>
-          <Text style={styles.userEmail}>{user?.email || 'john.doe@example.com'}</Text>
-          <Text style={styles.userPhone}>{user?.phone || '+91 98765 43210'}</Text>
+          <Text style={styles.userName}>{user?.name || 'Traveller'}</Text>
+          <Text style={styles.userEmail}>{user?.email || ''}</Text>
+          <Text style={styles.userPhone}>{user?.phone || ''}</Text>
         </View>
 
         {/* Account nav: a horizontal scroller on phones, a vertical sidebar on
@@ -774,6 +822,26 @@ const CustomerProfileScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  guestWrap: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 48 },
+  guestAvatar: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: Colors.primarySoft,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 18,
+  },
+  guestTitle: { fontSize: 22, fontWeight: '800', color: Colors.text, marginBottom: 8 },
+  guestBody: {
+    fontSize: 14, lineHeight: 21, color: Colors.textLight,
+    textAlign: 'center', maxWidth: 380, marginBottom: 26,
+  },
+  guestButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 24, paddingVertical: 14, borderRadius: 12,
+  },
+  guestButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  guestBrowse: { marginTop: 16, padding: 8 },
+  guestBrowseText: { color: Colors.primaryDark, fontSize: 14, fontWeight: '700' },
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',

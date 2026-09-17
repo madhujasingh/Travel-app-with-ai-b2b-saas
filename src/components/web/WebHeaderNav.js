@@ -53,7 +53,7 @@ const NavLink = ({ label, icon, isActive, onPress }) => (
 const WebHeaderNav = ({ state, showBack = false }) => {
   const navigation = useNavigation();
   const { getCartItemCount } = useCart();
-  const { user } = useAuth();
+  const { user, requireAuth } = useAuth();
   const cartCount = getCartItemCount();
 
   // `state` is only supplied in the tab-bar case; as a stack header there is no
@@ -159,22 +159,32 @@ const WebHeaderNav = ({ state, showBack = false }) => {
           {isStaff && (
             <Pressable
               onPress={() => navigation.navigate('B2BDashboard')}
-              style={({ hovered }) => [styles.link, hovered && styles.linkHovered]}
+              style={({ hovered }) => [styles.navLink, hovered && styles.navLinkHovered]}
             >
               <Ionicons name="grid-outline" size={17} color={Colors.textLight} />
-              <Text style={styles.linkText}>Dashboard</Text>
+              <Text style={styles.navLinkText}>Dashboard</Text>
             </Pressable>
           )}
 
-          <Pressable
-            onPress={() => goToTab('ProfileTab')}
-            style={({ hovered }) => [styles.account, hovered && styles.accountHovered]}
-          >
-            <Ionicons name="person-circle-outline" size={20} color={Colors.primaryDark} />
-            <Text style={styles.accountText} numberOfLines={1}>
-              {firstName || 'Account'}
-            </Text>
-          </Pressable>
+          {user ? (
+            <Pressable
+              onPress={() => goToTab('ProfileTab')}
+              style={({ hovered }) => [styles.account, hovered && styles.accountHovered]}
+            >
+              <Ionicons name="person-circle-outline" size={20} color={Colors.primaryDark} />
+              <Text style={styles.accountText} numberOfLines={1}>
+                {firstName || 'Account'}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => requireAuth(() => goToTab('ProfileTab'), 'Sign in to your MyItineri account.')}
+              style={({ hovered }) => [styles.signIn, hovered && styles.signInHovered]}
+            >
+              <Ionicons name="person-circle-outline" size={19} color="#FFFFFF" />
+              <Text style={styles.signInText}>Sign In</Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </View>
@@ -182,6 +192,17 @@ const WebHeaderNav = ({ state, showBack = false }) => {
 };
 
 const styles = StyleSheet.create({
+  signIn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
+  },
+  signInHovered: { backgroundColor: Colors.primaryDark },
+  signInText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
   header: {
     backgroundColor: Colors.card,
     borderBottomWidth: 1,
