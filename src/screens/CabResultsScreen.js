@@ -11,6 +11,7 @@ import WebResultsLayout, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { useAuth } from '../context/AuthContext';
 
 const SORT_OPTIONS = [
   { value: 'price', label: 'Price: Low to High' },
@@ -28,6 +29,7 @@ const grandTotalOf = (quote) => Number(quote?.fareBreakup?.totalFare || 0) + Num
 // quote (quotes[0]) per every sample in the docs, so this flattens the two
 // levels into one list item rather than nesting a second FlatList.
 const CabResultsScreen = ({ route, navigation }) => {
+  const { requireAuth } = useAuth();
   const { centeredContent, isDesktop } = useResponsive();
   const { quotesInfo, journeyInfo, routeDetails, journeyType, tripType, passengers, sourceBookingId } = route.params || {};
   const [sortBy, setSortBy] = useState('price');
@@ -115,16 +117,20 @@ const CabResultsScreen = ({ route, navigation }) => {
           <TouchableOpacity
             style={styles.bookButton}
             onPress={() =>
-              navigation.navigate('CabBooking', {
-                quote,
-                group,
-                journeyInfo,
-                routeDetails,
-                journeyType,
-                tripType,
-                passengers,
-                sourceBookingId,
-              })
+              requireAuth(
+                () =>
+                navigation.navigate('CabBooking', {
+                  quote,
+                  group,
+                  journeyInfo,
+                  routeDetails,
+                  journeyType,
+                  tripType,
+                  passengers,
+                  sourceBookingId,
+                }),
+                'Sign in to continue booking this cab.'
+              )
             }
           >
             <Text style={styles.bookButtonText}>Book This Cab</Text>

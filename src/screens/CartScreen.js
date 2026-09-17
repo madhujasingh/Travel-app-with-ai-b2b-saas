@@ -35,7 +35,7 @@ const CartScreen = ({ route, navigation }) => {
   const canGoBack = navigation.canGoBack();
   const { cartItems, addItemToCart, removeItemFromCart, getCartTotal, getCartItemCount, removeExpiredItems } =
     useCart();
-  const { token } = useAuth();
+  const { token, requireAuth } = useAuth();
   const [convenienceFee, setConvenienceFee] = React.useState(DEFAULT_CONVENIENCE_FEE);
 
   // Coupon. The server decides what the code is worth - this screen only sends
@@ -125,7 +125,10 @@ const CartScreen = ({ route, navigation }) => {
       appAlert('Error', 'Your cart is empty');
       return;
     }
-    navigation.navigate('Checkout', { cartItems, total: getCartTotal() });
+    requireAuth(
+      () => navigation.navigate('Checkout', { cartItems, total: getCartTotal() }),
+      'Sign in to complete your booking.'
+    );
   };
 
   const renderCartItem = (item) => (

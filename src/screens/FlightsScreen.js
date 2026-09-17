@@ -32,6 +32,7 @@ import API_CONFIG from '../config/api';
 import { AIRPORT_OPTIONS } from '../data/airports';
 import { AIRLINE_LOGOS } from '../data/airlineLogos';
 import { parseTripJackError } from '../utils/tripjackErrors';
+import { useAuth } from '../context/AuthContext';
 
 const TRIP_TYPES = [
   { label: 'One Way', value: 'ONE_WAY' },
@@ -637,6 +638,7 @@ const mapFlightsFromResponse = (data) => {
 };
 
 const FlightsScreen = ({ navigation }) => {
+  const { requireAuth } = useAuth();
   const { centeredContent, isDesktop } = useResponsive();
   const { markupFor } = useMarkup();
   const { scrolled, scrollProps } = useHeroHeader();
@@ -1480,7 +1482,10 @@ const FlightsScreen = ({ navigation }) => {
     // instance instead of opening a new one, silently popping this Flights
     // screen out of the stack in between. That left the back button on the
     // booking screen going all the way to Home instead of back to search.
-    navigation.push('FlightBooking', { flights, reviewResponse, passengerCounts });
+    requireAuth(
+      () => navigation.push('FlightBooking', { flights, reviewResponse, passengerCounts }),
+      'Sign in to continue booking this flight.'
+    );
   };
 
   const renderFlight = ({ item }) => {

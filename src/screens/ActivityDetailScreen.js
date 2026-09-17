@@ -20,6 +20,7 @@ import API_CONFIG from '../config/api';
 import { parseActivitiesError } from '../utils/activitiesApiErrors';
 import { formatInrEquivalent } from '../utils/currencyConversion';
 import { buildPaxBreakdown, contractRemarks, splitRemarks, formatCancellationDate } from '../utils/activityPaxPricing';
+import { useAuth } from '../context/AuthContext';
 
 // Content descriptions come back as HTML (<br />, <strong>, etc.) - RN has
 // no HTML renderer wired up here, so this strips tags down to plain text
@@ -66,6 +67,7 @@ const getHeroImage = (content) => {
 };
 
 const ActivityDetailScreen = ({ route, navigation }) => {
+  const { requireAuth } = useAuth();
   const { centeredContent } = useResponsive();
   const { activityCode, name, from, to, adults, childAges } = route.params;
   const [loading, setLoading] = useState(true);
@@ -340,20 +342,24 @@ const ActivityDetailScreen = ({ route, navigation }) => {
               // operationDates lists the specific valid date(s) for this
               // rate; default to the first one rather than the search range.
               const bookingDates = selectedRate.operationDates?.[0];
-              navigation.navigate('ActivityBooking', {
-                activityCode,
-                name: activity?.content?.name || name,
-                rateKey: selectedRate.rateKey,
-                from: bookingDates?.from || from,
-                to: bookingDates?.to || to,
-                adults,
-                childAges,
-                price: selectedRate.totalAmount?.amount,
-                currency: activity?.currency,
-                questions: selectedRate.questions || [],
-                paxAmounts: selectedRate.paxAmounts || [],
-                sessionName: selectedRate.sessions?.[0]?.name || null,
-              });
+              requireAuth(
+                () =>
+                navigation.navigate('ActivityBooking', {
+                  activityCode,
+                  name: activity?.content?.name || name,
+                  rateKey: selectedRate.rateKey,
+                  from: bookingDates?.from || from,
+                  to: bookingDates?.to || to,
+                  adults,
+                  childAges,
+                  price: selectedRate.totalAmount?.amount,
+                  currency: activity?.currency,
+                  questions: selectedRate.questions || [],
+                  paxAmounts: selectedRate.paxAmounts || [],
+                  sessionName: selectedRate.sessions?.[0]?.name || null,
+                }),
+                'Sign in to continue booking this activity.'
+              );
             }}
           >
             <Text style={styles.continueButtonText}>Continue with this option</Text>

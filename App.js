@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStorage from './src/utils/secureStorage';
 import { AlertHost } from './src/utils/appAlert';
+import LoginPrompt from './src/components/LoginPrompt';
 
 // Import Screens
 import SplashScreen from './src/screens/SplashScreen';
@@ -193,6 +194,11 @@ function CustomerTabs() {
 }
 
 export default function App() {
+  // Holds the action a signed-out traveller tried to take, so we can run it
+  // for them once they've signed in instead of dumping them back at the top.
+  const [authPrompt, setAuthPrompt] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+
   const [authState, setAuthState] = useState({
     token: null,
     user: null,
@@ -258,6 +264,18 @@ export default function App() {
     }
   };
 
+  const isAuthed = Boolean(authState.token && authState.user);
+  useEffect(() => {
+    if (!isAuthed || !pendingAction) return;
+    // One frame after the authenticated screens mount, so navigate() can
+    // resolve the booking route.
+    const timer = setTimeout(() => {
+      pendingAction();
+      setPendingAction(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [isAuthed, pendingAction]);
+
   const authContextValue = useMemo(
     () => ({
       token: authState.token,
@@ -271,6 +289,17 @@ export default function App() {
       logout: () => {
         setAuthState({ token: null, user: null });
         void clearPersistedAuthState();
+      },
+      // Gate for actions that genuinely need an account - booking, checkout,
+      // saved trips. Browsing and searching deliberately don't call this.
+      // Returns true when the caller may proceed immediately.
+      requireAuth: (action, message) => {
+        if (authState.token && authState.user) {
+          action?.();
+          return true;
+        }
+        setAuthPrompt({ action, message });
+        return false;
       },
     }),
     [authState]
@@ -333,12 +362,31 @@ export default function App() {
         >
           {!authContextValue.isAuthenticated ? (
             <>
-              <Stack.Screen
-                name="Splash"
-                component={SplashScreen}
-                initialParams={{ nextScreen: 'Login' }}
-              />
+              {/* Signed-out visitors get the storefront, not a login wall.
+                  Searching, prices and package pages are all public on the
+                  backend already, and a wall here would also make the whole
+                  site unindexable - crawlers can't sign in. Sign-in is asked
+                  for at the point of booking instead, via requireAuth. */}
+              <Stack.Screen name="CustomerTabs" component={CustomerTabs} />
+              <Stack.Screen name="LandPackage" component={LandPackageScreen} />
+              <Stack.Screen name="ItineraryList" component={ItineraryListScreen} />
+              <Stack.Screen name="ItineraryDetail" component={ItineraryDetailScreen} />
+              <Stack.Screen name="Hotels" component={HotelsScreen} />
+              <Stack.Screen name="HotelSearchResults" component={HotelSearchResultsScreen} />
+              <Stack.Screen name="HotelDetail" component={HotelDetailScreen} />
+              <Stack.Screen name="Flights" component={FlightsScreen} />
+              <Stack.Screen name="Activities" component={ActivitiesScreen} />
+              <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
+              <Stack.Screen name="Cabs" component={CabsScreen} />
+              <Stack.Screen name="CabResults" component={CabResultsScreen} />
+              <Stack.Screen name="TripSafe" component={TripSafeScreen} />
+              <Stack.Screen name="TripSafeResults" component={TripSafeResultsScreen} />
+              <Stack.Screen name="AIRecommendations" component={AIRecommendationsScreen} />
+              <Stack.Screen name="AIPlaceInsight" component={AIPlaceInsightScreen} />
+              {/* Still reachable directly, for anyone who wants the full page
+                  rather than the booking-time prompt. */}
               <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="Splash" component={SplashScreen} initialParams={{ nextScreen: 'CustomerTabs' }} />
             </>
           ) : (
             <>
@@ -408,6 +456,19 @@ export default function App() {
         {/* Renders the in-app dialog that replaces Alert.alert on web; a no-op
             on native, where the OS draws the dialog itself. Mounted here, after
             the navigator, so it overlays every screen. */}
+        <LoginPrompt
+          visible={Boolean(authPrompt)}
+          message={authPrompt?.message}
+          onClose={() => setAuthPrompt(null)}
+          onSuccess={() => {
+            // Deferred rather than run here: the booking screens are only
+            // registered on the authenticated branch of the navigator, so
+            // navigating before that re-render lands on a screen that does
+            // not exist yet. See the effect that drains this.
+            setPendingAction(() => authPrompt?.action || null);
+            setAuthPrompt(null);
+          }}
+        />
         <AlertHost />
       </CartProvider>
       </MarkupProvider>

@@ -23,6 +23,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { fetchHotelJson, SEARCH_SESSION_MS } from '../utils/hotelApiErrors';
 import DatePickerModal from '../components/DatePickerModal';
+import { useAuth } from '../context/AuthContext';
 
 // imagesJson is the raw fetch-hotel-content images[] array, stored as text -
 // each entry has links keyed by size (Standard/XXL/...), not a flat url.
@@ -212,6 +213,7 @@ const cancellationSummary = (cancellation) => {
 };
 
 const HotelDetailScreen = ({ route, navigation }) => {
+  const { requireAuth } = useAuth();
   const { centeredContent } = useResponsive();
   const { tjHotelId, hotelName } = route.params;
   const { markupFor } = useMarkup();
@@ -952,12 +954,16 @@ const HotelDetailScreen = ({ route, navigation }) => {
                     <TouchableOpacity
                       style={styles.continueButton}
                       onPress={() =>
-                        navigation.navigate('HotelBooking', {
-                          tjHotelId,
-                          hotelName: detail.hotelName,
-                          searchContext,
-                          reviewResult,
-                        })
+                        requireAuth(
+                          () =>
+                          navigation.navigate('HotelBooking', {
+                            tjHotelId,
+                            hotelName: detail.hotelName,
+                            searchContext,
+                            reviewResult,
+                          }),
+                          'Sign in to continue booking this hotel.'
+                        )
                       }
                     >
                       <Text style={styles.continueButtonText}>Continue to Book</Text>

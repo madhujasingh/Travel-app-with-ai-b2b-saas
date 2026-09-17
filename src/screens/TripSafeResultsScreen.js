@@ -85,7 +85,7 @@ const extractPlanFare = (plan, dayKey, ages) => {
 
 const TripSafeResultsScreen = ({ route, navigation }) => {
   const { centeredContent } = useResponsive();
-  const { token } = useAuth();
+  const { token, requireAuth } = useAuth();
   const { plans, journeyType, startDate, endDate, travellerAges, regionLabel, searchQuery } = route.params || {};
   const dayKey = coverageDayKey(searchQuery, startDate, endDate);
   const [reviewingPlid, setReviewingPlid] = useState(null);
@@ -121,16 +121,20 @@ const TripSafeResultsScreen = ({ route, navigation }) => {
       const fare =
         extractPlanFare(reviewedPlan, dayKey, travellerAges) ??
         extractPlanFare(plan, dayKey, travellerAges);
-      navigation.navigate('TripSafeBooking', {
-        bookingId: data?.bid,
-        plan: reviewedPlan,
-        product: reviewedProduct,
-        fare,
-        journeyType,
-        startDate: data?.isq?.sd || data?.sd || startDate,
-        endDate: data?.isq?.ed || data?.ed || endDate,
-        travellerAges,
-      });
+      requireAuth(
+        () =>
+        navigation.navigate('TripSafeBooking', {
+          bookingId: data?.bid,
+          plan: reviewedPlan,
+          product: reviewedProduct,
+          fare,
+          journeyType,
+          startDate: data?.isq?.sd || data?.sd || startDate,
+          endDate: data?.isq?.ed || data?.ed || endDate,
+          travellerAges,
+        }),
+        'Sign in to continue with this plan.'
+      );
     } catch (error) {
       appAlert('Travel Insurance', error.message || 'Unable to review this plan right now.');
     } finally {
