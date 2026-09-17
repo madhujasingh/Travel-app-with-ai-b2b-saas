@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ImageBackground,
   View,
   Text,
   StyleSheet,
@@ -13,7 +14,7 @@ import {
 import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../constants/Colors';
 import { digitsOnly } from '../utils/inputSanitizers';
@@ -35,6 +36,8 @@ const SERVICE_IMAGES = {
   cabs: require('../../assets/services/cabs.png'),
   tripsafe: require('../../assets/services/tripsafe.png'),
 };
+
+const HERO_IMAGE = require('../../assets/home/hero-sunset.jpg');
 
 const HomeScreen = ({ navigation }) => {
   const { isDesktop } = useResponsive();
@@ -186,6 +189,7 @@ const HomeScreen = ({ navigation }) => {
             title="Plan your perfect trip"
             subtitle="Tell us your budget and where you're headed - we'll build the itinerary around it."
             activeProduct="home"
+            image={HERO_IMAGE}
           >
             <WebSearchPanel onSearch={handleSearch}>
               <WebField
@@ -231,21 +235,18 @@ const HomeScreen = ({ navigation }) => {
             </WebSearchPanel>
           </WebHero>
         ) : (
-        <LinearGradient
-          colors={[Colors.primaryLight, Colors.primary, Colors.primaryDark]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <ImageBackground
+          source={HERO_IMAGE}
           style={[styles.header, isDesktop && styles.headerDesktop]}
+          imageStyle={styles.headerImage}
         >
-          <View style={styles.heroGlowLarge} />
-          <View style={styles.heroGlowSmall} />
-          <MaterialCommunityIcons
-            name="palm-tree"
-            size={140}
-            color="rgba(255,255,255,0.12)"
-            style={styles.heroPalm}
+          {/* The photo is a bright sky and sunset, and the titles are white -
+              without this they wash out completely. Darkest at the bottom,
+              where the wordmark and tagline sit. */}
+          <LinearGradient
+            colors={['rgba(12,10,9,0.18)', 'rgba(12,10,9,0.34)', 'rgba(12,10,9,0.62)']}
+            style={StyleSheet.absoluteFill}
           />
-          <Ionicons name="airplane" size={64} color="rgba(255,255,255,0.16)" style={styles.heroPlane} />
 
           <View style={styles.headerRow}>
             <TouchableOpacity
@@ -260,7 +261,7 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.greeting}>Welcome to</Text>
           <Text style={styles.appName}>MyItineri</Text>
           <Text style={styles.subtitle}>Plan your perfect trip</Text>
-        </LinearGradient>
+        </ImageBackground>
         )}
 
         {/* Content sheet - overlaps the header's rounded bottom edge. PageSection
@@ -612,6 +613,9 @@ const HomeScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  // The hero keeps its rounded bottom corners, so the photo has to be clipped
+  // to the same radius or it squares them off.
+  headerImage: { borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
   container: {
     flex: 1,
     backgroundColor: Colors.primary,
@@ -630,35 +634,6 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
     overflow: 'hidden',
-  },
-  heroGlowLarge: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 120,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    top: -110,
-    right: -50,
-  },
-  heroGlowSmall: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    bottom: -30,
-    left: -30,
-  },
-  heroPalm: {
-    position: 'absolute',
-    right: -10,
-    bottom: 10,
-  },
-  heroPlane: {
-    position: 'absolute',
-    left: -8,
-    top: 70,
-    transform: [{ rotate: '35deg' }],
   },
   headerRow: {
     flexDirection: 'row',
