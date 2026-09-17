@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import * as AuthSession from 'expo-auth-session';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
@@ -37,7 +38,7 @@ const INITIAL_SIGN_UP = {
 };
 
 const LoginScreen = () => {
-  const { centeredForm } = useResponsive();
+  const { isDesktop } = useResponsive();
   const { login } = useAuth();
   const [mode, setMode] = useState('signin');
   const [signInForm, setSignInForm] = useState(INITIAL_SIGN_IN);
@@ -233,8 +234,6 @@ const LoginScreen = () => {
 
   const renderSignInForm = () => (
     <>
-      <Text style={styles.sectionTitle}>Welcome back</Text>
-      <Text style={styles.sectionSubtitle}>Sign in with your email and password.</Text>
 
       <Text style={styles.label}>Email</Text>
       <TextInput
@@ -286,8 +285,6 @@ const LoginScreen = () => {
 
   const renderSignUpForm = () => (
     <>
-      <Text style={styles.sectionTitle}>Create account</Text>
-      <Text style={styles.sectionSubtitle}>No account yet? Fill in your details to get started.</Text>
 
       <Text style={styles.label}>Full Name</Text>
       <TextInput
@@ -344,17 +341,72 @@ const LoginScreen = () => {
     </>
   );
 
+  // Decorative only - dunes, blobs and the dashed flight path. Drawn behind
+  // the card and pointer-events:none so none of it can swallow a tap on the
+  // form. Desktop only: on a phone it would crowd the fields.
+  const renderBackdrop = () => (
+    <View style={styles.backdrop} pointerEvents="none">
+      <View style={[styles.blob, styles.blobTopRight]} />
+      <View style={[styles.blob, styles.blobBottomLeft]} />
+
+      {isDesktop && (
+        <>
+          <View style={styles.flightPathLeft} />
+          <View style={styles.flightPathRight} />
+          <Ionicons name="paper-plane-outline" size={34} color={Colors.primaryLight} style={styles.paperPlane} />
+          <Ionicons name="airplane" size={30} color={Colors.primary} style={styles.planeIcon} />
+
+          <View style={styles.scriptLeft}>
+            <Text style={styles.scriptLine}>Plan</Text>
+            <Text style={styles.scriptLine}>Explore</Text>
+            <Text style={[styles.scriptLine, styles.scriptAccent]}>Go Further</Text>
+          </View>
+
+          <View style={styles.scriptRight}>
+            <Text style={styles.scriptSmall}>Good Trips</Text>
+            <Text style={styles.scriptSmall}>Happier You</Text>
+          </View>
+        </>
+      )}
+
+      {/* Layered dunes along the bottom, palest at the back. */}
+      <View style={[styles.dune, styles.duneBack]} />
+      <View style={[styles.dune, styles.duneMid]} />
+      <View style={[styles.dune, styles.duneFront]} />
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
+      <StatusBar backgroundColor={Colors.background} barStyle="dark-content" />
 
-      <ScrollView contentContainerStyle={[styles.scrollContent, centeredForm]} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.title}>Welcome to MyItineri</Text>
-          <Text style={styles.subtitle}>Sign in to your account, or create a new one to get started.</Text>
+      <LinearGradient
+        colors={['#FFF9F4', '#FFF1E6', '#FFE6D5']}
+        style={StyleSheet.absoluteFill}
+      />
+      {renderBackdrop()}
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.brandRow}>
+          <Text style={styles.brandName}>MyItineri</Text>
+          <Ionicons name="airplane" size={20} color={Colors.primary} style={styles.brandIcon} />
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            {mode === 'signin' ? 'Welcome ' : 'Join '}
+            <Text style={styles.cardTitleAccent}>{mode === 'signin' ? 'Back' : 'Us'}</Text>
+          </Text>
+          <Text style={styles.cardSubtitle}>
+            {mode === 'signin'
+              ? 'Sign in to continue your journey'
+              : 'Create an account and start planning'}
+          </Text>
+
           <View style={styles.modeSwitch}>
             <TouchableOpacity
               style={[styles.modeButton, mode === 'signin' && styles.modeButtonActive]}
@@ -388,184 +440,186 @@ const LoginScreen = () => {
             {googleLoading ? (
               <ActivityIndicator color={Colors.text} />
             ) : (
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
+              <>
+                <Text style={styles.googleG}>G</Text>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </>
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.switchPrompt}
+            onPress={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+          >
+            <Text style={styles.switchPromptText}>
+              {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+              <Text style={styles.switchPromptLink}>{mode === 'signin' ? 'Sign Up' : 'Sign In'}</Text>
+            </Text>
+          </TouchableOpacity>
         </View>
+
+        <Text style={styles.footerTag}>TRAVEL  •  DISCOVER  •  BELONG</Text>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  container: { flex: 1, backgroundColor: '#FFF9F4' },
+
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 32,
   },
-  header: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 22,
-    paddingTop: 26,
-    paddingBottom: 32,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+
+  // ---- decorative backdrop ----
+  backdrop: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  blob: { position: 'absolute', backgroundColor: Colors.primary, opacity: 0.07 },
+  blobTopRight: { width: 320, height: 260, borderRadius: 140, top: -40, right: -70 },
+  blobBottomLeft: { width: 300, height: 220, borderRadius: 130, bottom: 120, left: -90 },
+
+  // Two straight dashed runs either side of the card read as one arc across
+  // the page without needing a curve primitive.
+  flightPathLeft: {
+    position: 'absolute', left: '4%', top: '54%', width: '30%',
+    borderTopWidth: 2, borderColor: Colors.primaryLight,
+    borderStyle: 'dashed', opacity: 0.55, transform: [{ rotate: '-14deg' }],
   },
-  title: {
-    fontSize: 31,
-    fontWeight: '800',
-    color: Colors.secondary,
+  flightPathRight: {
+    position: 'absolute', right: '4%', top: '34%', width: '30%',
+    borderTopWidth: 2, borderColor: Colors.primaryLight,
+    borderStyle: 'dashed', opacity: 0.55, transform: [{ rotate: '-16deg' }],
   },
-  subtitle: {
-    marginTop: 8,
-    color: Colors.secondary,
-    opacity: 0.9,
-    fontSize: 14,
-    lineHeight: 20,
+  paperPlane: { position: 'absolute', left: '9%', top: '50%', opacity: 0.75 },
+  planeIcon: { position: 'absolute', right: '8%', top: '26%', transform: [{ rotate: '-30deg' }] },
+
+  scriptLeft: { position: 'absolute', left: '7%', top: '24%' },
+  scriptRight: { position: 'absolute', right: '6%', bottom: '26%', alignItems: 'flex-end' },
+  // Falls back to plain italic anywhere the script faces are missing, which
+  // still reads as a handwritten aside rather than broken.
+  scriptLine: {
+    fontFamily: Platform.OS === 'web' ? "'Snell Roundhand','Brush Script MT',cursive" : undefined,
+    fontStyle: 'italic', fontSize: 30, lineHeight: 38, color: '#2B3A55', opacity: 0.8,
   },
+  scriptAccent: { color: Colors.primary, fontSize: 32 },
+  scriptSmall: {
+    fontFamily: Platform.OS === 'web' ? "'Snell Roundhand','Brush Script MT',cursive" : undefined,
+    fontStyle: 'italic', fontSize: 22, lineHeight: 30, color: Colors.primaryDark, opacity: 0.65,
+  },
+
+  dune: { position: 'absolute', left: -60, right: -60, borderTopLeftRadius: 500, borderTopRightRadius: 500 },
+  duneBack: { bottom: 0, height: 190, backgroundColor: Colors.primary, opacity: 0.10 },
+  duneMid: { bottom: -20, height: 150, backgroundColor: Colors.primary, opacity: 0.16 },
+  duneFront: { bottom: -50, height: 120, backgroundColor: Colors.primary, opacity: 0.24 },
+
+  // ---- brand ----
+  brandRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 22 },
+  brandName: { fontSize: 26, fontWeight: '800', color: Colors.primary, letterSpacing: 0.3 },
+  brandIcon: { marginLeft: 6 },
+
+  // ---- card ----
   card: {
-    marginHorizontal: 18,
-    marginTop: 18,
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    width: '100%',
+    maxWidth: 460,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 26,
+    paddingVertical: 30,
     shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
+    shadowOpacity: 0.10,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 14 },
     elevation: 6,
   },
+  cardTitle: { fontSize: 30, fontWeight: '800', color: '#1B2A47', textAlign: 'center' },
+  cardTitleAccent: { color: Colors.primary },
+  cardSubtitle: {
+    marginTop: 6, marginBottom: 22, fontSize: 14,
+    color: Colors.textLight, textAlign: 'center',
+  },
+
   modeSwitch: {
     flexDirection: 'row',
     backgroundColor: Colors.primarySoft,
-    borderRadius: 14,
+    borderRadius: 30,
     padding: 4,
-    marginBottom: 18,
+    marginBottom: 22,
   },
-  modeButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 11,
-    borderRadius: 10,
-  },
-  modeButtonActive: {
-    backgroundColor: Colors.secondary,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  modeButtonText: {
-    color: Colors.textLight,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  modeButtonTextActive: {
-    color: Colors.primary,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
-  },
-  sectionSubtitle: {
-    marginTop: 6,
-    marginBottom: 10,
-    color: Colors.textLight,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  label: {
-    marginBottom: 8,
-    marginTop: 10,
-    fontWeight: '700',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    color: Colors.text,
-  },
+  modeButton: { flex: 1, paddingVertical: 11, borderRadius: 26, alignItems: 'center' },
+  modeButtonActive: { backgroundColor: Colors.primarySurface },
+  modeButtonText: { fontSize: 14, fontWeight: '700', color: Colors.textLight },
+  modeButtonTextActive: { color: Colors.primaryDark },
+
+  label: { fontSize: 13, fontWeight: '700', color: '#1B2A47', marginBottom: 7 },
   input: {
     borderWidth: 1,
     borderColor: Colors.border,
+    backgroundColor: '#FFFDFB',
     borderRadius: 12,
-    paddingHorizontal: 13,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 14,
     color: Colors.text,
-    backgroundColor: '#FFFCFA',
+    marginBottom: 16,
   },
   passwordInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: Colors.border,
+    backgroundColor: '#FFFDFB',
     borderRadius: 12,
-    backgroundColor: '#FFFCFA',
+    marginBottom: 6,
   },
-  passwordInput: {
-    flex: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    color: Colors.text,
-  },
-  passwordToggle: {
-    paddingHorizontal: 13,
-  },
+  passwordInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 13, fontSize: 14, color: Colors.text },
+  passwordToggle: { paddingHorizontal: 12, paddingVertical: 10 },
+
   primaryButton: {
-    marginTop: 20,
     backgroundColor: Colors.primary,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 15,
     alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 5,
+    marginTop: 16,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
   },
-  primaryButtonText: {
-    color: Colors.secondary,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  dividerRow: {
+  primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  buttonDisabled: { opacity: 0.6 },
+
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
+  divider: { flex: 1, height: 1, backgroundColor: Colors.border },
+  dividerText: { marginHorizontal: 12, fontSize: 12, color: Colors.textMuted },
+
+  googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 18,
-    marginBottom: 2,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  dividerText: {
-    marginHorizontal: 10,
-    color: Colors.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  googleButton: {
-    marginTop: 12,
-    backgroundColor: '#FFFFFF',
-    borderColor: Colors.border,
+    justifyContent: 'center',
     borderWidth: 1,
+    borderColor: Colors.border,
     borderRadius: 12,
     paddingVertical: 14,
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  googleButtonText: {
-    color: Colors.text,
-    fontSize: 15,
-    fontWeight: '600',
+  googleG: { fontSize: 16, fontWeight: '800', color: '#4285F4', marginRight: 10 },
+  googleButtonText: { fontSize: 14, fontWeight: '700', color: Colors.text },
+
+  switchPrompt: { marginTop: 18, alignItems: 'center' },
+  switchPromptText: { fontSize: 13, color: Colors.textLight },
+  switchPromptLink: { color: Colors.primary, fontWeight: '800' },
+
+  footerTag: {
+    marginTop: 26,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2,
+    color: Colors.primaryDark,
+    opacity: 0.55,
   },
 });
 

@@ -16,7 +16,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../constants/Colors';
-import { useAuth } from '../context/AuthContext';
 import { digitsOnly } from '../utils/inputSanitizers';
 import PromoBannerCarousel from '../components/PromoBannerCarousel';
 import PageSection from '../components/web/PageSection';
@@ -38,7 +37,6 @@ const SERVICE_IMAGES = {
 };
 
 const HomeScreen = ({ navigation }) => {
-  const { user } = useAuth();
   const { isDesktop } = useResponsive();
   const { scrolled, scrollProps } = useHeroHeader();
   const [budget, setBudget] = useState('');
@@ -262,7 +260,6 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.greeting}>Welcome to</Text>
           <Text style={styles.appName}>MyItineri</Text>
           <Text style={styles.subtitle}>Plan your perfect trip</Text>
-          <Text style={styles.roleBadge}>Signed in as: {user?.role || 'CUSTOMER'}</Text>
         </LinearGradient>
         )}
 
@@ -714,18 +711,6 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     opacity: 0.92,
     marginTop: 6,
-  },
-  roleBadge: {
-    marginTop: 14,
-    color: Colors.secondary,
-    opacity: 0.95,
-    fontSize: 11,
-    fontWeight: '700',
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
   },
   contentSheet: {
     backgroundColor: Colors.background,
