@@ -171,7 +171,17 @@ const ItineraryListScreen = ({ route, navigation }) => {
     // hidden: that means the destination lists need extending, and silently
     // dropping the package would be worse than showing it.
     if (type === 'india' || type === 'international') {
+      const wanted = type.toUpperCase();
       list = list.filter((item) => {
+        // Packages carry their own category - INDIA or INTERNATIONAL - set when
+        // they're authored and by the AI generator too. Trust it when present.
+        const category = String(item.category || '').toUpperCase();
+        if (category === 'INDIA' || category === 'INTERNATIONAL') {
+          return category === wanted;
+        }
+        // Only older or imported rows lack one; fall back to reading the
+        // destination name, and keep anything still unrecognised rather than
+        // making a sellable package unreachable.
         const market = marketForDestination(item.destination);
         return market === null || market === type;
       });
