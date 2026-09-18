@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import useResponsive from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import API_CONFIG from '../config/api';
 import { appAlert } from '../utils/appAlert';
@@ -32,6 +33,7 @@ const BENEFITS = [
 
 const LoginPrompt = ({ visible, onClose, onSuccess, message }) => {
   const { login } = useAuth();
+  const { isDesktop } = useResponsive();
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -95,16 +97,18 @@ const LoginPrompt = ({ visible, onClose, onSuccess, message }) => {
   if (!visible) return null;
 
   const card = (
-    <View style={styles.card}>
-      <View style={styles.benefits}>
-        <Text style={styles.benefitsTitle}>Why sign in</Text>
-        {BENEFITS.map((benefit) => (
-          <View key={benefit.text} style={styles.benefitRow}>
-            <Ionicons name={benefit.icon} size={18} color="#FFFFFF" style={styles.benefitIcon} />
-            <Text style={styles.benefitText}>{benefit.text}</Text>
-          </View>
-        ))}
-      </View>
+    <View style={[styles.card, !isDesktop && styles.cardNarrow]}>
+      {isDesktop && (
+        <View style={styles.benefits}>
+          <Text style={styles.benefitsTitle}>Why sign in</Text>
+          {BENEFITS.map((benefit) => (
+            <View key={benefit.text} style={styles.benefitRow}>
+              <Ionicons name={benefit.icon} size={18} color="#FFFFFF" style={styles.benefitIcon} />
+              <Text style={styles.benefitText}>{benefit.text}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={styles.formSide}>
         <Pressable onPress={close} style={styles.closeButton} hitSlop={10}>
@@ -215,6 +219,7 @@ const styles = StyleSheet.create({
     left: 0,
     backgroundColor: 'rgba(12, 20, 33, 0.55)',
   },
+  cardNarrow: { maxWidth: 420, maxHeight: '90%' },
   card: {
     flexDirection: 'row',
     width: '100%',
@@ -224,9 +229,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: Colors.card,
   },
-  // Hidden on narrow screens - the form is what matters, the sell is a bonus.
+  // Rendered only on wide screens - see isDesktop above. Width, not platform:
+  // a phone browser is still Platform.OS === 'web'.
   benefits: {
-    display: Platform.OS === 'web' ? 'flex' : 'none',
     width: 260,
     padding: 26,
     backgroundColor: Colors.primaryDark,
