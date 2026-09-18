@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import { indianDestinations, internationalDestinations } from '../data/packageDestinations';
 
 // Bundled rather than hotlinked from Unsplash - the cards used to depend on a
 // third party staying up, and on the customer having a connection good enough
@@ -97,28 +98,6 @@ const THEMES = [
   { id: 'international', label: 'International', icon: 'earth-outline' },
 ];
 
-const internationalDestinations = [
-  { id: 1, name: 'Paris', country: 'France', image: 'business-outline', popular: true, themes: ['city', 'honeymoon'] },
-  { id: 2, name: 'Tokyo', country: 'Japan', image: 'navigate-outline', popular: true, themes: ['city', 'family'] },
-  { id: 3, name: 'Dubai', country: 'UAE', image: 'business', popular: true, themes: ['city', 'family', 'adventure'] },
-  { id: 4, name: 'Bali', country: 'Indonesia', image: 'sunny', popular: true, themes: ['beach', 'honeymoon'] },
-  { id: 5, name: 'Maldives', country: 'Maldives', image: 'water-outline', popular: true, themes: ['beach', 'honeymoon'] },
-  { id: 6, name: 'Singapore', country: 'Singapore', image: 'leaf-outline', popular: false, themes: ['city', 'family'] },
-  { id: 7, name: 'Thailand', country: 'Thailand', image: 'flower-outline', popular: false, themes: ['beach', 'adventure'] },
-  { id: 8, name: 'Switzerland', country: 'Switzerland', image: 'trail-sign', popular: false, themes: ['hills', 'honeymoon'] },
-];
-
-const indianDestinations = [
-  { id: 1, name: 'Jaipur', state: 'Rajasthan', image: 'business', popular: true, themes: ['city', 'family'] },
-  { id: 2, name: 'Goa', state: 'Goa', image: 'sunny', popular: true, themes: ['beach', 'honeymoon'] },
-  { id: 3, name: 'Kerala', state: 'Kerala', image: 'leaf', popular: true, themes: ['hills', 'honeymoon', 'family'] },
-  { id: 4, name: 'Manali', state: 'Himachal Pradesh', image: 'trail-sign', popular: true, themes: ['hills', 'adventure'] },
-  { id: 5, name: 'Varanasi', state: 'Uttar Pradesh', image: 'flower', popular: true, themes: ['spiritual'] },
-  { id: 6, name: 'Udaipur', state: 'Rajasthan', image: 'business-outline', popular: false, themes: ['city', 'honeymoon'] },
-  { id: 7, name: 'Shimla', state: 'Himachal Pradesh', image: 'trail-sign-outline', popular: false, themes: ['hills', 'family'] },
-  { id: 8, name: 'Agra', state: 'Uttar Pradesh', image: 'location', popular: false, themes: ['spiritual', 'city'] },
-];
-
 const LandPackageScreen = ({ navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
   const { scrolled, scrollProps } = useHeroHeader();
@@ -128,6 +107,7 @@ const LandPackageScreen = ({ navigation }) => {
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [travellers, setTravellers] = useState({ adults: 2, children: 0 });
   const [showAllDestinations, setShowAllDestinations] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
   // Everything we list, so the desktop landing page can show destinations and
   // themes before a market has been picked.
@@ -141,7 +121,11 @@ const LandPackageScreen = ({ navigation }) => {
 
   const themedDestinations = useMemo(() => {
     let list = allDestinations;
-    if (activeTheme === 'international') {
+    // A chosen market wins over the theme chips: picking "International" is a
+    // narrower statement than any theme, and the two would otherwise fight.
+    if (selectedCategory) {
+      list = list.filter((d) => d.market === selectedCategory);
+    } else if (activeTheme === 'international') {
       list = list.filter((d) => d.market === 'international');
     } else if (activeTheme !== 'all') {
       list = list.filter((d) => (d.themes || []).includes(activeTheme));
@@ -156,7 +140,7 @@ const LandPackageScreen = ({ navigation }) => {
       );
     }
     return list;
-  }, [allDestinations, activeTheme, searchQuery]);
+  }, [allDestinations, activeTheme, searchQuery, selectedCategory]);
 
   // One row's worth by default - the full sixteen pushed everything else off
   // the page.
@@ -175,7 +159,6 @@ const LandPackageScreen = ({ navigation }) => {
       travelDates,
       travellers,
     });
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const ctaScale = useRef(new Animated.Value(1)).current;
 
   const destinations = useMemo(() => {
@@ -324,12 +307,11 @@ const LandPackageScreen = ({ navigation }) => {
               style={styles.marketCard}
               activeOpacity={0.9}
               onPress={() => {
-                setSelectedCategory(category.id);
-                navigation.navigate('ItineraryList', {
-                  type: category.id,
-                  travelDates,
-                  travellers,
-                });
+                // Show this market's destinations instead of navigating: the
+                // package list has no country or city context, so jumping
+                // there skips the step that makes the choice meaningful.
+                setSelectedCategory((current) => (current === category.id ? null : category.id));
+                setShowAllDestinations(true);
               }}
             >
               <ImageBackground
@@ -359,7 +341,19 @@ const LandPackageScreen = ({ navigation }) => {
 
         <View style={styles.destSection}>
           <View style={styles.destHeader}>
-            <Text style={styles.destHeading}>Popular Destinations</Text>
+            <Text style={styles.destHeading}>
+              {selectedCategory === 'india'
+                ? 'Destinations in India'
+                : selectedCategory === 'international'
+                  ? 'International Destinations'
+                  : 'Popular Destinations'}
+            </Text>
+            {selectedCategory ? (
+              <TouchableOpacity style={styles.destViewAll} onPress={() => setSelectedCategory(null)}>
+                <Ionicons name="close" size={15} color={Colors.primary} />
+                <Text style={styles.destViewAllText}>Show all</Text>
+              </TouchableOpacity>
+            ) : null}
             {themedDestinations.length > DESTINATION_PREVIEW_COUNT ? (
               <TouchableOpacity
                 style={styles.destViewAll}
@@ -379,7 +373,7 @@ const LandPackageScreen = ({ navigation }) => {
 
           {themedDestinations.length === 0 ? (
             <Text style={styles.destEmpty}>
-              Nothing matches that theme yet — try another one.
+              Nothing matches that yet — try another theme or market.
             </Text>
           ) : (
             <View style={styles.destGrid}>

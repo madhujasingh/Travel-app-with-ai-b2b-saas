@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { getSampleItineraries } from '../data/sampleItineraries';
+import { marketForDestination } from '../data/packageDestinations';
 
 const TYPE_TO_ICON = {
   budget: 'wallet-outline',
@@ -156,8 +157,26 @@ const ItineraryListScreen = ({ route, navigation }) => {
   }, [destination, budget]);
 
   const getFilteredItineraries = () => {
-    if (filter === 'all') return itineraries;
-    return itineraries.filter((item) => item.type === filter);
+    let list = itineraries;
+
+    // `type` is the market the traveller picked - india or international.
+    // It arrives from the Packages landing and used to be ignored entirely,
+    // so both markets showed the same packages. Note item.type is the tier
+    // (budget/premium/luxury) and is unrelated, which is what hid this.
+    //
+    // Packages carry no market of their own, so it is derived from the
+    // destination name. An unrecognised destination is kept rather than
+    // hidden: that means the destination lists need extending, and silently
+    // dropping the package would be worse than showing it.
+    if (type === 'india' || type === 'international') {
+      list = list.filter((item) => {
+        const market = marketForDestination(item.destination);
+        return market === null || market === type;
+      });
+    }
+
+    if (filter === 'all') return list;
+    return list.filter((item) => item.type === filter);
   };
 
   const handleItineraryPress = (itinerary) => {
