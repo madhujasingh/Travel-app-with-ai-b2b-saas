@@ -2,6 +2,7 @@ package com.itinera.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -30,6 +31,7 @@ public class DayPlan {
     private String title;
 
     @JsonManagedReference
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "dayPlan", cascade = CascadeType.ALL)
     private List<Activity> activities;
 }
