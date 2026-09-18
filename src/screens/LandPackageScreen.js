@@ -1,6 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Animated,
   FlatList,
   ImageBackground,
   Pressable,
@@ -159,7 +158,6 @@ const LandPackageScreen = ({ navigation }) => {
       travelDates,
       travellers,
     });
-  const ctaScale = useRef(new Animated.Value(1)).current;
 
   const destinations = useMemo(() => {
     if (!selectedCategory) {
@@ -192,24 +190,6 @@ const LandPackageScreen = ({ navigation }) => {
       budget: '',
       people: '',
     });
-  };
-
-  const handleExplorePressIn = () => {
-    Animated.spring(ctaScale, {
-      toValue: 0.97,
-      useNativeDriver: true,
-      speed: 20,
-      bounciness: 4,
-    }).start();
-  };
-
-  const handleExplorePressOut = () => {
-    Animated.spring(ctaScale, {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 20,
-      bounciness: 6,
-    }).start();
   };
 
 
@@ -581,7 +561,13 @@ const LandPackageScreen = ({ navigation }) => {
 
       {!isDesktop ? (
       <View style={styles.header}>
-        <TouchableOpacity style={styles.floatingButton} onPress={() => navigation.goBack()}>
+        {/* Picking a market swaps this screen's content rather than pushing a
+            new screen, so Back has to undo that step first - otherwise it
+            leaves Packages entirely from what looks like a sub-page. */}
+        <TouchableOpacity
+          style={styles.floatingButton}
+          onPress={() => (selectedCategory ? setSelectedCategory(null) : navigation.goBack())}
+        >
           <Ionicons name="chevron-back" size={22} color={Colors.secondary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Land Packages</Text>
@@ -597,30 +583,6 @@ const LandPackageScreen = ({ navigation }) => {
           ? renderDestinationSelection()
           : renderCategorySelection()}
 
-      {/* Phone-only: on the desktop landing there is no selected category, so
-          this sat pinned over the content permanently disabled. */}
-      {!isDesktop && <View style={styles.floatingCtaWrap}>
-        <Animated.View style={{ transform: [{ scale: ctaScale }] }}>
-          <TouchableOpacity
-            style={[styles.floatingCta, !selectedCategory && styles.floatingCtaDisabled]}
-            activeOpacity={0.92}
-            onPress={() => selectedCategory && setSearchQuery('')}
-            onPressIn={handleExplorePressIn}
-            onPressOut={handleExplorePressOut}
-            disabled={!selectedCategory}
-          >
-            <View>
-              <Text style={styles.floatingCtaLabel}>Next step</Text>
-              <Text style={styles.floatingCtaTitle}>
-                {selectedCategory ? `${selectedCategoryMeta?.title} packages ready` : 'Explore Packages'}
-              </Text>
-            </View>
-            <View style={styles.floatingArrow}>
-              <Ionicons name={selectedCategory ? 'sparkles-outline' : 'arrow-forward'} size={18} color={Colors.secondary} />
-            </View>
-          </TouchableOpacity>
-        </Animated.View>
-      </View>}
       <DatePickerModal
         visible={datePickerVisible}
         rangeMode
@@ -1156,52 +1118,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.78)',
     textAlign: 'center',
     lineHeight: 21,
-  },
-  floatingCtaWrap: {
-    position: 'absolute',
-    left: 18,
-    right: 18,
-    bottom: 18,
-  },
-  floatingCta: {
-    backgroundColor: 'rgba(255,248,244,0.2)',
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    elevation: 10,
-  },
-  floatingCtaDisabled: {
-    opacity: 0.75,
-  },
-  floatingCtaLabel: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  floatingCtaTitle: {
-    color: Colors.secondary,
-    fontSize: 18,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  floatingArrow: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,248,244,0.16)',
   },
 });
 
