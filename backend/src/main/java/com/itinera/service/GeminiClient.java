@@ -34,12 +34,15 @@ public class GeminiClient {
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(10000);
-        requestFactory.setReadTimeout(30000);
+        requestFactory.setReadTimeout(90000);
 
         this.restClient = RestClient.builder()
                 .baseUrl(geminiConfig.getBaseUrl())
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                // Ask for JSON explicitly. Without it Google has answered with
+                // application/octet-stream, which no converter maps to JsonNode.
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
 
@@ -86,12 +89,37 @@ public class GeminiClient {
         }
 
         try {
-            JsonNode response = restClient.post()
+            // Read the body as text and parse it here rather than letting the
+            // converter pick by content type. Google has returned 200s labelled
+            // application/octet-stream, which failed conversion to JsonNode and
+            // surfaced as "Error while extracting response" with the real
+            // payload thrown away.
+            String raw = restClient.post()
                     .uri("/v1beta/models/{model}:generateContent?key={apiKey}",
                             geminiConfig.getModel(), geminiConfig.getApiKey())
                     .body(body)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(String.class);
+
+            if (!StringUtils.hasText(raw)) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Gemini returned an empty body");
+            }
+
+            JsonNode response;
+            try {
+                response = objectMapper.readTree(raw);
+            } catch (Exception ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "Gemini returned a body that is not JSON: " + raw.substring(0, Math.min(raw.length(), 300)));
+            }
+
+            // A model name that no longer exists comes back here rather than as
+            // an HTTP error, so say which model was asked for.
+            if (response.has("error")) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                        "Gemini rejected the request for model '" + geminiConfig.getModel() + "': "
+                                + response.path("error").path("message").asText(response.toString()));
+            }
 
             String text = response
                     .path("candidates").path(0)

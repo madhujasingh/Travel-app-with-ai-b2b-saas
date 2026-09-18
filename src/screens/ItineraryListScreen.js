@@ -316,9 +316,22 @@ const ItineraryListScreen = ({ route, navigation }) => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="search" size={52} color={Colors.primary} style={styles.emptyIcon} />
+              {/* Customer-facing: this used to read "Add one in the backend and
+                  it will appear here", which is an instruction to us, not to a
+                  traveller. Offer a way onward instead of a dead end. */}
+              <Text style={styles.emptyTitle}>No packages here yet</Text>
               <Text style={styles.emptyText}>
-                No itineraries found yet. Add one in the backend and it will appear here.
+                {destination
+                  ? `We don't have a package ready for ${destination} right now. Try another destination, or talk to us and we'll build one for you.`
+                  : "We don't have a package matching that yet. Try another destination, or talk to us and we'll build one for you."}
               </Text>
+              <TouchableOpacity
+                style={styles.emptyCta}
+                onPress={() => requireAuth(() => navigation.navigate('TalkToAgent'), 'Sign in to chat with a travel expert.')}
+              >
+                <Ionicons name="headset-outline" size={18} color={Colors.secondary} />
+                <Text style={styles.emptyCtaText}>Plan it with an expert</Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -350,6 +363,24 @@ const ItineraryListScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: Colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+  },
+  emptyCtaText: { color: Colors.secondary, fontSize: 14, fontWeight: '700' },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
