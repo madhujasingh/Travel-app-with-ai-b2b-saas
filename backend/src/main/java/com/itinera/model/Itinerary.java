@@ -1,6 +1,8 @@
 package com.itinera.model;
 
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -73,24 +75,30 @@ public class Itinerary {
     private LocalDateTime updatedAt;
 
     @ElementCollection
+    @BatchSize(size = 50)
     @CollectionTable(name = "itinerary_highlights", joinColumns = @JoinColumn(name = "itinerary_id"))
     @Column(name = "highlight")
     private List<String> highlights;
 
     @ElementCollection
+    @BatchSize(size = 50)
     @CollectionTable(name = "itinerary_inclusions", joinColumns = @JoinColumn(name = "itinerary_id"))
     @Column(name = "inclusion")
     private List<String> inclusions;
 
     @ElementCollection
+    @BatchSize(size = 50)
     @CollectionTable(name = "itinerary_exclusions", joinColumns = @JoinColumn(name = "itinerary_id"))
     @Column(name = "exclusion")
     private List<String> exclusions;
 
     @JsonManagedReference
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "itinerary", cascade = CascadeType.ALL)
     private List<DayPlan> dayPlans;
 
+    @JsonIgnore
+    @BatchSize(size = 50)
     @OneToMany(mappedBy = "itinerary", cascade = CascadeType.ALL)
     private List<Booking> bookings;
 
