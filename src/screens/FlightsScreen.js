@@ -1464,10 +1464,14 @@ const FlightsScreen = ({ navigation }) => {
       return;
     }
 
-    navigation.navigate('Checkout', {
-      cartItems: [reviewedFare.cartItem],
-      total: reviewedFare.cartItem.lineTotal,
-    });
+    requireAuth(
+      () =>
+      navigation.navigate('Checkout', {
+        cartItems: [reviewedFare.cartItem],
+        total: reviewedFare.cartItem.lineTotal,
+      }),
+      'Sign in to complete your booking.'
+    );
   };
 
   const holdThisFare = () => {
@@ -3100,7 +3104,12 @@ const FlightsScreen = ({ navigation }) => {
           <TouchableOpacity style={styles.heroCircleButton} onPress={handleHeaderBack}>
             <Ionicons name="chevron-back" size={22} color={Colors.accentBlueDark} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.heroCircleButton} onPress={() => navigation.navigate('MyFlightBookings')}>
+          <TouchableOpacity
+            style={styles.heroCircleButton}
+            onPress={() =>
+              requireAuth(() => navigation.navigate('MyFlightBookings'), 'Sign in to see your bookings.')
+            }
+          >
             <Ionicons name="briefcase-outline" size={19} color={Colors.accentBlueDark} />
           </TouchableOpacity>
         </View>

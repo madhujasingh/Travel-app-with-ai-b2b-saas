@@ -16,6 +16,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { getSampleItineraries } from '../data/sampleItineraries';
 import { marketForDestination } from '../data/packageDestinations';
+import { useAuth } from '../context/AuthContext';
 
 const TYPE_TO_ICON = {
   budget: 'wallet-outline',
@@ -50,6 +51,7 @@ const normalizeItinerary = (item) => {
 };
 
 const ItineraryListScreen = ({ route, navigation }) => {
+  const { requireAuth } = useAuth();
   const { centeredContent } = useResponsive();
   const { destination, budget, people, adults, children, type } = route.params;
   const [itineraries, setItineraries] = useState([]);
@@ -326,14 +328,18 @@ const ItineraryListScreen = ({ route, navigation }) => {
       <TouchableOpacity
         style={styles.talkToAgentButton}
         onPress={() =>
-          navigation.navigate('TalkToAgent', {
-            destination,
-            budget,
-            people,
-            adults,
-            children,
-            itineraries: getFilteredItineraries(),
-          })
+          requireAuth(
+            () =>
+            navigation.navigate('TalkToAgent', {
+              destination,
+              budget,
+              people,
+              adults,
+              children,
+              itineraries: getFilteredItineraries(),
+            }),
+            'Sign in to chat with a travel expert.'
+          )
         }
       >
         <Ionicons name="chatbubble-ellipses" size={22} color={Colors.secondary} style={styles.talkToAgentIcon} />

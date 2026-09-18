@@ -15,8 +15,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { adaptItineraryToWeather, fetchDestinationWeatherForecast } from '../utils/weatherPlanner';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 const ItineraryDetailScreen = ({ route, navigation }) => {
+  const { requireAuth } = useAuth();
   const { centeredContent } = useResponsive();
   const { itinerary, destination, people, adults, children } = route.params;
   const { addItemToCart } = useCart();
@@ -109,29 +111,41 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
   };
 
   const handleCustomize = () => {
-    navigation.navigate('Customization', {
-      itinerary,
-      destination,
-      people,
-      adults,
-      children,
-    });
+    requireAuth(
+      () =>
+      navigation.navigate('Customization', {
+        itinerary,
+        destination,
+        people,
+        adults,
+        children,
+      }),
+      'Sign in to customise this package.'
+    );
   };
 
   const handleTalkToAgent = () => {
-    navigation.navigate('TalkToAgent', {
-      itinerary,
-      destination,
-      people,
-      adults,
-      children,
-    });
+    requireAuth(
+      () =>
+      navigation.navigate('TalkToAgent', {
+        itinerary,
+        destination,
+        people,
+        adults,
+        children,
+      }),
+      'Sign in to chat with a travel expert.'
+    );
   };
 
   const handlePlanWithGroup = () => {
-    navigation.navigate('GroupTripPlanner', {
-      seedItinerary: itinerary,
-    });
+    requireAuth(
+      () =>
+      navigation.navigate('GroupTripPlanner', {
+        seedItinerary: itinerary,
+      }),
+      'Sign in to plan a group trip.'
+    );
   };
 
   return (

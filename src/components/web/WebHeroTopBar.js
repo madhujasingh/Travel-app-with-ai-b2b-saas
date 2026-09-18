@@ -48,7 +48,7 @@ const WebHeroTopBar = () => {
         ))}
 
         <Pressable
-          onPress={() => navigation.navigate('ChatInbox')}
+          onPress={() => requireAuth(() => navigation.navigate('ChatInbox'), 'Sign in to view your messages.')}
           style={({ hovered }) => [styles.link, hovered && styles.linkHovered]}
         >
           <Ionicons name="chatbubble-ellipses-outline" size={17} color="#FFFFFF" />

@@ -26,6 +26,7 @@ import WebStickyHeader from '../components/web/WebStickyHeader';
 import WebHero from '../components/web/WebHero';
 import WebSearchPanel from '../components/web/WebSearchPanel';
 import WebField from '../components/web/WebField';
+import { useAuth } from '../context/AuthContext';
 
 const SERVICE_IMAGES = {
   landPackage: require('../../assets/services/land-package.png'),
@@ -40,6 +41,7 @@ const SERVICE_IMAGES = {
 const HERO_IMAGE = require('../../assets/home/hero-sunset.jpg');
 
 const HomeScreen = ({ navigation }) => {
+  const { requireAuth } = useAuth();
   const { isDesktop } = useResponsive();
   const { scrolled, scrollProps } = useHeroHeader();
   const [budget, setBudget] = useState('');
@@ -251,7 +253,7 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.headerRow}>
             <TouchableOpacity
               style={styles.iconButton}
-              onPress={() => navigation.navigate('ChatInbox')}
+              onPress={() => requireAuth(() => navigation.navigate('ChatInbox'), 'Sign in to view your messages.')}
               activeOpacity={0.85}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={20} color={Colors.secondary} />
@@ -602,7 +604,7 @@ const HomeScreen = ({ navigation }) => {
           while floating over scrollable content - see commit e0d64b8. */}
       <TouchableOpacity
         style={styles.talkFloatingButton}
-        onPress={() => navigation.navigate('TalkToAgent')}
+        onPress={() => requireAuth(() => navigation.navigate('TalkToAgent'), 'Sign in to chat with a travel expert.')}
         activeOpacity={0.85}
       >
         <Ionicons name="headset" size={20} color={Colors.primary} />
