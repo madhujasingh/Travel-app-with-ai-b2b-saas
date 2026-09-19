@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.itinera.model.HotelSyncJob;
 import com.itinera.repository.HotelSyncJobRepository;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -96,6 +98,34 @@ public class HotelSyncJobRunner {
     // its startedAt is never used as a watermark - the next run naturally
     // retries the same range instead of silently skipping whatever was past
     // the cap (safe either way, since every sync here is an upsert).
+    // A sync runs @Async in-process, so if the process stops mid-job - which on
+    // Render's free tier it does, the instance spins down whenever traffic
+    // stops - the row is left saying RUNNING forever with nothing behind it.
+    // One such job sat RUNNING for 40 hours before this existed.
+    //
+    // Marked FAILED on startup rather than resumed: the work is an upsert and
+    // the watermark only ever anchors to a COMPLETED job, so the next run
+    // simply covers the same range again. Nothing is lost by giving up on it,
+    // and an honest FAILED is worth more than a RUNNING that will never end.
+    //
+    // Safe because this deployment runs a single instance. With more than one,
+    // this would need to check ownership rather than assume any in-flight job
+    // belongs to the process that just died.
+    @EventListener(ApplicationReadyEvent.class)
+    public void failOrphanedJobs() {
+        List<HotelSyncJob> orphaned = jobRepository.findByStatusIn(List.of("PENDING", "RUNNING"));
+        if (orphaned.isEmpty()) {
+            return;
+        }
+        orphaned.forEach(job -> {
+            job.setStatus("FAILED");
+            job.setErrorMessage("Interrupted - the service stopped while this job was running.");
+            job.setUpdatedAt(LocalDateTime.now());
+            job.setCompletedAt(LocalDateTime.now());
+        });
+        jobRepository.saveAll(orphaned);
+    }
+
     @Scheduled(cron = "0 0 4 * * *")
     public void refreshGlobalDelta() {
         startGlobalDeltaSync();

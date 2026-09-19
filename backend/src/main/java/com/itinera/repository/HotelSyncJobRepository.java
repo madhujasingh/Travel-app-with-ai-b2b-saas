@@ -17,4 +17,9 @@ public interface HotelSyncJobRepository extends JpaRepository<HotelSyncJob, Long
     // changed since the previous one started (not "since it finished",
     // which would risk missing anything that changed mid-run).
     Optional<HotelSyncJob> findTopByTypeAndStatusOrderByStartedAtDesc(String type, String status);
+
+    // Jobs that were in flight when the process stopped. Nothing owns these
+    // any more, so they need clearing on startup - see
+    // HotelSyncJobRunner.failOrphanedJobs.
+    List<HotelSyncJob> findByStatusIn(List<String> statuses);
 }
