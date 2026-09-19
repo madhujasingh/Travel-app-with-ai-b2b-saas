@@ -350,8 +350,12 @@ const HotelsScreen = ({ navigation }) => {
   const selectCity = async (cityEntry) => {
     try {
       setSelectingCity(true);
+      // Hotels near the city, not hotels labelled with its name. TripJack
+      // files localities as separate cities - Danapur is 8km from the centre
+      // of Patna with its own 110 hotels - so matching on the string alone
+      // missed about a fifth of what its own site shows.
       const hotelsInCity = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotel-catalog?city=${encodeURIComponent(cityEntry.city)}`,
+        `${API_CONFIG.BASE_URL}/hotel-catalog/near?city=${encodeURIComponent(cityEntry.city)}&radiusKm=25`,
         { method: 'GET' },
         'Unable to load hotels for this city right now.'
       );

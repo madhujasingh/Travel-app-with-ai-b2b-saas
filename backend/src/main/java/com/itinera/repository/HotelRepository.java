@@ -54,6 +54,44 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
                    "LIMIT :limit", nativeQuery = true)
     List<CityCount> searchCityCounts(@Param("term") String term, @Param("limit") int limit);
 
+    // Hotels near a city, rather than hotels labelled with its name.
+    //
+    // TripJack files localities as separate cities, inconsistently: Danapur is
+    // 8km from the centre of Patna and has its own 110 hotels, Kankarbagh is
+    // 0.8-3.6km out with 5 more, and two hotels in the same Kankarbagh street
+    // are filed one under KANKARBAGH and one under PATNA DISTRICT. Matching on
+    // the city string found 473 hotels where TripJack's own site found ~580.
+    //
+    // So the city only supplies a centre point - its hotels' median position,
+    // which needs no separate table of city coordinates - and everything
+    // within the radius is returned whatever its label says.
+    //
+    // The bounding box is what makes this quick: it is index-friendly and
+    // discards almost everything before the distance is computed for the
+    // handful that remain. 1 degree of latitude is ~111km; longitude shrinks
+    // by cos(lat), hence the division.
+    @Query(value =
+            "WITH centre AS ( " +
+            "  SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY latitude) AS lat, " +
+            "         percentile_cont(0.5) WITHIN GROUP (ORDER BY longitude) AS lon " +
+            "  FROM hotels WHERE upper(city) = upper(:city) AND latitude IS NOT NULL " +
+            ") " +
+            "SELECT h.* FROM hotels h, centre c " +
+            "WHERE h.latitude IS NOT NULL AND h.longitude IS NOT NULL " +
+            "  AND h.latitude  BETWEEN c.lat - (:radiusKm / 111.0) AND c.lat + (:radiusKm / 111.0) " +
+            "  AND h.longitude BETWEEN c.lon - (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
+            "                      AND c.lon + (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
+            "  AND 6371 * acos(least(1.0, " +
+            "        cos(radians(c.lat)) * cos(radians(h.latitude)) * " +
+            "        cos(radians(h.longitude) - radians(c.lon)) + " +
+            "        sin(radians(c.lat)) * sin(radians(h.latitude)))) <= :radiusKm " +
+            "ORDER BY 6371 * acos(least(1.0, " +
+            "        cos(radians(c.lat)) * cos(radians(h.latitude)) * " +
+            "        cos(radians(h.longitude) - radians(c.lon)) + " +
+            "        sin(radians(c.lat)) * sin(radians(h.latitude))))",
+            nativeQuery = true)
+    List<Hotel> findNearCity(@Param("city") String city, @Param("radiusKm") double radiusKm);
+
     // One-time cleanup for hotels synced before HotelCatalogService switched
     // to storing only lightweight fields in bulk (see
     // HotelCatalogService.clearHeavyContent) - a single bulk UPDATE rather

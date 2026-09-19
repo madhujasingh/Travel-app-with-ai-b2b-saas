@@ -205,6 +205,19 @@ public class HotelCatalogController {
                 hotelRepository.searchCityCounts(term, Math.min(Math.max(limit, 1), 50)));
     }
 
+    // Hotels near a city rather than hotels labelled with its name - see
+    // HotelRepository.findNearCity. radiusKm defaults to 25, which on the
+    // Patna data caught 578 of 581 nearby hotels; the three it missed are 30km
+    // out and genuinely a different town.
+    @GetMapping("/near")
+    public ResponseEntity<List<Hotel>> near(
+            @RequestParam String city,
+            @RequestParam(defaultValue = "25") double radiusKm
+    ) {
+        double radius = Math.min(Math.max(radiusKm, 1), 100);
+        return ResponseEntity.ok(hotelRepository.findNearCity(city, radius));
+    }
+
     @GetMapping
     public ResponseEntity<List<Hotel>> list(
             @RequestParam(required = false) String country,

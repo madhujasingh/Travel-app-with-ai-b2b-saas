@@ -25,3 +25,13 @@ CREATE INDEX IF NOT EXISTS hotels_name_city_trgm
 --   EXPLAIN ANALYZE SELECT * FROM hotels
 --   WHERE lower(name) LIKE lower('%taj jumeirah%') LIMIT 20;
 -- Expect a Bitmap Index Scan on hotels_name_trgm, not a Seq Scan.
+
+-- ---------------------------------------------------------------------------
+-- Index for the radius search (GET /hotel-catalog/near).
+--
+-- The query bounds a lat/long box before computing distances, so this is what
+-- makes that box cheap. Without it the box predicate scans every row, and the
+-- point of the box is to avoid exactly that.
+CREATE INDEX IF NOT EXISTS hotels_lat_lon
+    ON hotels (latitude, longitude)
+    WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
