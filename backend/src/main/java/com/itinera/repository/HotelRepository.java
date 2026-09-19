@@ -66,10 +66,17 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
     // which needs no separate table of city coordinates - and everything
     // within the radius is returned whatever its label says.
     //
+    // Strictly additive: a hotel qualifies if it is inside the radius OR still
+    // carries the city's own label. Radius alone would have dropped Hotel
+    // Amprapali Vihar - filed under PATNA DISTRICT but 44km from the centre -
+    // and a change meant to pick up neighbouring localities must not quietly
+    // lose hotels that were already being found.
+    //
     // The bounding box is what makes this quick: it is index-friendly and
     // discards almost everything before the distance is computed for the
     // handful that remain. 1 degree of latitude is ~111km; longitude shrinks
-    // by cos(lat), hence the division.
+    // by cos(lat), hence the division. Hotels without coordinates are kept
+    // when the label matches, and sort last.
     @Query(value =
             "WITH centre AS ( " +
             "  SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY latitude) AS lat, " +
@@ -77,15 +84,17 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
             "  FROM hotels WHERE upper(city) = upper(:city) AND latitude IS NOT NULL " +
             ") " +
             "SELECT h.* FROM hotels h, centre c " +
-            "WHERE h.latitude IS NOT NULL AND h.longitude IS NOT NULL " +
-            "  AND h.latitude  BETWEEN c.lat - (:radiusKm / 111.0) AND c.lat + (:radiusKm / 111.0) " +
-            "  AND h.longitude BETWEEN c.lon - (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
-            "                      AND c.lon + (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
-            "  AND 6371 * acos(least(1.0, " +
-            "        cos(radians(c.lat)) * cos(radians(h.latitude)) * " +
-            "        cos(radians(h.longitude) - radians(c.lon)) + " +
-            "        sin(radians(c.lat)) * sin(radians(h.latitude)))) <= :radiusKm " +
-            "ORDER BY 6371 * acos(least(1.0, " +
+            "WHERE upper(h.city) = upper(:city) " +
+            "   OR ( h.latitude IS NOT NULL AND h.longitude IS NOT NULL " +
+            "        AND h.latitude  BETWEEN c.lat - (:radiusKm / 111.0) AND c.lat + (:radiusKm / 111.0) " +
+            "        AND h.longitude BETWEEN c.lon - (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
+            "                            AND c.lon + (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
+            "        AND 6371 * acos(least(1.0, " +
+            "              cos(radians(c.lat)) * cos(radians(h.latitude)) * " +
+            "              cos(radians(h.longitude) - radians(c.lon)) + " +
+            "              sin(radians(c.lat)) * sin(radians(h.latitude)))) <= :radiusKm ) " +
+            "ORDER BY CASE WHEN h.latitude IS NULL THEN 1 ELSE 0 END, " +
+            "  6371 * acos(least(1.0, " +
             "        cos(radians(c.lat)) * cos(radians(h.latitude)) * " +
             "        cos(radians(h.longitude) - radians(c.lon)) + " +
             "        sin(radians(c.lat)) * sin(radians(h.latitude))))",
