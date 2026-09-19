@@ -301,6 +301,29 @@ const HotelDetailScreen = ({ route, navigation }) => {
     return true;
   });
 
+  // TripJack returns one entry per room-and-meal-plan combination, so the same
+  // room comes back several times at different prices. Grouping by the room
+  // means its name and photos are shown once with its rates listed beneath,
+  // which is how TripJack's own portal presents it - otherwise fifteen rates
+  // for four rooms reads as fifteen near-identical cards.
+  const roomGroups = (() => {
+    const groups = new Map();
+    filteredOptions.forEach((option) => {
+      const rooms = option.roomInfo || [];
+      const key = rooms.map((room) => room.name).filter(Boolean).join(' + ') || 'Room';
+      if (!groups.has(key)) groups.set(key, { key, rooms, options: [] });
+      groups.get(key).options.push(option);
+    });
+    // Cheapest room first, and cheapest rate first within each room.
+    const list = Array.from(groups.values());
+    list.forEach((group) =>
+      group.options.sort((a, b) => (a.pricing?.totalPrice || 0) - (b.pricing?.totalPrice || 0))
+    );
+    return list.sort(
+      (a, b) => (a.options[0]?.pricing?.totalPrice || 0) - (b.options[0]?.pricing?.totalPrice || 0)
+    );
+  })();
+
   const toggleMealBasisFilter = (meal) => {
     setSelectedMealBasis((current) => {
       const next = new Set(current);
@@ -767,7 +790,41 @@ const HotelDetailScreen = ({ route, navigation }) => {
             </>
           )}
 
-          {filteredOptions.map((option) => {
+          {roomGroups.map((group) => (
+            <View key={group.key} style={styles.roomGroup}>
+              <View style={styles.roomGroupHeader}>
+                <Text style={styles.roomGroupTitle}>{group.key}</Text>
+                <Text style={styles.roomGroupMeta}>
+                  {group.options.length} rate{group.options.length === 1 ? '' : 's'}
+                </Text>
+              </View>
+
+              {(() => {
+                // One photo strip for the room, not one per rate.
+                const groupImages = (group.rooms || []).flatMap((room) => roomImagesById[room.id] || []);
+                const unique = Array.from(new Set(groupImages));
+                if (unique.length === 0) return null;
+                return (
+                  <FlatList
+                    horizontal
+                    data={unique}
+                    keyExtractor={(url) => url}
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.roomImageRow}
+                    initialNumToRender={6}
+                    renderItem={({ item: url }) => (
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => setViewerState({ images: unique, index: Math.max(unique.indexOf(url), 0) })}
+                      >
+                        <Image source={{ uri: url }} style={styles.roomImageThumb} resizeMode="cover" />
+                      </TouchableOpacity>
+                    )}
+                  />
+                );
+              })()}
+
+          {group.options.map((option) => {
             const cancellation = cancellationSummary(option.cancellation);
             const isSoldOut = soldOutOptionIds.has(option.optionId);
             const isReviewing = reviewingOptionId === option.optionId;
@@ -784,38 +841,13 @@ const HotelDetailScreen = ({ route, navigation }) => {
             return (
               <View key={option.optionId} style={[styles.optionCard, isReviewed && styles.optionCardSelected]}>
                 <View style={styles.optionHeader}>
-                  <Text style={styles.mealBasis}>{option.mealBasis}</Text>
+                  <Text style={styles.mealBasis}>{option.mealBasis || 'Room Only'}</Text>
+                  {option.cancellation?.isRefundable ? (
+                    <Text style={styles.optionRefundable}>Refundable</Text>
+                  ) : (
+                    <Text style={styles.optionNonRefundable}>Non-refundable</Text>
+                  )}
                 </View>
-
-                {(option.roomInfo || []).map((room, index) => {
-                  const roomImages = roomImagesById[room.id] || [];
-                  return (
-                    <View key={index}>
-                      <Text style={styles.roomName}>
-                        Room {index + 1}: {room.name}
-                      </Text>
-                      {roomImages.length > 0 && (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          style={styles.roomImageRow}
-                        >
-                          {roomImages.map((url) => (
-                            <TouchableOpacity
-                              key={url}
-                              activeOpacity={0.85}
-                              onPress={() =>
-                                setViewerState({ images: roomImages, index: Math.max(roomImages.indexOf(url), 0) })
-                              }
-                            >
-                              <Image source={{ uri: url }} style={styles.roomImageThumb} resizeMode="cover" />
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      )}
-                    </View>
-                  );
-                })}
 
                 {cleanedInclusions.length > 0 && (
                   <View style={styles.inclusionsBlock}>
@@ -988,6 +1020,8 @@ const HotelDetailScreen = ({ route, navigation }) => {
               </View>
             );
           })}
+            </View>
+          ))}
         </ScrollView>
       )}
 
@@ -1058,6 +1092,28 @@ const HotelDetailScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  roomGroup: {
+    marginHorizontal: 15,
+    marginBottom: 18,
+    borderRadius: 14,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    paddingBottom: 6,
+  },
+  roomGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  roomGroupTitle: { flex: 1, fontSize: 15.5, fontWeight: '800', color: Colors.text },
+  roomGroupMeta: { fontSize: 12, color: Colors.textMuted, marginLeft: 10 },
+  optionRefundable: { fontSize: 12, fontWeight: '700', color: Colors.success },
+  optionNonRefundable: { fontSize: 12, fontWeight: '700', color: Colors.textMuted },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -1437,11 +1493,6 @@ const styles = StyleSheet.create({
   mealBasis: {
     fontSize: 13,
     color: Colors.textLight,
-  },
-  roomName: {
-    fontSize: 14,
-    color: Colors.text,
-    marginBottom: 2,
   },
   roomImageRow: {
     marginBottom: 8,
