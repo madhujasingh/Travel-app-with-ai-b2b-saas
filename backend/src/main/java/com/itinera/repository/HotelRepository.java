@@ -101,6 +101,33 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
             nativeQuery = true)
     List<Hotel> findNearCity(@Param("city") String city, @Param("radiusKm") double radiusKm);
 
+    // Same predicate, projected to ids. Callers building a TripJack Listing
+    // request need nothing else, and the full rows are heavy: Dubai is 6,772
+    // hotels of 23 fields, 4.8MB, to extract one string from each.
+    @Query(value =
+            "WITH centre AS ( " +
+            "  SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY latitude) AS lat, " +
+            "         percentile_cont(0.5) WITHIN GROUP (ORDER BY longitude) AS lon " +
+            "  FROM hotels WHERE upper(city) = upper(:city) AND latitude IS NOT NULL " +
+            ") " +
+            "SELECT h.tj_hotel_id FROM hotels h, centre c " +
+            "WHERE upper(h.city) = upper(:city) " +
+            "   OR ( h.latitude IS NOT NULL AND h.longitude IS NOT NULL " +
+            "        AND h.latitude  BETWEEN c.lat - (:radiusKm / 111.0) AND c.lat + (:radiusKm / 111.0) " +
+            "        AND h.longitude BETWEEN c.lon - (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
+            "                            AND c.lon + (:radiusKm / (111.0 * cos(radians(c.lat)))) " +
+            "        AND 6371 * acos(least(1.0, " +
+            "              cos(radians(c.lat)) * cos(radians(h.latitude)) * " +
+            "              cos(radians(h.longitude) - radians(c.lon)) + " +
+            "              sin(radians(c.lat)) * sin(radians(h.latitude)))) <= :radiusKm ) " +
+            "ORDER BY CASE WHEN h.latitude IS NULL THEN 1 ELSE 0 END, " +
+            "  6371 * acos(least(1.0, " +
+            "        cos(radians(c.lat)) * cos(radians(h.latitude)) * " +
+            "        cos(radians(h.longitude) - radians(c.lon)) + " +
+            "        sin(radians(c.lat)) * sin(radians(h.latitude))))",
+            nativeQuery = true)
+    List<String> findNearCityIds(@Param("city") String city, @Param("radiusKm") double radiusKm);
+
     // One-time cleanup for hotels synced before HotelCatalogService switched
     // to storing only lightweight fields in bulk (see
     // HotelCatalogService.clearHeavyContent) - a single bulk UPDATE rather

@@ -354,13 +354,11 @@ const HotelsScreen = ({ navigation }) => {
       // files localities as separate cities - Danapur is 8km from the centre
       // of Patna with its own 110 hotels - so matching on the string alone
       // missed about a fifth of what its own site shows.
-      const hotelsInCity = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotel-catalog/near?city=${encodeURIComponent(cityEntry.city)}&radiusKm=25`,
+      const ids = (await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotel-catalog/near?city=${encodeURIComponent(cityEntry.city)}&radiusKm=25&idsOnly=true`,
         { method: 'GET' },
         'Unable to load hotels for this city right now.'
-      );
-
-      const ids = hotelsInCity.map((h) => h.tjHotelId).filter(Boolean);
+      )).filter(Boolean);
       if (ids.length === 0) {
         appAlert('No hotels', 'No synced hotels found for this city.');
         return;

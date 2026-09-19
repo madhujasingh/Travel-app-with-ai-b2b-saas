@@ -209,12 +209,19 @@ public class HotelCatalogController {
     // HotelRepository.findNearCity. radiusKm defaults to 25, which on the
     // Patna data caught 578 of 581 nearby hotels; the three it missed are 30km
     // out and genuinely a different town.
+    // idsOnly is what the search form wants: it feeds these straight into a
+    // Listing request and reads nothing else, and the full rows are heavy -
+    // Dubai is 6,772 hotels of 23 fields, 4.8MB, for one string apiece.
     @GetMapping("/near")
-    public ResponseEntity<List<Hotel>> near(
+    public ResponseEntity<?> near(
             @RequestParam String city,
-            @RequestParam(defaultValue = "25") double radiusKm
+            @RequestParam(defaultValue = "25") double radiusKm,
+            @RequestParam(defaultValue = "false") boolean idsOnly
     ) {
         double radius = Math.min(Math.max(radiusKm, 1), 100);
+        if (idsOnly) {
+            return ResponseEntity.ok(hotelRepository.findNearCityIds(city, radius));
+        }
         return ResponseEntity.ok(hotelRepository.findNearCity(city, radius));
     }
 
