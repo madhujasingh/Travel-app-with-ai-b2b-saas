@@ -67,7 +67,7 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
   const [viewMode, setViewMode] = useState('list');
   const [visibleCount, setVisibleCount] = useState(RESULTS_PAGE_SIZE);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const scrollViewRef = useRef(null);
+  const listRef = useRef(null);
 
   const clearAllFilters = () => {
     setSelectedStars(new Set());
@@ -488,83 +488,81 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
     </>
   );
 
-  // One results scroller, rendered bare on phones and inside the desktop
-  // sidebar layout on web.
+  // The results list IS the scroller. It used to be a FlatList with
+  // scrollEnabled={false} nested inside a ScrollView, which react-native-web
+  // renders with touch-action: none - that swallows the touch gesture before
+  // the parent scroller sees it, so on a phone browser the results could not
+  // be scrolled at all. Mouse wheel was unaffected and native has no
+  // touch-action, which is why only mobile web was broken.
   const renderResultsScroll = () => (
-        <ScrollView
-          ref={scrollViewRef}
-          showsVerticalScrollIndicator={false}
-          onScroll={({ nativeEvent }) => {
-            const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
-            const nearBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 300;
-            if (nearBottom) {
-              setVisibleCount((prev) => Math.min(prev + RESULTS_PAGE_SIZE, filteredHotels.length));
-            }
-            setShowScrollTop(contentOffset.y > 400);
-          }}
-          scrollEventThrottle={200}
-        >
-          {hotels.length > 0 && (
-            <View style={styles.resultsToolbar}>
-              <View style={[styles.resultsToolbarRow, isDesktop && styles.hidden]}>
-                <TouchableOpacity style={styles.filtersButton} onPress={() => setFiltersModalVisible(true)}>
-                  <Ionicons name="options-outline" size={16} color={Colors.primary} />
-                  <Text style={styles.filtersButtonText}>Filters</Text>
-                  {activeFilterCount > 0 && (
-                    <View style={styles.filtersBadge}>
-                      <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-              <View style={styles.resultsMetaRow}>
-                <Text style={styles.resultsCount}>
-                  {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
-                  {filteredHotels.length === 1 ? '' : 's'} loaded
-                  {visibleCount < filteredHotels.length ? ' · scroll for more' : ''}
-                </Text>
-                {mappableHotels.length > 0 && (
-                  <TouchableOpacity style={styles.mapViewButton} onPress={() => setViewMode('map')}>
-                    <Ionicons name="map-outline" size={14} color={Colors.primary} />
-                    <Text style={styles.mapViewButtonText}>Map view</Text>
-                  </TouchableOpacity>
+    <FlatList
+      ref={listRef}
+      style={styles.resultsScroll}
+      data={filteredHotels.slice(0, visibleCount)}
+      renderItem={renderHotel}
+      keyExtractor={(item) => item.hotelId}
+      contentContainerStyle={[styles.listContainer, isDesktop ? null : centeredContent]}
+      showsVerticalScrollIndicator={false}
+      // A single column of cards is right on a phone and looks empty at
+      // 1200px. FlatList needs a new key when numColumns changes or it
+      // throws rather than re-laying out.
+      key={hotelColumns}
+      numColumns={hotelColumns}
+      columnWrapperStyle={hotelColumns > 1 ? styles.gridRow : undefined}
+      onEndReachedThreshold={0.6}
+      onEndReached={() =>
+        setVisibleCount((prev) => Math.min(prev + RESULTS_PAGE_SIZE, filteredHotels.length))
+      }
+      onScroll={({ nativeEvent }) => setShowScrollTop(nativeEvent.contentOffset.y > 400)}
+      scrollEventThrottle={200}
+      ListHeaderComponent={
+        hotels.length > 0 ? (
+          <View style={styles.resultsToolbar}>
+            <View style={[styles.resultsToolbarRow, isDesktop && styles.hidden]}>
+              <TouchableOpacity style={styles.filtersButton} onPress={() => setFiltersModalVisible(true)}>
+                <Ionicons name="options-outline" size={16} color={Colors.primary} />
+                <Text style={styles.filtersButtonText}>Filters</Text>
+                {activeFilterCount > 0 && (
+                  <View style={styles.filtersBadge}>
+                    <Text style={styles.filtersBadgeText}>{activeFilterCount}</Text>
+                  </View>
                 )}
-              </View>
-            </View>
-          )}
-
-          {hotels.length === 0 && (
-            <View style={styles.emptyState}>
-              <Ionicons name="bed-outline" size={40} color={Colors.textMuted} />
-              <Text style={styles.emptyStateText}>No hotels found for this search.</Text>
-              <Text style={styles.emptyStateSubtext}>Try different dates or another city.</Text>
-            </View>
-          )}
-
-          {hotels.length > 0 && filteredHotels.length === 0 && (
-            <View style={styles.emptyState}>
-              <Ionicons name="filter-outline" size={40} color={Colors.textMuted} />
-              <Text style={styles.emptyStateText}>No hotels match these filters.</Text>
-              <TouchableOpacity style={styles.clearFilterButton} onPress={clearAllFilters}>
-                <Text style={styles.clearFilterButtonText}>Clear Filters</Text>
               </TouchableOpacity>
             </View>
-          )}
-
-          <FlatList
-            data={filteredHotels.slice(0, visibleCount)}
-            renderItem={renderHotel}
-            keyExtractor={(item) => item.hotelId}
-            contentContainerStyle={[styles.listContainer, isDesktop ? null : centeredContent]}
-            scrollEnabled={false}
-            // A single column of cards is right on a phone and looks empty at
-            // 1200px. FlatList needs a new key when numColumns changes or it
-            // throws rather than re-laying out.
-            key={hotelColumns}
-            numColumns={hotelColumns}
-            columnWrapperStyle={hotelColumns > 1 ? styles.gridRow : undefined}
-          />
-        </ScrollView>
+            <View style={styles.resultsMetaRow}>
+              <Text style={styles.resultsCount}>
+                {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
+                {filteredHotels.length === 1 ? '' : 's'} loaded
+                {visibleCount < filteredHotels.length ? ' \u00b7 scroll for more' : ''}
+              </Text>
+              {mappableHotels.length > 0 && (
+                <TouchableOpacity style={styles.mapViewButton} onPress={() => setViewMode('map')}>
+                  <Ionicons name="map-outline" size={14} color={Colors.primary} />
+                  <Text style={styles.mapViewButtonText}>Map view</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        ) : null
+      }
+      ListEmptyComponent={
+        hotels.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="bed-outline" size={40} color={Colors.textMuted} />
+            <Text style={styles.emptyStateText}>No hotels found for this search.</Text>
+            <Text style={styles.emptyStateSubtext}>Try different dates or another city.</Text>
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons name="filter-outline" size={40} color={Colors.textMuted} />
+            <Text style={styles.emptyStateText}>No hotels match these filters.</Text>
+            <TouchableOpacity style={styles.clearFilterButton} onPress={clearAllFilters}>
+              <Text style={styles.clearFilterButtonText}>Clear Filters</Text>
+            </TouchableOpacity>
+          </View>
+        )
+      }
+    />
   );
 
   return (
@@ -624,7 +622,7 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
         <TouchableOpacity
           style={styles.scrollTopButton}
           activeOpacity={0.85}
-          onPress={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+          onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
         >
           <Ionicons name="arrow-up" size={22} color={Colors.secondary} />
         </TouchableOpacity>
@@ -665,6 +663,7 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  resultsScroll: { flex: 1 },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
