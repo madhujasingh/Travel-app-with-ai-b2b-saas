@@ -134,7 +134,22 @@ public class HotelSyncJobRunner {
     // Manual trigger (see HotelCatalogController) - same logic the schedule
     // runs, exposed so an admin can force a run instead of waiting for 4am.
     public HotelSyncJob startGlobalDeltaSync() {
-        String watermark = jobRepository.findTopByTypeAndStatusOrderByStartedAtDesc("GLOBAL_DELTA", "COMPLETED")
+        return startGlobalDeltaSync(null);
+    }
+
+    // sinceIso overrides the watermark, so a backlog can be caught up in
+    // slices. It has to be: a run only has about half an hour before this
+    // instance is recycled, and a month of arrears is ~100,000 records - two
+    // attempts died at 29 and 30 minutes having synced 77,661 and 101,031,
+    // so the range has to be small enough to finish rather than restart from
+    // the same place forever.
+    //
+    // Only a COMPLETED run advances the watermark, so slices must be applied
+    // oldest-first for the next one to pick up where the last left off.
+    public HotelSyncJob startGlobalDeltaSync(String sinceIso) {
+        String watermark = sinceIso != null && !sinceIso.isBlank()
+                ? sinceIso
+                : jobRepository.findTopByTypeAndStatusOrderByStartedAtDesc("GLOBAL_DELTA", "COMPLETED")
                 .map(j -> j.getStartedAt().toString() + "Z")
                 .orElse(LocalDateTime.now().toString() + "Z");
 

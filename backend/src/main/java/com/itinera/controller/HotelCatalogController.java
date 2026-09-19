@@ -137,9 +137,12 @@ public class HotelCatalogController {
     // NEW/UPDATE/DELETE delta sync (see HotelSyncJobRunner.refreshGlobalDelta)
     // instead of waiting for its 4am schedule. Returns immediately with a
     // job id - poll GET /hotel-catalog/sync-jobs/{id}.
+    // sinceIso is optional - omit it for the normal "changes since the last
+    // completed run" behaviour, or pass an ISO-8601 UTC timestamp to catch a
+    // backlog up in slices small enough to finish inside one run.
     @PostMapping("/sync-global-delta")
-    public ResponseEntity<?> syncGlobalDelta() {
-        HotelSyncJob job = hotelSyncJobRunner.startGlobalDeltaSync();
+    public ResponseEntity<?> syncGlobalDelta(@RequestParam(required = false) String sinceIso) {
+        HotelSyncJob job = hotelSyncJobRunner.startGlobalDeltaSync(sinceIso);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
