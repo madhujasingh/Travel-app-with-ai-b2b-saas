@@ -283,9 +283,15 @@ public class HotelCatalogService {
     // Returns the real number of rows removed - most ids TripJack reports
     // as deleted were never in our catalog (we only sync a fraction of
     // their global inventory), so this is typically far smaller than
-    // tjHotelIds.size(). deleteByTjHotelIdIn is transactional on its own
-    // (Spring Data JPA wraps @Modifying queries regardless of caller
-    // context), so no extra @Transactional wrapping is needed here.
+    // tjHotelIds.size().
+    //
+    // This used to claim Spring Data wraps @Modifying queries in a transaction
+    // on its own, so no @Transactional was needed. It does not, and the global
+    // delta sync failed here every time it had deletions to apply, at the very
+    // end of the run - "TransactionRequiredException: Executing an
+    // update/delete query". The annotation now sits on the repository queries
+    // themselves so no caller has to remember.
+    @Transactional
     public int deleteHotelsByTjHotelIds(List<String> tjHotelIds) {
         if (tjHotelIds == null || tjHotelIds.isEmpty()) {
             return 0;

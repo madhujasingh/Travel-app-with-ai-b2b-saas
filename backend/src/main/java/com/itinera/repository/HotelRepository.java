@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -20,6 +21,7 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
     // than loading/re-saving every row, so it stays fast and memory-safe
     // regardless of table size.
     @Modifying
+    @Transactional
     @Query("UPDATE Hotel h SET h.imagesJson = null, h.amenitiesJson = null, h.descriptionsJson = null, h.policiesJson = null " +
            "WHERE h.imagesJson IS NOT NULL OR h.amenitiesJson IS NOT NULL OR h.descriptionsJson IS NOT NULL OR h.policiesJson IS NOT NULL")
     int clearHeavyContent();
@@ -42,6 +44,7 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
     // clearHeavyContent - one statement rather than loading/deleting rows
     // one at a time.
     @Modifying
+    @Transactional
     @Query("DELETE FROM Hotel h WHERE UPPER(h.countryName) = UPPER(:countryName) AND UPPER(h.city) NOT IN :keepCitiesUpper")
     int deleteByCountryNameExceptCities(@Param("countryName") String countryName, @Param("keepCitiesUpper") List<String> keepCitiesUpper);
 
@@ -53,6 +56,7 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
     // global inventory), so that real count is very different from - and
     // much smaller than - the number of ids checked.
     @Modifying
+    @Transactional
     @Query("DELETE FROM Hotel h WHERE h.tjHotelId IN :tjHotelIds")
     int deleteByTjHotelIdIn(@Param("tjHotelIds") List<String> tjHotelIds);
 
