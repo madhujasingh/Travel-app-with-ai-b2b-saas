@@ -15,6 +15,32 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
     List<Hotel> findByCountryNameIgnoreCase(String countryName);
     List<Hotel> findByCityIgnoreCase(String city);
 
+    // Type-ahead over 175k+ hotels. Matches name and city together so
+    // "taj mumbai" works as one query.
+    //
+    // Deliberately avoids pg_trgm's similarity() in the ordering: the GIN
+    // trigram index (db/hotel-search-index.sql) makes this fast, but the query
+    // still returns correct results without it, just slowly. Depending on the
+    // extension would mean search failing outright wherever it isn't installed.
+    //
+    // Ordering puts names that start with the term first, then earliest match
+    // position, so typing "taj" ranks "Taj Palace" above "Hotel Grand Taj".
+    // star_rating is text, so it is only cast when it actually looks numeric -
+    // a stray non-numeric value would otherwise error the whole query.
+    @Query(value =
+            "SELECT * FROM hotels h " +
+            "WHERE lower(h.name) LIKE lower(concat('%', :term, '%')) " +
+            "   OR lower(concat(h.name, ' ', coalesce(h.city, ''))) LIKE lower(concat('%', :term, '%')) " +
+            "ORDER BY " +
+            "  CASE WHEN lower(h.name) LIKE lower(concat(:term, '%')) THEN 0 ELSE 1 END, " +
+            "  position(lower(:term) in lower(h.name)), " +
+            "  CASE WHEN h.star_rating ~ '^[0-9]+(\\.[0-9]+)?$' " +
+            "       THEN cast(h.star_rating AS numeric) ELSE 0 END DESC, " +
+            "  h.name " +
+            "LIMIT :limit",
+            nativeQuery = true)
+    List<Hotel> searchByName(@Param("term") String term, @Param("limit") int limit);
+
     // One-time cleanup for hotels synced before HotelCatalogService switched
     // to storing only lightweight fields in bulk (see
     // HotelCatalogService.clearHeavyContent) - a single bulk UPDATE rather

@@ -208,6 +208,27 @@ public class HotelCatalogController {
         return ResponseEntity.ok(hotelRepository.findAll());
     }
 
+    // Public type-ahead - "search by hotel name" on the hotels form. Returns
+    // the same lightweight rows the city listing does, so the caller can feed
+    // the ids straight into a Listing call.
+    //
+    // A name search sends TripJack a handful of ids instead of every hotel in
+    // the city: Dubai alone is 6,700+ hotels, which is 68 chunked Listing
+    // calls, against one here.
+    @GetMapping("/search")
+    public ResponseEntity<?> search(
+            @RequestParam String q,
+            @RequestParam(defaultValue = "20") int limit
+    ) {
+        String term = q == null ? "" : q.trim();
+        // Below three characters the result set is meaningless and the query
+        // is at its most expensive - every second hotel matches "ta".
+        if (term.length() < 3) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(hotelRepository.searchByName(term, Math.min(Math.max(limit, 1), 50)));
+    }
+
     @GetMapping("/{tjHotelId}")
     public ResponseEntity<Hotel> get(@PathVariable String tjHotelId) {
         return hotelRepository.findById(tjHotelId)
