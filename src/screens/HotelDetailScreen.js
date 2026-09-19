@@ -32,10 +32,13 @@ const parseGalleryImages = (imagesJson) => {
   try {
     const parsed = JSON.parse(imagesJson);
     if (!Array.isArray(parsed)) return [];
+    // Every image the hotel has. This used to cut to the first 10, which is
+    // why every hotel showed exactly ten photos - TripJack returns far more
+    // (127 for one Munnar property, 62 for another). The strip below is
+    // windowed so the count doesn't cost anything to render.
     return parsed
       .map((img) => img?.links?.Standard?.href || img?.links?.XXL?.href || Object.values(img?.links || {})[0]?.href)
-      .filter(Boolean)
-      .slice(0, 10);
+      .filter(Boolean);
   } catch (err) {
     return [];
   }
@@ -548,11 +551,21 @@ const HotelDetailScreen = ({ route, navigation }) => {
                   </TouchableOpacity>
                 )}
 
+                {/* A FlatList rather than a ScrollView of Images: a hotel can
+                    have 100+ photos and mounting them all at once is slow on a
+                    phone. Horizontal, so it doesn't fight the vertical scroller
+                    for the gesture. */}
                 {galleryImages.length > 1 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryRow}>
-                    {galleryImages.map((url) => (
+                  <FlatList
+                    horizontal
+                    data={galleryImages}
+                    keyExtractor={(url) => url}
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.galleryRow}
+                    initialNumToRender={8}
+                    windowSize={5}
+                    renderItem={({ item: url }) => (
                       <TouchableOpacity
-                        key={url}
                         activeOpacity={0.85}
                         onPress={() =>
                           setViewerState({ images: viewerImages, index: Math.max(viewerImages.indexOf(url), 0) })
@@ -560,8 +573,8 @@ const HotelDetailScreen = ({ route, navigation }) => {
                       >
                         <Image source={{ uri: url }} style={styles.galleryThumb} resizeMode="cover" />
                       </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                    )}
+                  />
                 )}
               </>
             );
