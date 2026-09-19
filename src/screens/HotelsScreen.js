@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -90,6 +90,9 @@ const HotelsScreen = ({ navigation }) => {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
   const [hotelIdsInput, setHotelIdsInput] = useState('');
+  // Hotel-name matches for the destination picker, alongside the city list.
+  const [hotelMatches, setHotelMatches] = useState([]);
+  const [searchingHotels, setSearchingHotels] = useState(false);
   const [rooms, setRooms] = useState([createEmptyRoom()]);
   const [roomsModal, setRoomsModal] = useState(false);
   const scrollRef = useRef(null);
@@ -382,6 +385,49 @@ const HotelsScreen = ({ navigation }) => {
     } finally {
       setSelectingCity(false);
     }
+  };
+
+  // Looks up hotels by name as the traveller types. Debounced because this
+  // fires per keystroke, and held to three characters - below that nearly
+  // every hotel matches and the answer is useless.
+  useEffect(() => {
+    const term = citySearch.trim();
+    if (term.length < 3) {
+      setHotelMatches([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setSearchingHotels(true);
+        const results = await fetchHotelJson(
+          `${API_CONFIG.BASE_URL}/hotel-catalog/search?q=${encodeURIComponent(term)}`,
+          { method: 'GET' },
+          'Unable to search hotels right now.'
+        );
+        if (!cancelled) setHotelMatches(Array.isArray(results) ? results : []);
+      } catch (error) {
+        // Silent - the city list below still works, and an error toast on
+        // every keystroke would be worse than no suggestions.
+        if (!cancelled) setHotelMatches([]);
+      } finally {
+        if (!cancelled) setSearchingHotels(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [citySearch]);
+
+  // Picking one hotel sends TripJack a single id instead of every hotel in its
+  // city - one Listing call rather than 68 for somewhere like Dubai.
+  const selectHotel = (hotel) => {
+    setHotelIdsInput(String(hotel.tjHotelId));
+    setDestinationLabel(hotel.city ? `${hotel.name}, ${hotel.city}` : hotel.name);
+    setCityModal(false);
+    setCitySearch('');
+    setHotelMatches([]);
   };
 
   const filteredCities = (cities || []).filter((c) =>
@@ -793,18 +839,46 @@ const HotelsScreen = ({ navigation }) => {
         <Pressable style={styles.modalOverlay} onPress={() => setCityModal(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Choose a city</Text>
+              <Text style={styles.modalTitle}>Where to?</Text>
               <TouchableOpacity onPress={() => setCityModal(false)}>
                 <Ionicons name="close" size={20} color={Colors.text} />
               </TouchableOpacity>
             </View>
             <TextInput
               style={styles.modalSearchInput}
-              placeholder="Search city..."
+              placeholder="Search a city or hotel name..."
               placeholderTextColor={Colors.textMuted}
               value={citySearch}
               onChangeText={setCitySearch}
             />
+            {/* Hotel matches first: someone typing a hotel name wants that
+                hotel, and searching one property is far quicker than a whole
+                city. The city list stays below for browsing. */}
+            {(searchingHotels || hotelMatches.length > 0) && (
+              <View style={styles.hotelMatchBlock}>
+                <Text style={styles.modalSectionLabel}>
+                  Hotels{searchingHotels ? ' · searching…' : ''}
+                </Text>
+                {hotelMatches.slice(0, 6).map((hotel) => (
+                  <TouchableOpacity
+                    key={hotel.tjHotelId}
+                    style={styles.modalListRow}
+                    onPress={() => selectHotel(hotel)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalListRowText} numberOfLines={1}>{hotel.name}</Text>
+                      <Text style={styles.modalListRowMeta}>
+                        {[hotel.city, hotel.countryName].filter(Boolean).join(', ')}
+                      </Text>
+                    </View>
+                    <Ionicons name="bed-outline" size={16} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {hotelMatches.length > 0 && <Text style={styles.modalSectionLabel}>Cities</Text>}
+
             {loadingCities ? (
               <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
             ) : filteredCities.length === 0 ? (
@@ -873,6 +947,17 @@ const HotelsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  hotelMatchBlock: { borderBottomWidth: 1, borderBottomColor: Colors.border, paddingBottom: 6, marginBottom: 6 },
+  modalSectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    paddingHorizontal: 4,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
