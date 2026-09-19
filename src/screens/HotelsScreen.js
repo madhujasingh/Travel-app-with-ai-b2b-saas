@@ -122,7 +122,6 @@ const HotelsScreen = ({ navigation }) => {
   const [cities, setCities] = useState(null);
   const [cityModal, setCityModal] = useState(false);
   const [citySearch, setCitySearch] = useState('');
-  const [loadingCities, setLoadingCities] = useState(false);
   const [selectingCity, setSelectingCity] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState('');
 
@@ -336,23 +335,12 @@ const HotelsScreen = ({ navigation }) => {
   // manual per-hotel picking - selecting a city searches every synced hotel
   // in it, up to TripJack's 100-hids-per-request limit, same as a real OTA.
 
+  // Opens empty. It used to download every city with synced hotels - 26,500+
+  // rows, 1.6MB, about ten seconds - and filter them in the browser, which
+  // meant staring at an alphabetical list starting at "Aadit" before typing
+  // anything. Both cities and hotels are searched server-side as you type.
   const openCityModal = async () => {
     setCityModal(true);
-    if (cities) return;
-
-    try {
-      setLoadingCities(true);
-      const data = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotel-catalog/cities`,
-        { method: 'GET' },
-        'Unable to load cities right now.'
-      );
-      setCities(data || []);
-    } catch (error) {
-      appAlert('Cities', error.message || 'Unable to load cities right now.');
-    } finally {
-      setLoadingCities(false);
-    }
   };
 
   // Opens the picker pre-filtered to a city name.
@@ -394,22 +382,36 @@ const HotelsScreen = ({ navigation }) => {
     const term = citySearch.trim();
     if (term.length < 3) {
       setHotelMatches([]);
+      setCities([]);
       return undefined;
     }
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
         setSearchingHotels(true);
-        const results = await fetchHotelJson(
-          `${API_CONFIG.BASE_URL}/hotel-catalog/search?q=${encodeURIComponent(term)}`,
-          { method: 'GET' },
-          'Unable to search hotels right now.'
-        );
-        if (!cancelled) setHotelMatches(Array.isArray(results) ? results : []);
+        const [hotels, cityMatches] = await Promise.all([
+          fetchHotelJson(
+            `${API_CONFIG.BASE_URL}/hotel-catalog/search?q=${encodeURIComponent(term)}`,
+            { method: 'GET' },
+            'Unable to search hotels right now.'
+          ).catch(() => []),
+          fetchHotelJson(
+            `${API_CONFIG.BASE_URL}/hotel-catalog/cities?q=${encodeURIComponent(term)}`,
+            { method: 'GET' },
+            'Unable to search cities right now.'
+          ).catch(() => []),
+        ]);
+        if (!cancelled) {
+          setHotelMatches(Array.isArray(hotels) ? hotels : []);
+          setCities(Array.isArray(cityMatches) ? cityMatches : []);
+        }
       } catch (error) {
-        // Silent - the city list below still works, and an error toast on
-        // every keystroke would be worse than no suggestions.
-        if (!cancelled) setHotelMatches([]);
+        // Silent - an error toast on every keystroke would be worse than no
+        // suggestions.
+        if (!cancelled) {
+          setHotelMatches([]);
+          setCities([]);
+        }
       } finally {
         if (!cancelled) setSearchingHotels(false);
       }
@@ -430,9 +432,8 @@ const HotelsScreen = ({ navigation }) => {
     setHotelMatches([]);
   };
 
-  const filteredCities = (cities || []).filter((c) =>
-    `${c.city} ${c.countryName}`.toLowerCase().includes(citySearch.trim().toLowerCase())
-  );
+  // Already filtered server-side - see the lookup effect above.
+  const filteredCities = cities || [];
 
   // The full room editor. Rendered in the phone form card, and in a modal from
   // the desktop hero's Rooms & Guests field so it never needs a scroll.
@@ -879,10 +880,12 @@ const HotelsScreen = ({ navigation }) => {
 
             {hotelMatches.length > 0 && <Text style={styles.modalSectionLabel}>Cities</Text>}
 
-            {loadingCities ? (
-              <ActivityIndicator color={Colors.primary} style={styles.modalLoading} />
-            ) : filteredCities.length === 0 ? (
-              <Text style={styles.modalEmptyText}>No synced cities match "{citySearch.trim()}".</Text>
+            {citySearch.trim().length < 3 ? (
+              <Text style={styles.modalEmptyText}>
+                Start typing a city or hotel name.
+              </Text>
+            ) : filteredCities.length === 0 && hotelMatches.length === 0 && !searchingHotels ? (
+              <Text style={styles.modalEmptyText}>Nothing matches "{citySearch.trim()}".</Text>
             ) : (
               <FlatList
                 data={filteredCities}

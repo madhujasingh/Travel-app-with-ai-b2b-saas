@@ -189,9 +189,20 @@ public class HotelCatalogController {
     // Public - powers the "search by city" picker on the frontend. Only
     // returns cities that actually have synced hotels, so every result is
     // guaranteed to resolve to real, searchable hotel IDs.
+    // q filters server-side. Without it this returns every city with synced
+    // hotels - 26,500+ rows, 1.6MB, ~10s - which the picker used to download
+    // in full just to filter it in the browser. Kept unfiltered for admin use.
     @GetMapping("/cities")
-    public ResponseEntity<List<HotelRepository.CityCount>> cities() {
-        return ResponseEntity.ok(hotelRepository.findCityCounts());
+    public ResponseEntity<List<HotelRepository.CityCount>> cities(
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "20") int limit
+    ) {
+        String term = q == null ? "" : q.trim();
+        if (term.isEmpty()) {
+            return ResponseEntity.ok(hotelRepository.findCityCounts());
+        }
+        return ResponseEntity.ok(
+                hotelRepository.searchCityCounts(term, Math.min(Math.max(limit, 1), 50)));
     }
 
     @GetMapping

@@ -41,6 +41,19 @@ public interface HotelRepository extends JpaRepository<Hotel, String> {
             nativeQuery = true)
     List<Hotel> searchByName(@Param("term") String term, @Param("limit") int limit);
 
+    // Cities matching a typed term. The unfiltered findCityCounts is 26,500+
+    // rows and 1.6MB - fine as an admin listing, far too much to ship to a
+    // picker that the traveller is going to type into anyway.
+    @Query(value = "SELECT INITCAP(city) AS city, INITCAP(country_name) AS countryName, COUNT(*) AS hotelCount " +
+                   "FROM hotels WHERE city IS NOT NULL AND city <> '' " +
+                   "  AND (lower(city) LIKE lower(concat('%', :term, '%')) " +
+                   "       OR lower(country_name) LIKE lower(concat('%', :term, '%'))) " +
+                   "GROUP BY INITCAP(city), INITCAP(country_name) " +
+                   "ORDER BY CASE WHEN lower(INITCAP(city)) LIKE lower(concat(:term, '%')) THEN 0 ELSE 1 END, " +
+                   "         COUNT(*) DESC " +
+                   "LIMIT :limit", nativeQuery = true)
+    List<CityCount> searchCityCounts(@Param("term") String term, @Param("limit") int limit);
+
     // One-time cleanup for hotels synced before HotelCatalogService switched
     // to storing only lightweight fields in bulk (see
     // HotelCatalogService.clearHeavyContent) - a single bulk UPDATE rather
