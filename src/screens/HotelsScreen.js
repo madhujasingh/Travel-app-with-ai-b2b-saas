@@ -852,55 +852,65 @@ const HotelsScreen = ({ navigation }) => {
               value={citySearch}
               onChangeText={setCitySearch}
             />
-            {/* Hotel matches first: someone typing a hotel name wants that
-                hotel, and searching one property is far quicker than a whole
-                city. The city list stays below for browsing. */}
-            {(searchingHotels || hotelMatches.length > 0) && (
-              <View style={styles.hotelMatchBlock}>
-                <Text style={styles.modalSectionLabel}>
-                  Hotels{searchingHotels ? ' · searching…' : ''}
-                </Text>
-                {hotelMatches.slice(0, 6).map((hotel) => (
-                  <TouchableOpacity
-                    key={hotel.tjHotelId}
-                    style={styles.modalListRow}
-                    onPress={() => selectHotel(hotel)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.modalListRowText} numberOfLines={1}>{hotel.name}</Text>
-                      <Text style={styles.modalListRowMeta}>
-                        {[hotel.city, hotel.countryName].filter(Boolean).join(', ')}
-                      </Text>
-                    </View>
-                    <Ionicons name="bed-outline" size={16} color={Colors.textMuted} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+            {/* One scroller for both sections. They used to be a fixed hotel
+                block above a FlatList, so the list took whatever height was
+                left - about two cities - and the rest were unreachable.
 
-            {hotelMatches.length > 0 && <Text style={styles.modalSectionLabel}>Cities</Text>}
-
+                Cities lead: a city is the broader answer and what most people
+                are after. Someone who typed a hotel name finds it below, and
+                that section is short. */}
             {citySearch.trim().length < 3 ? (
-              <Text style={styles.modalEmptyText}>
-                Start typing a city or hotel name.
-              </Text>
+              <Text style={styles.modalEmptyText}>Start typing a city or hotel name.</Text>
             ) : filteredCities.length === 0 && hotelMatches.length === 0 && !searchingHotels ? (
               <Text style={styles.modalEmptyText}>Nothing matches "{citySearch.trim()}".</Text>
             ) : (
-              <FlatList
-                data={filteredCities}
-                keyExtractor={(item) => `${item.city}-${item.countryName}`}
-                style={styles.modalList}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.modalListRow} onPress={() => selectCity(item)} disabled={selectingCity}>
-                    <View>
-                      <Text style={styles.modalListRowText}>{item.city}</Text>
-                      <Text style={styles.modalListRowMeta}>{item.countryName}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
-                  </TouchableOpacity>
+              <ScrollView style={styles.modalList} keyboardShouldPersistTaps="handled">
+                {filteredCities.length > 0 && (
+                  <>
+                    <Text style={styles.modalSectionLabel}>Cities</Text>
+                    {filteredCities.map((item) => (
+                      <TouchableOpacity
+                        key={`${item.city}-${item.countryName}`}
+                        style={styles.modalListRow}
+                        onPress={() => selectCity(item)}
+                        disabled={selectingCity}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.modalListRowText}>{item.city}</Text>
+                          <Text style={styles.modalListRowMeta}>
+                            {item.countryName}
+                            {item.hotelCount ? ` · ${item.hotelCount} hotels` : ''}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+                      </TouchableOpacity>
+                    ))}
+                  </>
                 )}
-              />
+
+                {(searchingHotels || hotelMatches.length > 0) && (
+                  <>
+                    <Text style={styles.modalSectionLabel}>
+                      Hotels{searchingHotels ? ' · searching…' : ''}
+                    </Text>
+                    {hotelMatches.map((hotel) => (
+                      <TouchableOpacity
+                        key={hotel.tjHotelId}
+                        style={styles.modalListRow}
+                        onPress={() => selectHotel(hotel)}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.modalListRowText} numberOfLines={1}>{hotel.name}</Text>
+                          <Text style={styles.modalListRowMeta}>
+                            {[hotel.city, hotel.countryName].filter(Boolean).join(', ')}
+                          </Text>
+                        </View>
+                        <Ionicons name="bed-outline" size={16} color={Colors.textMuted} />
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+              </ScrollView>
             )}
           </Pressable>
         </Pressable>
@@ -950,7 +960,6 @@ const HotelsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  hotelMatchBlock: { borderBottomWidth: 1, borderBottomColor: Colors.border, paddingBottom: 6, marginBottom: 6 },
   modalSectionLabel: {
     fontSize: 11,
     fontWeight: '800',
