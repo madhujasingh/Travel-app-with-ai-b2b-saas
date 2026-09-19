@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -15,6 +15,7 @@ import useResponsive from '../hooks/useResponsive';
 import WebResultsLayout, { WebResultsBar, WebResultsCount } from '../components/web/WebResultsLayout';
 import MarkupPrice from '../components/MarkupPrice';
 import { appAlert } from '../utils/appAlert';
+import API_CONFIG from '../config/api';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -55,7 +56,63 @@ const getTopOption = (item) => (item.options || []).find((option) => option.inve
 const HotelSearchResultsScreen = ({ route, navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
   const hotelColumns = isDesktop ? 2 : 1;
-  const { hotels, searchSession, destinationLabel } = route.params;
+  const {
+    hotels: initialHotels,
+    pendingChunks,
+    listingPayload,
+    searchSession,
+    destinationLabel,
+  } = route.params;
+
+  // Hotels arrive in waves: the search screen sends the first chunk so results
+  // appear quickly, and the rest are fetched here and appended. Everything
+  // downstream - filters, facets, counts - already derives from `hotels`, so
+  // it all updates as more land.
+  const [hotels, setHotels] = useState(initialHotels || []);
+  const [remainingChunks, setRemainingChunks] = useState((pendingChunks || []).length);
+
+  useEffect(() => {
+    const chunks = pendingChunks || [];
+    if (chunks.length === 0 || !listingPayload) return undefined;
+
+    let cancelled = false;
+
+    const run = async () => {
+      // Six at a time rather than all at once: an earlier, more aggressive
+      // version of this tripped TripJack's Cloudflare rate limiting, and a
+      // large city is 20+ chunks.
+      const CONCURRENCY = 6;
+      for (let i = 0; i < chunks.length && !cancelled; i += CONCURRENCY) {
+        const wave = chunks.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          wave.map((hids) =>
+            fetch(`${API_CONFIG.BASE_URL}/hotels/listing`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...listingPayload, hids }),
+            })
+              .then((r) => (r.ok ? r.json() : null))
+              // One failed chunk shouldn't lose the hotels already on screen.
+              .catch(() => null)
+          )
+        );
+        if (cancelled) return;
+        const more = results.flatMap((data) => data?.hotels || []);
+        if (more.length > 0) {
+          setHotels((current) => {
+            const seen = new Set(current.map((h) => h.hotelId));
+            return [...current, ...more.filter((h) => !seen.has(h.hotelId))];
+          });
+        }
+        setRemainingChunks((current) => Math.max(current - wave.length, 0));
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingChunks, listingPayload]);
   const { checkIn, checkOut } = searchSession;
 
   const [filtersModalVisible, setFiltersModalVisible] = useState(false);
@@ -533,7 +590,8 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
               <Text style={styles.resultsCount}>
                 {Math.min(visibleCount, filteredHotels.length)} of {filteredHotels.length} hotel
                 {filteredHotels.length === 1 ? '' : 's'} loaded
-                {visibleCount < filteredHotels.length ? ' \u00b7 scroll for more' : ''}
+                {remainingChunks > 0 ? ' \u00b7 still searching…' : ''}
+                {remainingChunks === 0 && visibleCount < filteredHotels.length ? ' \u00b7 scroll for more' : ''}
               </Text>
               {mappableHotels.length > 0 && (
                 <TouchableOpacity style={styles.mapViewButton} onPress={() => setViewMode('map')}>

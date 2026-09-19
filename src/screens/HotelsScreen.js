@@ -255,31 +255,29 @@ const HotelsScreen = ({ navigation }) => {
       setLoading(true);
 
       const chunks = chunkArray(hids, LISTING_CHUNK_SIZE);
-      const responses = await Promise.all(
-        chunks.map((chunkHids) => {
-          const payload = { ...basePayload, hids: chunkHids };
-          if (__DEV__) console.log('[hotel listing] REQUEST', JSON.stringify(payload));
-          return fetchHotelJson(
-            `${API_CONFIG.BASE_URL}/hotels/listing`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            },
-            'Unable to search hotels right now.'
-          );
-        })
-      );
-      if (__DEV__) console.log('[hotel listing] RESPONSES', JSON.stringify(responses));
 
-      const mergedHotels = responses.flatMap((data) => data.hotels || []);
-      // Same correlationId (the docs call it "searchId" in prose) must be reused
-      // for Detail and Review - the session is valid ~15 minutes from Listing.
-      // Results render on their own screen (see HotelSearchResultsScreen)
-      // instead of inline below the form, so results are visible immediately
-      // without scrolling past the search form.
+      // Only the first chunk is awaited. A city like New Delhi is 2,207 hotels
+      // across 23 chunks and takes ~13s for all of them; waiting meant staring
+      // at a spinner for the whole of it. The results screen fetches the rest
+      // in the background and appends as they land, so the first hotels are on
+      // screen in a few seconds and nothing is dropped.
+      const firstResponse = await fetchHotelJson(
+        `${API_CONFIG.BASE_URL}/hotels/listing`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...basePayload, hids: chunks[0] }),
+        },
+        'Unable to search hotels right now.'
+      );
+
+      const mergedHotels = firstResponse.hotels || [];
+
       navigation.navigate('HotelSearchResults', {
         hotels: mergedHotels,
+        // Everything still to fetch, and what to fetch it with.
+        pendingChunks: chunks.slice(1),
+        listingPayload: basePayload,
         searchSession: {
           correlationId,
           checkIn,
