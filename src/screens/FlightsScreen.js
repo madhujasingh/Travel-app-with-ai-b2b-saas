@@ -29,7 +29,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
-import { AIRPORT_OPTIONS } from '../data/airports';
+import { findAirportByCode, searchAirports } from '../data/airports';
 import { AIRLINE_LOGOS } from '../data/airlineLogos';
 import { parseTripJackError } from '../utils/tripjackErrors';
 import { useAuth } from '../context/AuthContext';
@@ -161,27 +161,23 @@ const resolveAirportCode = (value) => {
   const normalized = value.trim().toUpperCase();
   if (!normalized) return null;
 
-  const byCity = AIRPORT_OPTIONS.find((option) => option.city.toUpperCase() === normalized);
-  if (byCity) {
-    return byCity.code;
-  }
-
-  // TripJack accepts any valid IATA airport code, not just the curated quick-pick list above.
-  if (/^[A-Z]{3}$/.test(normalized)) {
+  // A typed three-letter code wins outright - it is unambiguous, and several
+  // cities share a name with somewhere else's airport.
+  if (/^[A-Z]{3}$/.test(normalized) && findAirportByCode(normalized)) {
     return normalized;
   }
+
+  const [best] = searchAirports(normalized, 1);
+  if (best) return best.code;
+
+  // TripJack accepts any valid IATA code, including any this list has not
+  // caught up with, so an unrecognised three-letter code still goes through.
+  if (/^[A-Z]{3}$/.test(normalized)) return normalized;
 
   return null;
 };
 
-const getAirportSuggestions = (query) => {
-  const normalized = query.trim().toUpperCase();
-  if (!normalized) return [];
-
-  return AIRPORT_OPTIONS.filter(
-    (option) => option.city.toUpperCase().includes(normalized) || option.code.includes(normalized)
-  ).slice(0, 6);
-};
+const getAirportSuggestions = (query) => searchAirports(query, 6);
 
 // TripJack's segment city names come back inconsistently cased (e.g. "Navi
 // mumbai", "Delhi") - title-case each word so they read as proper names.
@@ -2504,7 +2500,14 @@ const FlightsScreen = ({ navigation }) => {
                 onPress={() => chooseAirportSuggestion(index, field, option)}
               >
                 <Ionicons name="location-outline" size={15} color={Colors.primaryDark} />
-                <Text style={styles.webSuggestCity} numberOfLines={1}>{option.city}</Text>
+                <View style={styles.suggestTextBlock}>
+                  <Text style={styles.webSuggestCity} numberOfLines={1}>{option.city}</Text>
+                  {/* The country matters now the list is every airport
+                      TripJack has - several dozen cities share a name. */}
+                  {!!option.country && (
+                    <Text style={styles.suggestCountry} numberOfLines={1}>{option.country}</Text>
+                  )}
+                </View>
                 <Text style={styles.webSuggestCode}>{option.code}</Text>
               </TouchableOpacity>
             ))}
@@ -2771,7 +2774,12 @@ const FlightsScreen = ({ navigation }) => {
                         onPress={() => chooseAirportSuggestion(index, airportSuggestFor.field, option)}
                       >
                         <Ionicons name="location-outline" size={15} color={Colors.primaryDark} />
-                        <Text style={styles.airportSuggestCity}>{option.city}</Text>
+                        <View style={styles.suggestTextBlock}>
+                          <Text style={styles.airportSuggestCity} numberOfLines={1}>{option.city}</Text>
+                          {!!option.country && (
+                            <Text style={styles.suggestCountry} numberOfLines={1}>{option.country}</Text>
+                          )}
+                        </View>
                         <Text style={styles.airportSuggestCode}>{option.code}</Text>
                       </TouchableOpacity>
                     ))}
@@ -3529,6 +3537,8 @@ const FlightsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  suggestTextBlock: { flex: 1, minWidth: 0 },
+  suggestCountry: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
   // The filters modal referenced these three and they did not exist, so it
   // rendered with no dimmed backdrop and its title and buttons stacked instead
   // of sitting on one row. Matched to calendarOverlay/calendarModalHeader,
