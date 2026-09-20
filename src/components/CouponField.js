@@ -27,7 +27,11 @@ const CouponField = ({ productType, orderAmount, applied, onApplied, onRemoved,
   const [error, setError] = useState('');
 
   const apply = async () => {
-    const entered = code.trim();
+    // Normalised here rather than in onChangeText. Rewriting the value on
+    // every keystroke moves the cursor, because the controlled value stops
+    // matching what the field already holds - on web that made the box
+    // unusable, and on a phone it dropped focus after each character.
+    const entered = code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
     if (!entered) {
       setError('Enter a coupon code.');
       return;
@@ -91,7 +95,7 @@ const CouponField = ({ productType, orderAmount, applied, onApplied, onRemoved,
           placeholder="Enter code"
           placeholderTextColor={Colors.textMuted}
           value={code}
-          onChangeText={(value) => setCode(value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))}
+          onChangeText={setCode}
           autoCapitalize="characters"
           maxLength={40}
         />

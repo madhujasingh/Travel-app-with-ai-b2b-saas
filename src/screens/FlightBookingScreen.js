@@ -1953,7 +1953,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
                     <TextInput
                       style={styles.input}
                       value={t.pan}
-                      onChangeText={(v) => updateTraveller(index, 'pan', v.toUpperCase())}
+                      onChangeText={(v) => updateTraveller(index, 'pan', v)}
                       placeholder="PAN (e.g. ABCDE1234F)"
                       placeholderTextColor={Colors.textMuted}
                       autoCapitalize="characters"

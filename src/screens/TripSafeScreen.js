@@ -341,7 +341,7 @@ const TripSafeScreen = ({ navigation }) => {
           icon="school-outline"
           flex={1.4}
           value={countryCode}
-          onChangeText={(v) => setCountryCode(v.toUpperCase().slice(0, 2))}
+          onChangeText={setCountryCode}
           placeholder="US, FR, DE"
           maxLength={2}
         />
@@ -456,7 +456,7 @@ const TripSafeScreen = ({ navigation }) => {
                 placeholder="Country code, e.g. US, FR, DE"
                 placeholderTextColor={Colors.textMuted}
                 value={countryCode}
-                onChangeText={(v) => setCountryCode(v.toUpperCase().slice(0, 2))}
+                onChangeText={setCountryCode}
                 autoCapitalize="characters"
                 maxLength={2}
               />

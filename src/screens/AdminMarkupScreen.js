@@ -168,7 +168,11 @@ const AdminMarkupScreen = ({ navigation }) => {
         body: JSON.stringify({
           service,
           category,
-          entityKey,
+          // Normalised here rather than in the input. Uppercasing and trimming
+          // on every keystroke rewrites the value the field already holds,
+          // which moves the cursor - and the trim made a space impossible to
+          // type at all.
+          entityKey: (entityKey || '').trim().toUpperCase(),
           entityLabel: override?.entityLabel || null,
           markupValue: rule.value ? Number(rule.value) : 0,
           markupUnit: rule.unit || 'FLAT_FULL',
@@ -251,7 +255,7 @@ const AdminMarkupScreen = ({ navigation }) => {
             placeholder={meta.placeholder}
             placeholderTextColor={Colors.textMuted}
             value={draft.entityKey}
-            onChangeText={(value) => setDraft({ entityKey: value.toUpperCase().trim() })}
+            onChangeText={(value) => setDraft({ entityKey: value })}
             autoCapitalize="characters"
             maxLength={80}
           />
