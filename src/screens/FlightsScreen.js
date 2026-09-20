@@ -2499,16 +2499,21 @@ const FlightsScreen = ({ navigation }) => {
                 style={styles.webSuggestRow}
                 onPress={() => chooseAirportSuggestion(index, field, option)}
               >
-                <Ionicons name="location-outline" size={15} color={Colors.primaryDark} />
+                <Text style={styles.webSuggestCode}>{option.code}</Text>
                 <View style={styles.suggestTextBlock}>
-                  <Text style={styles.webSuggestCity} numberOfLines={1}>{option.city}</Text>
-                  {/* The country matters now the list is every airport
-                      TripJack has - several dozen cities share a name. */}
-                  {!!option.country && (
-                    <Text style={styles.suggestCountry} numberOfLines={1}>{option.country}</Text>
+                  <View style={styles.suggestTopLine}>
+                    <Text style={styles.webSuggestCity} numberOfLines={1}>{option.city}</Text>
+                    {/* Country and airport name both matter now the list is
+                        every airport TripJack has: dozens of cities share a
+                        name, and London alone has six airports. */}
+                    {!!option.country && (
+                      <Text style={styles.suggestCountry} numberOfLines={1}>{option.country}</Text>
+                    )}
+                  </View>
+                  {!!option.name && (
+                    <Text style={styles.suggestAirportName} numberOfLines={1}>{option.name}</Text>
                   )}
                 </View>
-                <Text style={styles.webSuggestCode}>{option.code}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -2773,14 +2778,18 @@ const FlightsScreen = ({ navigation }) => {
                         style={styles.airportSuggestRow}
                         onPress={() => chooseAirportSuggestion(index, airportSuggestFor.field, option)}
                       >
-                        <Ionicons name="location-outline" size={15} color={Colors.primaryDark} />
+                        <Text style={styles.airportSuggestCode}>{option.code}</Text>
                         <View style={styles.suggestTextBlock}>
-                          <Text style={styles.airportSuggestCity} numberOfLines={1}>{option.city}</Text>
-                          {!!option.country && (
-                            <Text style={styles.suggestCountry} numberOfLines={1}>{option.country}</Text>
+                          <View style={styles.suggestTopLine}>
+                            <Text style={styles.airportSuggestCity} numberOfLines={1}>{option.city}</Text>
+                            {!!option.country && (
+                              <Text style={styles.suggestCountry} numberOfLines={1}>{option.country}</Text>
+                            )}
+                          </View>
+                          {!!option.name && (
+                            <Text style={styles.suggestAirportName} numberOfLines={1}>{option.name}</Text>
                           )}
                         </View>
-                        <Text style={styles.airportSuggestCode}>{option.code}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -3537,8 +3546,10 @@ const FlightsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  suggestTextBlock: { flex: 1, minWidth: 0 },
-  suggestCountry: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
+  suggestTextBlock: { flex: 1, minWidth: 0, marginLeft: 10 },
+  suggestTopLine: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
+  suggestCountry: { fontSize: 11.5, color: Colors.textLight, flexShrink: 0 },
+  suggestAirportName: { fontSize: 11, color: Colors.textMuted, marginTop: 1 },
   // The filters modal referenced these three and they did not exist, so it
   // rendered with no dimmed backdrop and its title and buttons stacked instead
   // of sitting on one row. Matched to calendarOverlay/calendarModalHeader,
