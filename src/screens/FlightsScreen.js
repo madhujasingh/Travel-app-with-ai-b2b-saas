@@ -1475,11 +1475,19 @@ const FlightsScreen = ({ navigation }) => {
       return;
     }
 
+    const { cartItem } = reviewedFare;
+    // Close the review modal before prompting. The sign-in prompt is a
+    // fixed-position overlay, and a react-native Modal sits above it on web -
+    // so leaving this open put the prompt behind it, invisible until the modal
+    // was dismissed. holdThisFare already does this, which is why Book This
+    // Fare behaved and this did not.
+    setReviewedFare(null);
+
     requireAuth(
       () =>
       navigation.navigate('Checkout', {
-        cartItems: [reviewedFare.cartItem],
-        total: reviewedFare.cartItem.lineTotal,
+        cartItems: [cartItem],
+        total: cartItem.lineTotal,
       }),
       'Sign in to complete your booking.'
     );
