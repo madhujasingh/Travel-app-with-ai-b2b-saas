@@ -14,7 +14,13 @@ import { useAuth } from '../context/AuthContext';
 // The screen never computes a discount: it sends the code and the order total,
 // and the server returns what the code is worth. The parent applies the
 // returned discountAmount to its own total.
-const CouponField = ({ productType, orderAmount, applied, onApplied, onRemoved }) => {
+const CouponField = ({ productType, orderAmount, applied, onApplied, onRemoved,
+  // The same keys the price was worked out with. The server caps the
+  // discount at the markup it resolves from these, so sending the wrong ones
+  // caps against the wrong number.
+  markupCategory = 'DEFAULT',
+  markupEntityKey = '',
+}) => {
   const { token } = useAuth();
   const [code, setCode] = useState('');
   const [checking, setChecking] = useState(false);
@@ -32,7 +38,7 @@ const CouponField = ({ productType, orderAmount, applied, onApplied, onRemoved }
       const response = await fetch(`${API_CONFIG.BASE_URL}/coupons/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ code: entered, orderAmount, productType }),
+        body: JSON.stringify({ code: entered, orderAmount, productType, markupCategory, markupEntityKey }),
       });
 
       const raw = await response.text();

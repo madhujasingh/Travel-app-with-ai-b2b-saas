@@ -99,8 +99,20 @@ public class CouponController {
             return ResponseEntity.badRequest().body(Map.of("message", "Invalid order amount."));
         }
 
+        // The same keys the price was calculated with. Without them the ceiling
+        // is computed from the service-wide default, which is a different - and
+        // often larger - number than the markup actually charged.
+        String markupCategory = body.get("markupCategory") == null
+                ? null : String.valueOf(body.get("markupCategory"));
+        String markupEntityKey = body.get("markupEntityKey") == null
+                ? "" : String.valueOf(body.get("markupEntityKey"));
+
         return ResponseEntity.ok(couponService.quote(
-                code, orderAmount, discountableMargin(productType, orderAmount), productType, currentUserId()));
+                code,
+                orderAmount,
+                discountableMargin(productType, markupCategory, markupEntityKey, orderAmount),
+                productType,
+                currentUserId()));
     }
 
     // How much of an order is ours to discount. The supplier's share - TripJack's
@@ -114,7 +126,10 @@ public class CouponController {
     // flights, the convenience fee: those are the only amounts charged on our
     // own rail. The supplier's fare is never discountable, because TripJack
     // rejects a Book that pays less than the reviewed fare.
-    private BigDecimal discountableMargin(String productType, BigDecimal orderAmount) {
+    private BigDecimal discountableMargin(String productType,
+                                          String markupCategory,
+                                          String markupEntityKey,
+                                          BigDecimal orderAmount) {
         String product = productType == null ? "" : productType.trim().toUpperCase();
         BigDecimal amount = orderAmount == null ? BigDecimal.ZERO : orderAmount;
 
@@ -122,7 +137,17 @@ public class CouponController {
             return amount;
         }
 
-        BigDecimal margin = markupService.markupFor(product, "DEFAULT", amount, 1);
+        // Resolved with the caller's own category and entity, not "DEFAULT".
+        // Hardcoding the default meant a domestic one-way priced with a 250
+        // markup still had its discount capped against the 350 service-wide
+        // rule - so a 350 coupon was accepted against 250 of margin, and the
+        // difference came out of our own pocket.
+        BigDecimal margin = markupService.markupFor(
+                product,
+                markupCategory == null || markupCategory.isBlank() ? "DEFAULT" : markupCategory,
+                markupEntityKey == null ? "" : markupEntityKey,
+                amount,
+                1);
 
         if (product.equals("FLIGHT")) {
             Double fee = platformSettingsService.get().getFlightConvenienceFee();

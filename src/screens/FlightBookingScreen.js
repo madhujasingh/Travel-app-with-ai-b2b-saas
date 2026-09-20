@@ -2370,6 +2370,11 @@ const FlightBookingScreen = ({ route, navigation }) => {
               <View style={styles.couponBlock}>
                 <CouponField
                   productType="FLIGHT"
+                  // The same category and airline the markup above was priced
+                  // with, so the discount is capped against the markup this
+                  // booking actually carries rather than the flight default.
+                  markupCategory={markupCategory}
+                  markupEntityKey={routeAirlineCode(flights) || ''}
                   orderAmount={totalWithSsr + convenienceFee + insuranceAmount + markupAmount}
                   applied={appliedCoupon}
                   onApplied={setAppliedCoupon}

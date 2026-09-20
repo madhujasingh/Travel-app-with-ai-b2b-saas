@@ -107,13 +107,16 @@ const HotelBookingScreen = ({ route, navigation }) => {
   const { token } = useAuth();
   const { markupFor } = useMarkup();
   const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const { hotelName, searchContext, reviewResult } = route.params;
+  const { tjHotelId, hotelName, searchContext, reviewResult } = route.params;
   const option = reviewResult.option;
 
   // Charged on top of the reviewed rate; TripJack still receives the rate
   // exactly (paymentInfos below is untouched).
   const supplierTotal = Number(option?.pricing?.totalPrice || 0);
-  const markupAmount = markupFor('HOTEL', 'DEFAULT', supplierTotal, 1);
+  // Priced with the hotel's own key, the way HotelDetailScreen displays it.
+  // Without it a per-hotel markup override showed on the detail page and was
+  // not charged here, so the guest saw one price and paid another.
+  const markupAmount = markupFor('HOTEL', 'DEFAULT', supplierTotal, 1, tjHotelId || '');
   const couponDiscount = Number(appliedCoupon?.discountAmount || 0);
   // paymentInfos still carries the reviewed rate; only the customer's total moves.
   const customerTotal = Math.max(supplierTotal + markupAmount - couponDiscount, 0);
@@ -569,6 +572,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
                         <View style={styles.couponBlock}>
               <CouponField
                 productType="HOTEL"
+                markupEntityKey={tjHotelId || ''}
                 orderAmount={supplierTotal + markupAmount}
                 applied={appliedCoupon}
                 onApplied={setAppliedCoupon}
