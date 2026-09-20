@@ -22,6 +22,7 @@ import WebSearchPanel from '../components/web/WebSearchPanel';
 import WebValueProps from '../components/web/WebValueProps';
 import WebField from '../components/web/WebField';
 import { appAlert } from '../utils/appAlert';
+import { encodeRooms } from '../utils/searchParams';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -124,6 +125,11 @@ const HotelsScreen = ({ navigation }) => {
   const [citySearch, setCitySearch] = useState('');
   const [selectingCity, setSelectingCity] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState('');
+  // What the traveller picked, in a form the URL can carry: a city name to
+  // re-resolve, or a single hotel id. The resolved id list itself cannot go in
+  // the URL - Dubai alone is 6,772 ids, about 90KB.
+  const [searchCity, setSearchCity] = useState('');
+  const [searchHotelId, setSearchHotelId] = useState('');
 
   const [datePickerField, setDatePickerField] = useState(null); // 'checkIn' | 'checkOut' | null
 
@@ -254,39 +260,17 @@ const HotelsScreen = ({ navigation }) => {
 
       setLoading(true);
 
-      const chunks = chunkArray(hids, LISTING_CHUNK_SIZE);
-
-      // Only the first chunk is awaited. A city like New Delhi is 2,207 hotels
-      // across 23 chunks and takes ~13s for all of them; waiting meant staring
-      // at a spinner for the whole of it. The results screen fetches the rest
-      // in the background and appends as they land, so the first hotels are on
-      // screen in a few seconds and nothing is dropped.
-      const firstResponse = await fetchHotelJson(
-        `${API_CONFIG.BASE_URL}/hotels/listing`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...basePayload, hids: chunks[0] }),
-        },
-        'Unable to search hotels right now.'
-      );
-
-      const mergedHotels = firstResponse.hotels || [];
-
+      // Criteria only. The results screen resolves hotel ids and fetches the
+      // listings itself, so the URL alone is enough to reproduce the search -
+      // a refresh or a shared link re-runs it rather than showing nothing.
       navigation.navigate('HotelSearchResults', {
-        hotels: mergedHotels,
-        // Everything still to fetch, and what to fetch it with.
-        pendingChunks: chunks.slice(1),
-        listingPayload: basePayload,
-        searchSession: {
-          correlationId,
-          checkIn,
-          checkOut,
-          rooms: roomsPayload,
-          currency: currency.trim().toUpperCase(),
-          nationality: nationality.trim(),
-          expiresAt: Date.now() + SEARCH_SESSION_MS,
-        },
+        city: searchCity,
+        hotelId: searchHotelId,
+        checkIn,
+        checkOut,
+        rooms: encodeRooms(rooms),
+        currency: currency.trim().toUpperCase(),
+        nationality: nationality.trim(),
         destinationLabel,
       });
     } catch (error) {
@@ -366,6 +350,8 @@ const HotelsScreen = ({ navigation }) => {
 
       setHotelIdsInput(ids.join(', '));
       setDestinationLabel(`${cityEntry.city}, ${cityEntry.countryName}`);
+      setSearchCity(cityEntry.city);
+      setSearchHotelId('');
       setCityModal(false);
       setCitySearch('');
     } catch (error) {
@@ -426,6 +412,8 @@ const HotelsScreen = ({ navigation }) => {
   // city - one Listing call rather than 68 for somewhere like Dubai.
   const selectHotel = (hotel) => {
     setHotelIdsInput(String(hotel.tjHotelId));
+    setSearchHotelId(String(hotel.tjHotelId));
+    setSearchCity('');
     setDestinationLabel(hotel.city ? `${hotel.name}, ${hotel.city}` : hotel.name);
     setCityModal(false);
     setCitySearch('');

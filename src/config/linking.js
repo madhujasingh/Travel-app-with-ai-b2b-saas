@@ -31,7 +31,13 @@ const linking = {
 
       // Hotels
       Hotels: 'hotels',
-      HotelSearchResults: 'hotels/search',
+      // Criteria ride in the query string so a refresh or a shared link
+      // re-runs the search. The resolved hotel ids deliberately do not - Dubai
+      // alone is 6,772 of them.
+      HotelSearchResults: {
+        path: 'hotels/search',
+        parse: { city: String, checkIn: String, checkOut: String },
+      },
       HotelDetail: 'hotels/:hotelId',
       HotelBooking: 'hotels/:hotelId/book',
 

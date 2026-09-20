@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Modal,
@@ -16,6 +17,8 @@ import WebResultsLayout, { WebResultsBar, WebResultsCount } from '../components/
 import MarkupPrice from '../components/MarkupPrice';
 import { appAlert } from '../utils/appAlert';
 import API_CONFIG from '../config/api';
+import { asString, decodeRooms } from '../utils/searchParams';
+import { SEARCH_SESSION_MS } from '../utils/hotelApiErrors';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,60 +59,114 @@ const getTopOption = (item) => (item.options || []).find((option) => option.inve
 const HotelSearchResultsScreen = ({ route, navigation }) => {
   const { centeredContent, isDesktop } = useResponsive();
   const hotelColumns = isDesktop ? 2 : 1;
-  const {
-    hotels: initialHotels,
-    pendingChunks,
-    listingPayload,
-    searchSession,
-    destinationLabel,
-    // Guarded because params are empty on a browser refresh: the URL is
-    // /hotels/search and carries no search criteria, so React Navigation
-    // restores the route with nothing in it. Without this the destructure
-    // throws and the page is simply blank. The other results screens already
-    // guard the same way.
-  } = route.params || {};
+  // Everything needed to run the search, and nothing that cannot survive a
+  // URL. Params arrive as strings from a link and as values from navigate(),
+  // so both are normalised.
+  const params = route.params || {};
+  const city = asString(params.city);
+  const singleHotelId = asString(params.hotelId);
+  const checkIn = asString(params.checkIn);
+  const checkOut = asString(params.checkOut);
+  const roomsEncoded = asString(params.rooms, '2');
+  const currency = asString(params.currency, 'INR');
+  const nationality = asString(params.nationality, 'IN');
+  const destinationLabel = asString(params.destinationLabel) || city || 'Search Results';
 
-  // Hotels arrive in waves: the search screen sends the first chunk so results
-  // appear quickly, and the rest are fetched here and appended. Everything
-  // downstream - filters, facets, counts - already derives from `hotels`, so
-  // it all updates as more land.
-  const [hotels, setHotels] = useState(initialHotels || []);
-  const [remainingChunks, setRemainingChunks] = useState((pendingChunks || []).length);
+  const [hotels, setHotels] = useState([]);
+  const [loadingSearch, setLoadingSearch] = useState(true);
+  const [searchError, setSearchError] = useState('');
+  const [remainingChunks, setRemainingChunks] = useState(0);
+
+  // The correlationId ties Listing, Detail and Review together for ~15
+  // minutes, so it is minted per run of this effect rather than passed in -
+  // a refreshed page is a genuinely new search and needs its own.
+  const [searchSession, setSearchSession] = useState(null);
 
   useEffect(() => {
-    const chunks = pendingChunks || [];
-    if (chunks.length === 0 || !listingPayload) return undefined;
+    if (!checkIn || !checkOut || (!city && !singleHotelId)) {
+      setLoadingSearch(false);
+      setSearchError('This search link is incomplete. Please search again.');
+      return undefined;
+    }
 
     let cancelled = false;
 
     const run = async () => {
-      // Six at a time rather than all at once: an earlier, more aggressive
-      // version of this tripped TripJack's Cloudflare rate limiting, and a
-      // large city is 20+ chunks.
-      const CONCURRENCY = 6;
-      for (let i = 0; i < chunks.length && !cancelled; i += CONCURRENCY) {
-        const wave = chunks.slice(i, i + CONCURRENCY);
-        const results = await Promise.all(
-          wave.map((hids) =>
-            fetch(`${API_CONFIG.BASE_URL}/hotels/listing`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ...listingPayload, hids }),
-            })
-              .then((r) => (r.ok ? r.json() : null))
-              // One failed chunk shouldn't lose the hotels already on screen.
-              .catch(() => null)
-          )
-        );
-        if (cancelled) return;
-        const more = results.flatMap((data) => data?.hotels || []);
-        if (more.length > 0) {
-          setHotels((current) => {
-            const seen = new Set(current.map((h) => h.hotelId));
-            return [...current, ...more.filter((h) => !seen.has(h.hotelId))];
-          });
+      setLoadingSearch(true);
+      setSearchError('');
+      setHotels([]);
+      try {
+        // Ids are resolved here rather than carried in the URL: Dubai is
+        // 6,772 of them, about 90KB, which is not a link anyone can share.
+        let ids = [];
+        if (singleHotelId) {
+          ids = [singleHotelId];
+        } else {
+          const res = await fetch(
+            `${API_CONFIG.BASE_URL}/hotel-catalog/near?city=${encodeURIComponent(city)}&radiusKm=25&idsOnly=true`
+          );
+          if (!res.ok) throw new Error('Unable to load hotels for this city.');
+          ids = (await res.json()).filter(Boolean).map(String);
         }
-        setRemainingChunks((current) => Math.max(current - wave.length, 0));
+        if (cancelled) return;
+        if (ids.length === 0) {
+          setSearchError('No hotels found for this destination.');
+          setLoadingSearch(false);
+          return;
+        }
+
+        const correlationId = `mi${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+        const payload = {
+          checkIn,
+          checkOut,
+          rooms: decodeRooms(roomsEncoded),
+          currency,
+          correlationId,
+          nationality,
+        };
+        setSearchSession({
+          ...payload,
+          expiresAt: Date.now() + SEARCH_SESSION_MS,
+        });
+
+        const chunks = [];
+        for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+        setRemainingChunks(chunks.length);
+
+        // Six at a time rather than all at once: an earlier, more aggressive
+        // version of this tripped TripJack's Cloudflare rate limiting, and a
+        // large city is 20+ chunks. Results are appended wave by wave so the
+        // first hotels appear while the rest are still arriving.
+        const CONCURRENCY = 6;
+        for (let i = 0; i < chunks.length && !cancelled; i += CONCURRENCY) {
+          const wave = chunks.slice(i, i + CONCURRENCY);
+          const responses = await Promise.all(
+            wave.map((hids) =>
+              fetch(`${API_CONFIG.BASE_URL}/hotels/listing`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, hids }),
+              })
+                .then((r) => (r.ok ? r.json() : null))
+                // One failed chunk must not discard hotels already on screen.
+                .catch(() => null)
+            )
+          );
+          if (cancelled) return;
+          const more = responses.flatMap((data) => data?.hotels || []);
+          if (more.length > 0) {
+            setHotels((current) => {
+              const seen = new Set(current.map((h) => h.hotelId));
+              return [...current, ...more.filter((h) => !seen.has(h.hotelId))];
+            });
+          }
+          setRemainingChunks((current) => Math.max(current - wave.length, 0));
+          setLoadingSearch(false);
+        }
+      } catch (error) {
+        if (!cancelled) setSearchError(error.message || 'Unable to search hotels right now.');
+      } finally {
+        if (!cancelled) setLoadingSearch(false);
       }
     };
 
@@ -117,8 +174,7 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
     return () => {
       cancelled = true;
     };
-  }, [pendingChunks, listingPayload]);
-  const { checkIn, checkOut } = searchSession;
+  }, [city, singleHotelId, checkIn, checkOut, roomsEncoded, currency, nationality]);
 
   const [filtersModalVisible, setFiltersModalVisible] = useState(false);
   const [selectedStars, setSelectedStars] = useState(() => new Set());
@@ -609,7 +665,22 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
         ) : null
       }
       ListEmptyComponent={
-        hotels.length === 0 ? (
+        // The search runs on this screen now, so an empty list means "still
+        // looking" as often as it means "nothing found".
+        loadingSearch ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator color={Colors.primary} size="large" />
+            <Text style={styles.emptyStateSubtext}>Searching for hotels…</Text>
+          </View>
+        ) : searchError ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="alert-circle-outline" size={40} color={Colors.textMuted} />
+            <Text style={styles.emptyStateText}>{searchError}</Text>
+            <TouchableOpacity style={styles.clearFilterButton} onPress={() => navigation.goBack()}>
+              <Text style={styles.clearFilterButtonText}>New search</Text>
+            </TouchableOpacity>
+          </View>
+        ) : hotels.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="bed-outline" size={40} color={Colors.textMuted} />
             <Text style={styles.emptyStateText}>No hotels found for this search.</Text>
