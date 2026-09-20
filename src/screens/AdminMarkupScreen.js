@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  FlatList,
+  Modal,
+  Pressable,
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
@@ -19,6 +22,7 @@ import { Colors } from '../constants/Colors';
 import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { digitsOnly } from '../utils/inputSanitizers';
+import { searchAirlines } from '../data/airlines';
 
 // Mirrors MarkupService.SERVICES and the category split it understands.
 const SERVICES = [
@@ -87,6 +91,11 @@ const AdminMarkupScreen = ({ navigation }) => {
   const [savingKey, setSavingKey] = useState(null);
   const [overrides, setOverrides] = useState([]);
   const [ruleIds, setRuleIds] = useState({});
+  // Airline picker for the FLIGHT override - a two-letter carrier code is not
+  // something to type from memory when we have the list.
+  const [airlinePicker, setAirlinePicker] = useState(false);
+  const [airlineQuery, setAirlineQuery] = useState('');
+
   // service -> { entityKey, entityLabel, value, unit }
   const [draftOverride, setDraftOverride] = useState({});
 
@@ -250,23 +259,42 @@ const AdminMarkupScreen = ({ navigation }) => {
         ))}
 
         <View style={styles.overrideForm}>
-          <TextInput
-            style={[styles.valueInput, styles.entityInput]}
-            placeholder={meta.placeholder}
-            placeholderTextColor={Colors.textMuted}
-            value={draft.entityKey}
-            onChangeText={(value) => setDraft({ entityKey: value })}
-            autoCapitalize="characters"
-            maxLength={80}
-          />
-          <TextInput
-            style={[styles.valueInput, styles.entityInput]}
-            placeholder="Name (optional)"
-            placeholderTextColor={Colors.textMuted}
-            value={draft.entityLabel}
-            onChangeText={(value) => setDraft({ entityLabel: value })}
-            maxLength={160}
-          />
+          {service.key === 'FLIGHT' ? (
+            <TouchableOpacity
+              style={[styles.valueInput, styles.entityInput, styles.entityPicker]}
+              onPress={() => {
+                setAirlineQuery('');
+                setAirlinePicker(service.key);
+              }}
+            >
+              <Text style={draft.entityKey ? styles.entityPickerValue : styles.entityPickerPlaceholder} numberOfLines={1}>
+                {draft.entityKey
+                  ? `${draft.entityKey}${draft.entityLabel ? ` · ${draft.entityLabel}` : ''}`
+                  : 'Choose an airline'}
+              </Text>
+              <Ionicons name="chevron-down" size={15} color={Colors.textMuted} />
+            </TouchableOpacity>
+          ) : (
+            <TextInput
+              style={[styles.valueInput, styles.entityInput]}
+              placeholder={meta.placeholder}
+              placeholderTextColor={Colors.textMuted}
+              value={draft.entityKey}
+              onChangeText={(value) => setDraft({ entityKey: value })}
+              autoCapitalize="characters"
+              maxLength={80}
+            />
+          )}
+          {service.key === 'FLIGHT' ? null : (
+            <TextInput
+              style={[styles.valueInput, styles.entityInput]}
+              placeholder="Name (optional)"
+              placeholderTextColor={Colors.textMuted}
+              value={draft.entityLabel}
+              onChangeText={(value) => setDraft({ entityLabel: value })}
+              maxLength={160}
+            />
+          )}
           <TextInput
             style={styles.valueInput}
             placeholder="0"
@@ -415,11 +443,105 @@ const AdminMarkupScreen = ({ navigation }) => {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      <Modal visible={!!airlinePicker} transparent animationType="fade" onRequestClose={() => setAirlinePicker(false)}>
+        <Pressable style={styles.pickerOverlay} onPress={() => setAirlinePicker(false)}>
+          <Pressable style={styles.pickerCard} onPress={() => {}}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Choose an airline</Text>
+              <TouchableOpacity onPress={() => setAirlinePicker(false)}>
+                <Ionicons name="close" size={20} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.pickerSearch}
+              placeholder="Search by name or code"
+              placeholderTextColor={Colors.textMuted}
+              value={airlineQuery}
+              onChangeText={setAirlineQuery}
+              autoCapitalize="none"
+            />
+            <FlatList
+              data={searchAirlines(airlineQuery, 60)}
+              keyExtractor={(item) => item.code}
+              keyboardShouldPersistTaps="handled"
+              style={styles.pickerList}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    // Both fields come from the picked airline, so the code and
+                    // the name can never disagree.
+                    setDraftOverride((current) => {
+                      const existing = current[airlinePicker]
+                        || { entityKey: '', entityLabel: '', value: '', unit: 'FLAT_FULL' };
+                      return {
+                        ...current,
+                        [airlinePicker]: { ...existing, entityKey: item.code, entityLabel: item.name },
+                      };
+                    });
+                    setAirlinePicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerCode}>{item.code}</Text>
+                  <Text style={styles.pickerName} numberOfLines={1}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.pickerEmpty}>No airline matches "{airlineQuery.trim()}".</Text>
+              }
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  entityPicker: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  entityPickerValue: { flex: 1, fontSize: 13, fontWeight: '700', color: Colors.text },
+  entityPickerPlaceholder: { flex: 1, fontSize: 13, color: Colors.textMuted },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 34, 0.45)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  pickerCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+    maxHeight: '80%',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+  },
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  pickerTitle: { fontSize: 16, fontWeight: '800', color: Colors.text },
+  pickerSearch: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.text,
+    marginBottom: 10,
+  },
+  pickerList: { maxHeight: 380 },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  pickerCode: { width: 34, fontSize: 13, fontWeight: '800', color: Colors.primaryDark },
+  pickerName: { flex: 1, fontSize: 13.5, color: Colors.text },
+  pickerEmpty: { paddingVertical: 18, fontSize: 13, color: Colors.textMuted, textAlign: 'center' },
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.primary,

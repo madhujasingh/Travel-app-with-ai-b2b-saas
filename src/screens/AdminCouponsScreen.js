@@ -52,6 +52,19 @@ const toIsoDateTime = (value, endOfDay) =>
 
 const fromIsoDate = (value) => (value ? String(value).slice(0, 10) : '');
 
+// Defined at module scope deliberately. Inside the screen's body this was a
+// new component type on every render, so React unmounted and remounted every
+// field - and therefore every TextInput - on each keystroke. The form could
+// not be typed into at all: focus was destroyed after each character.
+const Field = ({ label, hint, children }) => (
+  <View style={styles.field}>
+    <Text style={styles.fieldLabel}>{label}</Text>
+    {children}
+    {!!hint && <Text style={styles.fieldHint}>{hint}</Text>}
+  </View>
+);
+
+
 const AdminCouponsScreen = ({ navigation }) => {
   const { token } = useAuth();
   const { centeredContent, isDesktop } = useResponsive();
@@ -130,7 +143,9 @@ const AdminCouponsScreen = ({ navigation }) => {
 
   const save = async () => {
     const payload = {
-      code: draft.code.trim().toUpperCase(),
+      // Stripped here rather than in the input, which rewrote the value on
+      // every keystroke and moved the cursor.
+      code: draft.code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, ''),
       description: draft.description.trim() || null,
       discountType: draft.discountType,
       discountValue: draft.discountValue ? Number(draft.discountValue) : null,
@@ -291,14 +306,6 @@ const AdminCouponsScreen = ({ navigation }) => {
     );
   };
 
-  const Field = ({ label, hint, children }) => (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      {children}
-      {!!hint && <Text style={styles.fieldHint}>{hint}</Text>}
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={Colors.primary} barStyle="light-content" />
@@ -376,9 +383,7 @@ const AdminCouponsScreen = ({ navigation }) => {
                   placeholder="SAVE20"
                   placeholderTextColor={Colors.textMuted}
                   value={draft.code}
-                  onChangeText={(value) =>
-                    setDraft((c) => ({ ...c, code: value.toUpperCase().replace(/[^A-Z0-9_-]/g, '') }))
-                  }
+                  onChangeText={(value) => setDraft((c) => ({ ...c, code: value }))}
                   autoCapitalize="characters"
                   maxLength={40}
                 />
