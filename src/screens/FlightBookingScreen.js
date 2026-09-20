@@ -85,6 +85,7 @@ const emptyTraveller = (ti, pt) => ({
   pNat: '',
   pid: '',
   di: '',
+  pan: '',
 });
 
 const buildDefaultTravellers = (passengerCounts) => {
@@ -445,6 +446,11 @@ const FlightBookingScreen = ({ route, navigation }) => {
   // expiry together regardless of which specific flag triggered it.
   const passportRequired = !!(conditions?.pcs?.pm || conditions?.pcs?.pped || conditions?.pcs?.pid);
   const documentIdApplicable = !!conditions?.dc?.ida;
+  // conditions.ipa - PAN is mandatory for this fare. Worth being strict about:
+  // TripJack does not reject a missing or invalid PAN, it moves the booking to
+  // a Pending state and returns no error, so a silent omission here surfaces
+  // as a traveller who has paid and holds no ticket.
+  const panRequired = !!conditions?.ipa;
   const documentIdRequired = !!conditions?.dc?.idm;
   const holdAllowed = isResume || conditions?.isBA !== false;
   const ssrSegments = getSsrSegments(reviewResponse);
@@ -1004,6 +1010,11 @@ const FlightBookingScreen = ({ route, navigation }) => {
         if (documentIdApplicable && t.di) {
           traveller.di = t.di;
         }
+        // Per traveller, not once per booking - see the Book and Hold sample
+        // payloads, which carry pan on every travellerInfo entry.
+        if (panRequired && t.pan) {
+          traveller.pan = t.pan.trim().toUpperCase();
+        }
 
         if (t.pt !== 'INFANT') {
           if (ssrBaggageInfos.length) traveller.ssrBaggageInfos = ssrBaggageInfos;
@@ -1071,6 +1082,18 @@ const FlightBookingScreen = ({ route, navigation }) => {
       }
       if (documentIdRequired && !t.di.trim()) {
         return `${label}: document ID is required for this fare.`;
+      }
+      if (panRequired) {
+        const pan = t.pan.trim().toUpperCase();
+        if (!pan) {
+          return `${label}: PAN is required for this fare.`;
+        }
+        // Five letters, four digits, one letter. Checked here because an
+        // invalid PAN is accepted by the API and then quietly strands the
+        // booking in Pending.
+        if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+          return `${label}: enter a valid PAN, e.g. ABCDE1234F.`;
+        }
       }
     }
 
@@ -1918,6 +1941,24 @@ const FlightBookingScreen = ({ route, navigation }) => {
                       placeholder="Document ID"
                       placeholderTextColor={Colors.textMuted}
                       autoCapitalize="characters"
+                    />
+                  </>
+                ) : null}
+                {panRequired ? (
+                  <>
+                    <View style={styles.subsectionDivider} />
+                    <View style={styles.subsectionLabelRow}>
+                      <Ionicons name="document-text-outline" size={13} color={Colors.primaryDark} />
+                      <Text style={styles.cardSubtitle}>PAN required for this fare</Text>
+                    </View>
+                    <TextInput
+                      style={styles.input}
+                      value={t.pan}
+                      onChangeText={(v) => updateTraveller(index, 'pan', v.toUpperCase())}
+                      placeholder="PAN (e.g. ABCDE1234F)"
+                      placeholderTextColor={Colors.textMuted}
+                      autoCapitalize="characters"
+                      maxLength={10}
                     />
                   </>
                 ) : null}
