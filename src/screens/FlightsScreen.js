@@ -708,6 +708,7 @@ const FlightsScreen = ({ navigation }) => {
   const [flights, setFlights] = useState([]);
   const [searched, setSearched] = useState(false);
   const [reviewedFare, setReviewedFare] = useState(null);
+  const [reviewingCard, setReviewingCard] = useState(null);
   const [fareRuleState, setFareRuleState] = useState({ visible: false, loading: false, data: null, error: null });
   const [selectedByGroup, setSelectedByGroup] = useState({});
   // Which fare (Classic/Flex/...) is toggled on for each flight card, keyed
@@ -1265,7 +1266,10 @@ const FlightsScreen = ({ navigation }) => {
     flightNoQuery,
   ]);
 
-  const runReview = async (legs) => {
+  // Review takes a couple of seconds. Without feedback on the card that was
+  // tapped, it looks like nothing happened and people tap again - each tap
+  // firing another review call.
+  const runReview = async (legs, cardKey = null) => {
     const priceIds = legs.flatMap((leg) => leg.priceIds || []);
     if (!priceIds.length) {
       appAlert('Review unavailable', 'This fare is missing the TripJack review identifier.');
@@ -1274,6 +1278,7 @@ const FlightsScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
+      setReviewingCard(cardKey);
       console.log('[review] REQUEST', JSON.stringify({ priceIds }));
       const response = await fetch(`${API_CONFIG.BASE_URL}/flights/review`, {
         method: 'POST',
@@ -1329,10 +1334,11 @@ const FlightsScreen = ({ navigation }) => {
       }
     } finally {
       setLoading(false);
+      setReviewingCard(null);
     }
   };
 
-  const reviewFare = (flight) => runReview([flight]);
+  const reviewFare = (flight) => runReview([flight], (flight.priceIds || []).join('|'));
 
   const closeFareRules = () => setFareRuleState({ visible: false, loading: false, data: null, error: null });
 
@@ -1692,12 +1698,27 @@ const FlightsScreen = ({ navigation }) => {
               <Text style={styles.bookButtonText}>{isSelected ? 'Selected' : 'Select'}</Text>
             </View>
           ) : (
-            <TouchableOpacity
-              style={styles.bookButton}
-              onPress={() => reviewFare(getFlightWithFare(item, selectedFareIndex))}
-            >
-              <Text style={styles.bookButtonText}>Review Fare</Text>
-            </TouchableOpacity>
+            (() => {
+              const fareForReview = getFlightWithFare(item, selectedFareIndex);
+              const cardKey = (fareForReview.priceIds || []).join('|');
+              const isReviewing = reviewingCard === cardKey;
+              return (
+                <TouchableOpacity
+                  style={[styles.bookButton, (isReviewing || loading) && styles.bookButtonBusy]}
+                  onPress={() => reviewFare(fareForReview)}
+                  // Disabled while any review is in flight, not just this
+                  // card's: a second call would race the first and the fare
+                  // that opens would not be the one last tapped.
+                  disabled={loading}
+                >
+                  {isReviewing ? (
+                    <ActivityIndicator size="small" color={Colors.secondary} />
+                  ) : (
+                    <Text style={styles.bookButtonText}>Review Fare</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })()
           )}
         </View>
       </TouchableOpacity>
@@ -1709,8 +1730,8 @@ const FlightsScreen = ({ navigation }) => {
       return (
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.emptyTitle}>Searching flights...</Text>
-          <Text style={styles.emptySubtitle}>TripJack results can take a few seconds to come back.</Text>
+          <Text style={styles.emptyTitle}>Finding the best fares for you…</Text>
+          <Text style={styles.emptySubtitle}>Comparing airlines and fare types. This takes a few seconds.</Text>
         </View>
       );
     }
@@ -3546,6 +3567,7 @@ const FlightsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  bookButtonBusy: { opacity: 0.75 },
   suggestTextBlock: { flex: 1, minWidth: 0, marginLeft: 10 },
   suggestTopLine: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
   suggestCountry: { fontSize: 11.5, color: Colors.textLight, flexShrink: 0 },
