@@ -637,6 +637,17 @@ const mapFlightsFromResponse = (data) => {
   return cards;
 };
 
+// "1A / 0C / 0I" is how TripJack counts passengers, not how a traveller reads
+// one. Zero counts are dropped rather than printed as "0 children".
+const describePassengers = (counts = {}) => {
+  const { adults = 0, children = 0, infants = 0 } = counts;
+  const parts = [];
+  if (adults) parts.push(`${adults} adult${adults === 1 ? '' : 's'}`);
+  if (children) parts.push(`${children} child${children === 1 ? '' : 'ren'}`);
+  if (infants) parts.push(`${infants} infant${infants === 1 ? '' : 's'}`);
+  return parts.join(', ') || '1 adult';
+};
+
 const FlightsScreen = ({ navigation }) => {
   const { requireAuth } = useAuth();
   const { centeredContent, isDesktop } = useResponsive();
@@ -3248,7 +3259,7 @@ const FlightsScreen = ({ navigation }) => {
                 <View style={styles.reviewMetaRow}>
                   <Text style={styles.reviewMetaLabel}>Passengers</Text>
                   <Text style={styles.reviewMetaValue}>
-                    {reviewedFare.passengerCounts.adults}A / {reviewedFare.passengerCounts.children}C / {reviewedFare.passengerCounts.infants}I
+                    {describePassengers(reviewedFare.passengerCounts)}
                   </Text>
                 </View>
                 <View style={styles.reviewMetaRow}>
@@ -3280,11 +3291,9 @@ const FlightsScreen = ({ navigation }) => {
                   <Ionicons name="arrow-forward-circle" size={30} color={Colors.secondary} />
                 </TouchableOpacity>
 
-                <Text style={styles.reviewHelper}>Or manage this fare as a regular cart item instead:</Text>
-
                 <View style={styles.reviewActions}>
                   <TouchableOpacity style={styles.reviewTertiaryButton} onPress={continueReviewedFareToCheckout}>
-                    <Text style={styles.reviewTertiaryButtonText}>Continue</Text>
+                    <Text style={styles.reviewTertiaryButtonText}>Have a coupon code?</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -3512,6 +3521,27 @@ const FlightsScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  // The filters modal referenced these three and they did not exist, so it
+  // rendered with no dimmed backdrop and its title and buttons stacked instead
+  // of sitting on one row. Matched to calendarOverlay/calendarModalHeader,
+  // which do the same job on this screen already.
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 34, 0.45)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: Colors.text,
+  },
   container: {
     flex: 1,
     // Extremely light blue-gray rather than the app's default warm
@@ -4888,12 +4918,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: Colors.primary,
-  },
-  reviewHelper: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    lineHeight: 18,
-    marginTop: 6,
   },
   reviewActions: {
     flexDirection: 'row',
