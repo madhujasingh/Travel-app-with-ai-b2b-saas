@@ -27,6 +27,7 @@ import DatePickerModal from '../components/DatePickerModal';
 import { useAuth } from '../context/AuthContext';
 import { parseTripJackError } from '../utils/tripjackErrors';
 import { digitsOnly } from '../utils/inputSanitizers';
+import { normalisePan, validatePan } from '../utils/pan';
 
 const TITLES_BY_PAX_TYPE = {
   ADULT: ['Mr', 'Mrs', 'Ms'],
@@ -1013,7 +1014,7 @@ const FlightBookingScreen = ({ route, navigation }) => {
         // Per traveller, not once per booking - see the Book and Hold sample
         // payloads, which carry pan on every travellerInfo entry.
         if (panRequired && t.pan) {
-          traveller.pan = t.pan.trim().toUpperCase();
+          traveller.pan = normalisePan(t.pan);
         }
 
         if (t.pt !== 'INFANT') {
@@ -1084,15 +1085,13 @@ const FlightBookingScreen = ({ route, navigation }) => {
         return `${label}: document ID is required for this fare.`;
       }
       if (panRequired) {
-        const pan = t.pan.trim().toUpperCase();
-        if (!pan) {
-          return `${label}: PAN is required for this fare.`;
-        }
-        // Five letters, four digits, one letter. Checked here because an
-        // invalid PAN is accepted by the API and then quietly strands the
-        // booking in Pending.
-        if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
-          return `${label}: enter a valid PAN, e.g. ABCDE1234F.`;
+        // Checks the format, that the entity type is real, and that an
+        // individual's surname initial matches this traveller - see
+        // utils/pan.js for why that is worth doing here rather than leaving
+        // it to the API.
+        const panIssue = validatePan(t.pan, t.lN);
+        if (panIssue) {
+          return `${label}: ${panIssue}`;
         }
       }
     }

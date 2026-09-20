@@ -23,6 +23,7 @@ import API_CONFIG from '../config/api';
 import { fetchHotelJson } from '../utils/hotelApiErrors';
 import { useAuth } from '../context/AuthContext';
 import { phoneDigits } from '../utils/inputSanitizers';
+import { normalisePan, validatePan } from '../utils/pan';
 
 const TITLES = ['Mr', 'Mrs', 'Ms', 'Miss', 'Master'];
 
@@ -153,8 +154,16 @@ const HotelBookingScreen = ({ route, navigation }) => {
         if (!traveler.fN.trim() || !traveler.lN.trim()) {
           return 'Enter a first and last name for every traveller.';
         }
-        if (panRequired && !traveler.pan.trim()) {
-          return 'PAN is required for every traveller on this rate.';
+        if (panRequired) {
+          // Was a non-empty check only. A wrong PAN is not rejected by the
+          // supplier either, so the same structural checks apply here.
+          const panIssue = validatePan(traveler.pan, traveler.lN);
+          // Named rather than numbered: this loop walks rooms then travellers,
+          // so there is no single index, and the name is what the guest will
+          // recognise anyway.
+          if (panIssue) {
+            return `${traveler.fN.trim()} ${traveler.lN.trim()}: ${panIssue}`;
+          }
         }
         if (passportRequired && !traveler.pNum.trim()) {
           return 'Passport number is required for every traveller on this rate.';
@@ -191,7 +200,7 @@ const HotelBookingScreen = ({ route, navigation }) => {
           fN: traveler.fN.trim(),
           lN: traveler.lN.trim(),
         };
-        if (panRequired) entry.pan = traveler.pan.trim();
+        if (panRequired) entry.pan = normalisePan(traveler.pan);
         if (passportRequired) entry.pNum = traveler.pNum.trim();
         return entry;
       }),
