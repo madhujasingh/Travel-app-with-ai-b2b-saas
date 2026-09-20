@@ -28,6 +28,7 @@ import HotelBookingScreen from './src/screens/HotelBookingScreen';
 import FlightsScreen from './src/screens/FlightsScreen';
 import ActivitiesScreen from './src/screens/ActivitiesScreen';
 import ActivityDetailScreen from './src/screens/ActivityDetailScreen';
+import ActivityResultsScreen from './src/screens/ActivityResultsScreen';
 import ActivityBookingScreen from './src/screens/ActivityBookingScreen';
 import CabsScreen from './src/screens/CabsScreen';
 import CabResultsScreen from './src/screens/CabResultsScreen';
@@ -89,7 +90,7 @@ const WEB_HEADER_ROUTES = new Set([
   'Cart', 'Checkout', 'TalkToAgent', 'GroupTripPlanner',
   'Hotels', 'HotelSearchResults', 'HotelDetail', 'HotelBooking',
   'Flights', 'FlightBooking', 'FlightReissue', 'MyFlightBookings',
-  'Activities', 'ActivityDetail', 'ActivityBooking',
+  'Activities', 'ActivityResults', 'ActivityDetail', 'ActivityBooking',
   'Cabs', 'CabResults', 'CabBooking',
   'TripSafe', 'TripSafeResults', 'TripSafeBooking',
   'AIRecommendations', 'AIPlaceInsight',
@@ -400,6 +401,7 @@ export default function App() {
               <Stack.Screen name="HotelDetail" component={HotelDetailScreen} />
               <Stack.Screen name="Flights" component={FlightsScreen} />
               <Stack.Screen name="Activities" component={ActivitiesScreen} />
+              <Stack.Screen name="ActivityResults" component={ActivityResultsScreen} />
               <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
               <Stack.Screen name="Cabs" component={CabsScreen} />
               <Stack.Screen name="CabResults" component={CabResultsScreen} />
@@ -445,6 +447,7 @@ export default function App() {
               <Stack.Screen name="HotelBooking" component={HotelBookingScreen} />
               <Stack.Screen name="Flights" component={FlightsScreen} />
               <Stack.Screen name="Activities" component={ActivitiesScreen} />
+              <Stack.Screen name="ActivityResults" component={ActivityResultsScreen} />
               <Stack.Screen name="ActivityDetail" component={ActivityDetailScreen} />
               <Stack.Screen name="ActivityBooking" component={ActivityBookingScreen} />
               <Stack.Screen name="Cabs" component={CabsScreen} />

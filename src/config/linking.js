@@ -43,6 +43,7 @@ const linking = {
 
       // Activities
       Activities: 'activities',
+      ActivityResults: 'activities/search',
       ActivityDetail: 'activities/:activityCode',
       ActivityBooking: 'activities/:activityCode/book',
 

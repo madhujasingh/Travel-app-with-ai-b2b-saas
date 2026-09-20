@@ -76,8 +76,6 @@ const ActivitiesScreen = ({ navigation }) => {
   const [childAges, setChildAges] = useState([]);
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState(null);
-  const [searched, setSearched] = useState(false);
 
   const [countries, setCountries] = useState(null);
   const [countryModal, setCountryModal] = useState(false);
@@ -241,7 +239,6 @@ const ActivitiesScreen = ({ navigation }) => {
 
     try {
       setSearching(true);
-      setSearched(true);
       const response = await fetch(`${API_CONFIG.BASE_URL}/activities/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -251,9 +248,20 @@ const ActivitiesScreen = ({ navigation }) => {
       if (!response.ok) {
         throw new Error(parseActivitiesError(data, 'Unable to search activities right now.'));
       }
-      setResults(Array.isArray(data?.activities) ? data.activities : []);
+      const found = Array.isArray(data?.activities) ? data.activities : [];
+      // Results get their own screen, the way hotels and cabs already do -
+      // otherwise a search leaves you looking at the form you just filled in.
+      navigation.navigate('ActivityResults', {
+        results: found,
+        destinationLabel,
+        searchContext: {
+          from: fromDate,
+          to: toDate,
+          adults: Math.max(1, parseInt(adults, 10) || 1),
+          childAges: childAges.map((age) => parseInt(age, 10)),
+        },
+      });
     } catch (error) {
-      setResults([]);
       appAlert('Activities Search', error.message || 'Unable to search activities right now.');
     } finally {
       setSearching(false);
@@ -308,52 +316,6 @@ const ActivitiesScreen = ({ navigation }) => {
     </WebSearchPanel>
   );
 
-  const renderActivityCard = ({ item }) => {
-            const imageUrl = getActivityImage(item);
-            const price = getActivityPrice(item);
-            const name = item?.content?.name || 'Activity';
-            const destinationName = item?.country?.destinations?.[0]?.name || '';
-            return (
-              <TouchableOpacity
-                style={[styles.resultCard, activityColumns > 1 && styles.resultCardGrid]}
-                onPress={() =>
-                  navigation.navigate('ActivityDetail', {
-                    activityCode: item?.content?.activityCode,
-                    name,
-                    from: fromDate,
-                    to: toDate,
-                    adults: Math.max(1, parseInt(adults, 10) || 1),
-                    childAges: childAges.map((age) => parseInt(age, 10)),
-                  })
-                }
-              >
-                {imageUrl ? (
-                  <Image source={{ uri: imageUrl }} style={styles.resultImage} />
-                ) : (
-                  <View style={[styles.resultImage, styles.resultImagePlaceholder]}>
-                    <Ionicons name="image-outline" size={24} color={Colors.textMuted} />
-                  </View>
-                )}
-                <View style={styles.resultInfo}>
-                  <Text style={styles.resultName} numberOfLines={2}>{name}</Text>
-                  {!!destinationName && <Text style={styles.resultDestination}>{destinationName}</Text>}
-                  {price && (
-                    <>
-                      <MarkupPrice
-                        service="ACTIVITY"
-                        baseAmount={price.amount}
-                        prefix={`From ${price.currency || ''} `}
-                        priceStyle={styles.resultPrice}
-                      />
-                      {!!formatInrEquivalent(price.amount, price.currency) && (
-                        <Text style={styles.resultPriceInr}>{formatInrEquivalent(price.amount, price.currency)}</Text>
-                      )}
-                    </>
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -460,17 +422,11 @@ const ActivitiesScreen = ({ navigation }) => {
         </View>
       )}
 
-      {!isDesktop && !searching && searched && (results || []).length === 0 && (
-        <View style={styles.centerState}>
-          <Text style={styles.emptyText}>No activities found for this search.</Text>
-        </View>
-      )}
-
       {isDesktop ? (
         // The hero rides in the list header so it scrolls with the results -
         // as a sibling it stayed pinned and a tall panel was unreachable.
         <FlatList
-          data={searching ? [] : (results || [])}
+          data={[]}
           keyExtractor={(item, index) => item?.activityCode || item?.content?.activityCode || String(index)}
           contentContainerStyle={styles.resultsList}
           key={activityColumns}
@@ -515,11 +471,6 @@ const ActivitiesScreen = ({ navigation }) => {
                 </View>
               ) : null}
 
-              {!searching && searched && (results || []).length === 0 ? (
-                <View style={styles.centerState}>
-                  <Text style={styles.emptyText}>No activities found for this search.</Text>
-                </View>
-              ) : null}
             </View>
           }
           ListFooterComponent={
@@ -535,18 +486,6 @@ const ActivitiesScreen = ({ navigation }) => {
               />
             </View>
           }
-          renderItem={renderActivityCard}
-        />
-      ) : !searching && (results || []).length > 0 ? (
-        <FlatList
-          data={results}
-          keyExtractor={(item, index) => item?.activityCode || item?.content?.activityCode || String(index)}
-          contentContainerStyle={[styles.resultsList, centeredContent]}
-          key={activityColumns}
-          {...scrollProps}
-          numColumns={activityColumns}
-          columnWrapperStyle={activityColumns > 1 ? styles.gridRow : undefined}
-          renderItem={renderActivityCard}
         />
       ) : null}
 
@@ -748,10 +687,6 @@ const styles = StyleSheet.create({
     marginTop: 40,
     alignItems: 'center',
   },
-  emptyText: {
-    color: Colors.textMuted,
-    fontSize: 14,
-  },
   // The list header holds the full-bleed hero, so it must not inherit the
   // list's horizontal padding.
   webListHeader: {
@@ -793,55 +728,10 @@ const styles = StyleSheet.create({
   gridRow: {
     gap: 12,
   },
-  resultCardGrid: {
-    flex: 1,
-  },
-  resultCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    overflow: 'hidden',
-    marginBottom: 12,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  resultImage: {
-    width: 96,
-    height: 96,
-  },
-  resultImagePlaceholder: {
-    backgroundColor: Colors.backgroundAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  resultInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'center',
-  },
-  resultName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text,
-  },
   resultDestination: {
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 4,
-  },
-  resultPrice: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.primary,
-    marginTop: 6,
-  },
-  resultPriceInr: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,
