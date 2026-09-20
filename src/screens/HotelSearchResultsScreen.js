@@ -62,7 +62,12 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
     listingPayload,
     searchSession,
     destinationLabel,
-  } = route.params;
+    // Guarded because params are empty on a browser refresh: the URL is
+    // /hotels/search and carries no search criteria, so React Navigation
+    // restores the route with nothing in it. Without this the destructure
+    // throws and the page is simply blank. The other results screens already
+    // guard the same way.
+  } = route.params || {};
 
   // Hotels arrive in waves: the search screen sends the first chunk so results
   // appear quickly, and the rest are fetched here and appended. Everything
