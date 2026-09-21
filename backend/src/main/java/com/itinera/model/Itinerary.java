@@ -132,7 +132,9 @@ public class Itinerary {
     }
 
     public enum ItineraryType {
-        BUDGET, PREMIUM, ADVENTURE, FAMILY, ROMANTIC
+        BUDGET, PREMIUM, LUXURY, ADVENTURE, FAMILY, ROMANTIC,
+        HONEYMOON, WELLNESS, PILGRIMAGE, WILDLIFE, BEACH,
+        CULTURAL, WEEKEND, GROUP, SOLO
     }
 
     public enum Category {
