@@ -79,13 +79,13 @@ const AUTH_STORAGE_KEY = 'itinera.auth';
 // hero has scrolled away instead.
 const HERO_ROUTES = new Set([
   'Flights', 'Hotels', 'Activities', 'Cabs', 'TripSafe',
-  'Cart', 'MyFlightBookings', 'ChatInbox', 'GroupTripPlanner',
+  'Cart', 'MyFlightBookings', 'ChatInbox',
   'LandPackage',
 ]);
 
 const WEB_HEADER_ROUTES = new Set([
   'LandPackage', 'ItineraryList', 'ItineraryDetail', 'Customization',
-  'Cart', 'Checkout', 'TalkToAgent', 'GroupTripPlanner',
+  'Cart', 'Checkout', 'TalkToAgent',
   'Hotels', 'HotelSearchResults', 'HotelDetail', 'HotelBooking',
   'Flights', 'FlightBooking', 'FlightReissue', 'MyFlightBookings',
   'Activities', 'ActivityResults', 'ActivityDetail', 'ActivityBooking',
@@ -153,6 +153,14 @@ function CustomerTabs() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => tabIcon('home', color, focused),
+        }}
+      />
+      <Tab.Screen
+        name="GroupTab"
+        component={GroupTripPlannerScreen}
+        options={{
+          title: 'Groups',
+          tabBarIcon: ({ color, focused }) => tabIcon('people', color, focused),
         }}
       />
       <Tab.Screen
@@ -456,7 +464,6 @@ export default function App() {
               <Stack.Screen name="AdminPosterStudio" component={AdminPosterStudioScreen} />
               <Stack.Screen name="AdminCoupons" component={AdminCouponsScreen} />
               <Stack.Screen name="AdminMarkup" component={AdminMarkupScreen} />
-              <Stack.Screen name="GroupTripPlanner" component={GroupTripPlannerScreen} />
               <Stack.Screen name="RequestDetail" component={RequestDetailScreen} />
               <Stack.Screen name="CreatePackage" component={CreatePackageScreen} />
               <Stack.Screen name="SupplierRequests" component={SupplierRequestsScreen} />

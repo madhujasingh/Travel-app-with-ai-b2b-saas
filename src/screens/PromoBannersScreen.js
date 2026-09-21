@@ -36,7 +36,7 @@ const SCREEN_OPTIONS = [
   { label: 'Flights', value: 'Flights' },
   { label: 'Activities', value: 'Activities' },
   { label: 'Land Packages', value: 'LandPackage' },
-  { label: 'Group Trip Planner', value: 'GroupTripPlanner' },
+  { label: 'Group Trip Planner', value: 'GroupTab' },
 ];
 
 const EMPTY_FORM = {

@@ -18,6 +18,7 @@ import useHeroHeader from '../hooks/useHeroHeader';
 import WebStickyHeader from '../components/web/WebStickyHeader';
 import { appAlert } from '../utils/appAlert';
 
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import API_CONFIG from '../config/api';
@@ -277,6 +278,23 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
     setActiveSection(match.finalizedItineraryId ? 'PREVIOUS' : 'CURRENT');
     setSelectedTripId(match.id);
   }, [requestedTripId, trips]);
+
+  // Group planning is a tab now, not a pushed screen, so anything routed in
+  // through params outlives the visit that set it: without this, opening the
+  // tab later would re-select whichever trip was last deep-linked from
+  // Profile, or keep offering to seed a plan from a package chosen long ago.
+  // Clearing on blur leaves the params intact for the whole visit they were
+  // meant for, and resets the tab to its default state for the next one.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        if (requestedTripId || seedItinerary) {
+          navigation.setParams({ tripId: undefined, seedItinerary: undefined });
+        }
+      },
+      [navigation, requestedTripId, seedItinerary]
+    )
+  );
 
   useEffect(() => {
     if (activeTrip?.id) {

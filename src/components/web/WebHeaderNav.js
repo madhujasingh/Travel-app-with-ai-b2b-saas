@@ -29,7 +29,7 @@ const PRODUCTS = [
   { label: 'Activities', route: 'Activities', icon: 'ticket-outline' },
   { label: 'Cabs', route: 'Cabs', icon: 'car-outline' },
   { label: 'Packages', route: 'LandPackage', icon: 'map-outline' },
-  { label: 'Group Trips', route: 'GroupTripPlanner', icon: 'people-outline' },
+  { label: 'Group Trips', route: 'GroupTab', icon: 'people-outline', isTab: true },
 ];
 
 const NavLink = ({ label, icon, isActive, onPress }) => (

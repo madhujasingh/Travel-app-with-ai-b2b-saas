@@ -32,6 +32,9 @@ const CARD_HEIGHT = 180;
 // Admin-managed deal/discount banners (see backend PromoBannerController) -
 // renders nothing if the placement has no active banners, so screens can
 // drop this in unconditionally without an empty-state gap.
+// Banner targets that live in the bottom tab bar rather than the stack.
+const TAB_TARGETS = new Set(['HomeTab', 'GroupTab', 'PromotionsTab', 'CartTab', 'ProfileTab']);
+
 const PromoBannerCarousel = ({ placement, heading }) => {
   const navigation = useNavigation();
   const { isDesktop } = useResponsive();
@@ -65,7 +68,13 @@ const PromoBannerCarousel = ({ placement, heading }) => {
       // that has since been removed would otherwise throw on tap. A banner
       // that goes nowhere is a far smaller problem than one that crashes.
       try {
-        navigation.navigate(banner.linkTarget);
+        if (TAB_TARGETS.has(banner.linkTarget)) {
+          // A bare tab name only resolves from inside the tab navigator, and
+          // this carousel also renders on pushed screens like Hotels.
+          navigation.navigate('CustomerTabs', { screen: banner.linkTarget });
+        } else {
+          navigation.navigate(banner.linkTarget);
+        }
       } catch (error) {
         console.log(`Promo banner points at an unknown screen: ${banner.linkTarget}`);
       }

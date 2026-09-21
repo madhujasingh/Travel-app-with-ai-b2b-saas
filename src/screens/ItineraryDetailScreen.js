@@ -141,8 +141,9 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
   const handlePlanWithGroup = () => {
     requireAuth(
       () =>
-      navigation.navigate('GroupTripPlanner', {
-        seedItinerary: itinerary,
+      navigation.navigate('CustomerTabs', {
+        screen: 'GroupTab',
+        params: { seedItinerary: itinerary },
       }),
       'Sign in to plan a group trip.'
     );

@@ -17,6 +17,7 @@ const linking = {
         path: '',
         screens: {
           HomeTab: 'home',
+          GroupTab: 'group-trips',
           PromotionsTab: 'deals',
           CartTab: 'cart',
           ProfileTab: 'profile',
@@ -31,7 +32,6 @@ const linking = {
       Customization: 'itineraries/:itineraryId/customize',
       Checkout: 'checkout',
       TalkToAgent: 'talk-to-agent',
-      GroupTripPlanner: 'group-trips',
 
       // Hotels
       Hotels: 'hotels',

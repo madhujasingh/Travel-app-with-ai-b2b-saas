@@ -480,7 +480,7 @@ const CustomerProfileScreen = ({ navigation }) => {
           <View style={styles.tabContent}>
             <TouchableOpacity
               style={styles.groupPlannerLaunchCard}
-              onPress={() => navigation.navigate('GroupTripPlanner')}
+              onPress={() => navigation.navigate('CustomerTabs', { screen: 'GroupTab' })}
             >
               <View style={styles.groupPlannerLaunchIcon}>
                 <Ionicons name="people-outline" size={20} color={Colors.secondary} />
@@ -505,7 +505,12 @@ const CustomerProfileScreen = ({ navigation }) => {
               <TouchableOpacity
                 key={trip.id}
                 style={styles.groupTripCard}
-                onPress={() => navigation.navigate('GroupTripPlanner', { tripId: trip.id })}
+                onPress={() =>
+                  navigation.navigate('CustomerTabs', {
+                    screen: 'GroupTab',
+                    params: { tripId: trip.id },
+                  })
+                }
               >
                 <View style={styles.groupTripHeader}>
                   <Text style={styles.groupTripTitle}>{trip.title}</Text>
