@@ -1,13 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
+  Platform,
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { appAlert } from '../utils/appAlert';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +23,24 @@ import { parseFlyerText } from '../utils/flyerTextParser';
 import { decimalOnly } from '../utils/inputSanitizers';
 
 const itineraryTypes = ['BUDGET', 'PREMIUM', 'ADVENTURE', 'FAMILY', 'ROMANTIC'];
+const ratingOptions = [1, 2, 3, 4, 5];
+
+// expo-image-picker hands back a file:// uri on native and a blob:/data: one
+// on web. React Native's FormData takes the {uri, name, type} shape; the
+// browser's needs a real Blob, so the picked asset is normalised here rather
+// than at each call site.
+const appendImageTo = async (formData, asset) => {
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(asset.uri)).blob();
+    formData.append('image', blob, asset.fileName || 'cover.jpg');
+    return;
+  }
+  formData.append('image', {
+    uri: asset.uri,
+    name: asset.fileName || 'cover.jpg',
+    type: asset.mimeType || 'image/jpeg',
+  });
+};
 const itineraryCategories = ['INDIA', 'INTERNATIONAL'];
 
 const createEmptyDay = (dayNumber) => ({
@@ -82,24 +104,42 @@ const parseActivityLine = (line) => {
   };
 };
 
-const AdminItineraryUploadScreen = ({ navigation }) => {
+const AdminItineraryUploadScreen = ({ navigation, route }) => {
   const { token, user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
+
+  // Opened from the manage-packages list with a package to edit, or from the
+  // dashboard tile with nothing, in which case this creates a new one.
+  const editing = route?.params?.itinerary || null;
+
   const [form, setForm] = useState({
-    title: '',
-    destination: '',
-    duration: '',
-    price: '',
-    description: '',
-    imageUrl: '',
-    type: 'PREMIUM',
-    category: 'INTERNATIONAL',
-    highlights: '',
-    inclusions: '',
-    exclusions: '',
+    title: editing?.title || '',
+    destination: editing?.destination || '',
+    duration: editing?.duration || '',
+    price: editing?.price != null ? String(editing.price) : '',
+    description: editing?.description || '',
+    imageUrl: editing?.imageUrl || '',
+    type: editing?.type || 'PREMIUM',
+    category: editing?.category || 'INTERNATIONAL',
+    rating: editing?.rating != null ? Number(editing.rating) : 5,
+    isActive: editing?.isActive !== false,
+    highlights: (editing?.highlights || []).join('\n'),
+    inclusions: (editing?.inclusions || []).join('\n'),
+    exclusions: (editing?.exclusions || []).join('\n'),
   });
-  const [dayPlans, setDayPlans] = useState([createEmptyDay(1)]);
+  const [dayPlans, setDayPlans] = useState(
+    editing?.dayPlans?.length
+      ? editing.dayPlans.map((day) => ({
+          dayNumber: day.dayNumber,
+          title: day.title || '',
+          activitiesText: (day.activities || [])
+            .map((a) => `${a.time ? `${a.time} - ` : ''}${a.activity || ''}`)
+            .join('\n'),
+        }))
+      : [createEmptyDay(1)]
+  );
   const [pasteText, setPasteText] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
 
   const isAdmin = user?.role === 'ADMIN';
   const canSubmit = useMemo(
@@ -169,6 +209,45 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
     appAlert('Parsed', 'Fields below have been filled in — review and edit before publishing.');
   };
 
+  const pickImage = async () => {
+    // The web picker needs no OS permission, and asking for one there returns
+    // denied, which would block the picker that actually works.
+    if (Platform.OS !== 'web') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        appAlert('Permission needed', 'Please allow photo library access to pick a cover photo.');
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      aspect: [16, 9],
+      allowsEditing: true,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setSelectedImage(result.assets[0]);
+    }
+  };
+
+  // The photo goes up separately from the package body: the bytes are
+  // @JsonIgnore on the server, so they can't ride along in the JSON, and
+  // keeping them apart means the cover can be swapped later without
+  // resending the whole package.
+  const uploadCoverPhoto = async (itineraryId) => {
+    if (!selectedImage) {
+      return true;
+    }
+    const formData = new FormData();
+    await appendImageTo(formData, selectedImage);
+    const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/${itineraryId}/image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    return response.ok;
+  };
+
   const submitItinerary = async () => {
     if (!isAdmin) {
       appAlert('Access denied', 'Only admins can upload itineraries.');
@@ -187,13 +266,13 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
         destination: form.destination.trim(),
         duration: form.duration.trim(),
         price: Number(form.price),
-        rating: 5,
-        reviewCount: 0,
+        rating: Number(form.rating) || 5,
+        reviewCount: editing?.reviewCount ?? 0,
         description: form.description.trim() || `${form.destination.trim()} itinerary created by admin`,
         imageUrl: form.imageUrl.trim() || 'briefcase-outline',
         type: form.type,
         category: form.category,
-        isActive: true,
+        isActive: form.isActive,
         highlights: splitLines(form.highlights),
         inclusions: splitLines(form.inclusions),
         exclusions: splitLines(form.exclusions),
@@ -204,18 +283,43 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
         })),
       };
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        editing
+          ? `${API_CONFIG.BASE_URL}/itineraries/${editing.id}`
+          : `${API_CONFIG.BASE_URL}/itineraries`,
+        {
+          method: editing ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.message || data?.error || 'Failed to create itinerary');
+        throw new Error(
+          data?.message || data?.error || `Failed to ${editing ? 'update' : 'create'} itinerary`
+        );
+      }
+
+      // A failed photo must not read as a failed package - the package is
+      // already saved by this point, and saying otherwise would send the
+      // admin back to re-enter everything.
+      const photoOk = await uploadCoverPhoto(data.id);
+      if (!photoOk) {
+        appAlert(
+          'Package saved, photo failed',
+          'The package was saved, but its cover photo could not be uploaded. Open it from Manage Packages to try the photo again.'
+        );
+      }
+
+      if (editing) {
+        appAlert('Package updated', 'Your changes are live.', [
+          { text: 'Done', onPress: () => navigation.goBack() },
+        ]);
+        return;
       }
 
       appAlert('Itinerary uploaded', 'Your itinerary is now live in the app.', [
@@ -235,11 +339,14 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
               imageUrl: '',
               type: 'PREMIUM',
               category: 'INTERNATIONAL',
+              rating: 5,
+              isActive: true,
               highlights: '',
               inclusions: '',
               exclusions: '',
             });
             setDayPlans([createEmptyDay(1)]);
+            setSelectedImage(null);
           },
         },
       ]);
@@ -257,13 +364,13 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Upload Itinerary</Text>
+        <Text style={styles.headerTitle}>{editing ? 'Edit Package' : 'Upload Itinerary'}</Text>
         <View style={{ width: 28 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>Admin Publishing Studio</Text>
+          <Text style={styles.heroTitle}>{editing ? `Editing: ${editing.title}` : 'Admin Publishing Studio'}</Text>
           <Text style={styles.heroText}>
             Create a destination package with the same day-wise format users already see in the app.
           </Text>
@@ -323,10 +430,49 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
           />
           <TextInput
             style={styles.input}
-            placeholder="Icon name (optional, e.g. airplane-outline)"
+            placeholder="Fallback icon name (optional, e.g. airplane-outline)"
             value={form.imageUrl}
             onChangeText={(value) => updateForm('imageUrl', value)}
           />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Cover Photo</Text>
+          <Text style={styles.sectionHint}>
+            Shown on the package card and detail screen. 16:9 works best.
+          </Text>
+
+          {selectedImage ? (
+            <Image source={{ uri: selectedImage.uri }} style={styles.coverPreview} />
+          ) : editing?.hasImage ? (
+            <Image
+              source={{ uri: `${API_CONFIG.BASE_URL}/itineraries/${editing.id}/image` }}
+              style={styles.coverPreview}
+            />
+          ) : (
+            <View style={[styles.coverPreview, styles.coverEmpty]}>
+              <Ionicons name="image-outline" size={32} color={Colors.textMuted} />
+              <Text style={styles.coverEmptyText}>No photo yet</Text>
+            </View>
+          )}
+
+          <View style={styles.row}>
+            <TouchableOpacity style={[styles.photoButton, styles.halfInput]} onPress={pickImage}>
+              <Ionicons name="image-outline" size={18} color={Colors.primary} />
+              <Text style={styles.photoButtonText}>
+                {selectedImage || editing?.hasImage ? 'Change photo' : 'Choose photo'}
+              </Text>
+            </TouchableOpacity>
+            {selectedImage ? (
+              <TouchableOpacity
+                style={[styles.photoButton, styles.halfInput]}
+                onPress={() => setSelectedImage(null)}
+              >
+                <Ionicons name="close-outline" size={18} color={Colors.textMuted} />
+                <Text style={styles.photoButtonText}>Clear</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -353,6 +499,40 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
                 <Text style={[styles.chipText, form.category === category && styles.chipTextActive]}>{category}</Text>
               </TouchableOpacity>
             ))}
+          </View>
+
+          <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>Rating</Text>
+          <View style={styles.chipRow}>
+            {ratingOptions.map((value) => (
+              <TouchableOpacity
+                key={value}
+                style={[styles.chip, form.rating === value && styles.chipActive]}
+                onPress={() => updateForm('rating', value)}
+              >
+                <Ionicons
+                  name="star"
+                  size={13}
+                  color={form.rating === value ? Colors.secondary : Colors.textMuted}
+                />
+                <Text style={[styles.chipText, form.rating === value && styles.chipTextActive]}>
+                  {' '}{value}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchLabel}>Visible to customers</Text>
+              <Text style={styles.sectionHint}>
+                Turn this off to take the package off sale without deleting it.
+              </Text>
+            </View>
+            <Switch
+              value={form.isActive}
+              onValueChange={(value) => updateForm('isActive', value)}
+              trackColor={{ true: Colors.primary }}
+            />
           </View>
         </View>
 
@@ -423,7 +603,11 @@ const AdminItineraryUploadScreen = ({ navigation }) => {
           disabled={!canSubmit || submitting || !isAdmin}
         >
           <Ionicons name="cloud-upload-outline" size={20} color={Colors.secondary} style={styles.submitIcon} />
-          <Text style={styles.submitText}>{submitting ? 'Publishing...' : 'Publish Itinerary'}</Text>
+          <Text style={styles.submitText}>
+            {submitting
+              ? (editing ? 'Saving...' : 'Publishing...')
+              : (editing ? 'Save Changes' : 'Publish Itinerary')}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -503,6 +687,56 @@ const styles = StyleSheet.create({
   },
   sectionTitleCompact: {
     marginTop: 6,
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: Colors.textMuted || '#777',
+    marginBottom: 10,
+  },
+  coverPreview: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: '#EFEFEF',
+  },
+  coverEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#CFCFCF',
+  },
+  coverEmptyText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: Colors.textMuted || '#777',
+  },
+  photoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    backgroundColor: '#FAFAFA',
+  },
+  photoButtonText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textDark || '#222',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  switchLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textDark || '#222',
   },
   helperText: {
     fontSize: 13,

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
+  Image,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
@@ -33,6 +34,9 @@ const normalizeItinerary = (item) => {
     ...item,
     type: normalizedType,
     image: item.imageUrl || TYPE_TO_ICON[normalizedType] || 'briefcase-outline',
+    // An admin-uploaded cover photo lives on the server, not in the row - the
+    // icon above stays as the fallback for packages without one.
+    photoUri: item.hasImage ? `${API_CONFIG.BASE_URL}/itineraries/${item.id}/image` : null,
     rating: Number(item.rating || 0),
     reviews: Number(item.reviewCount || 0),
     price: Number(item.price || 0),
@@ -219,7 +223,11 @@ const ItineraryListScreen = ({ route, navigation }) => {
       activeOpacity={0.8}
     >
       <View style={styles.cardHeader}>
-        <Ionicons name={item.image} size={60} color={Colors.secondary} style={styles.cardImage} />
+        {item.photoUri ? (
+          <Image source={{ uri: item.photoUri }} style={styles.cardPhoto} resizeMode="cover" />
+        ) : (
+          <Ionicons name={item.image} size={60} color={Colors.secondary} style={styles.cardImage} />
+        )}
         {item.aiGenerated ? (
           <View style={styles.aiBadge}>
             <Ionicons name="sparkles" size={11} color={Colors.secondary} />
@@ -491,6 +499,14 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   cardImage: {},
+  // Negative margins cancel cardHeader's padding so a real photo reaches the
+  // card's edges, where the icon it replaces was meant to sit inset instead.
+  cardPhoto: {
+    alignSelf: 'stretch',
+    height: 160,
+    marginHorizontal: -20,
+    marginVertical: -20,
+  },
   aiBadge: {
     position: 'absolute',
     top: 10,

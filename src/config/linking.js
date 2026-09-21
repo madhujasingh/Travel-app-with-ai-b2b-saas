@@ -72,6 +72,7 @@ const linking = {
       ChatScreen: 'messages/:conversationId',
 
       // B2B / admin
+      AdminItineraries: 'admin/itineraries',
       AdminItineraryUpload: 'admin/itineraries/upload',
       SupplierNetwork: 'admin/suppliers',
       PromoBanners: 'admin/promo-banners',

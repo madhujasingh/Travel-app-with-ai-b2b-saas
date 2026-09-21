@@ -371,6 +371,24 @@ const B2BDashboard = ({ navigation }) => {
           <Ionicons name="cloud-upload-outline" size={28} color={Colors.secondary} />
         </View>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.adminUploadCard}
+        onPress={() => navigation.navigate('AdminItineraries')}
+        activeOpacity={0.9}
+      >
+        <View style={styles.adminUploadCopy}>
+          <Text style={styles.adminUploadEyebrow}>Admin only</Text>
+          <Text style={styles.adminUploadTitle}>Manage packages</Text>
+          <Text style={styles.adminUploadText}>
+            Every package in the catalogue - edit one, change its photo, take it off sale or delete it.
+          </Text>
+        </View>
+        <View style={styles.adminUploadIconWrap}>
+          <Ionicons name="albums-outline" size={28} color={Colors.secondary} />
+        </View>
+      </TouchableOpacity>
+
       <TouchableOpacity
         style={styles.posterStudioCard}
         onPress={() => navigation.navigate('AdminPosterStudio')}

@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Image,
   StatusBar,
 } from 'react-native';
 import useResponsive from '../hooks/useResponsive';
@@ -13,6 +14,7 @@ import { appAlert } from '../utils/appAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
+import API_CONFIG from '../config/api';
 import { adaptItineraryToWeather, fetchDestinationWeatherForecast } from '../utils/weatherPlanner';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +30,11 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
   const [weatherBundle, setWeatherBundle] = useState(null);
   const [weatherError, setWeatherError] = useState('');
   const heroIcon = itinerary.image || itinerary.imageUrl || 'briefcase-outline';
+  // An admin-uploaded cover photo is served from the API rather than stored on
+  // the row; without one the icon above stays as the hero.
+  const heroPhotoUri = (itinerary.hasImage || itinerary.photoUri)
+    ? (itinerary.photoUri || `${API_CONFIG.BASE_URL}/itineraries/${itinerary.id}/image`)
+    : null;
   const inclusions = itinerary.inclusions || [];
   const exclusions = itinerary.exclusions || [];
   const highlights = itinerary.highlights || [];
@@ -167,7 +174,11 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={centeredContent}>
         {/* Hero Section */}
         <View style={styles.heroSection}>
-          <Ionicons name={heroIcon} size={80} color={Colors.secondary} style={styles.heroImage} />
+          {heroPhotoUri ? (
+            <Image source={{ uri: heroPhotoUri }} style={styles.heroPhoto} resizeMode="cover" />
+          ) : (
+            <Ionicons name={heroIcon} size={80} color={Colors.secondary} style={styles.heroImage} />
+          )}
           <View style={styles.heroOverlay}>
             <Text style={styles.heroTitle}>{itinerary.title}</Text>
             <Text style={styles.heroDuration}>{itinerary.duration}</Text>
@@ -464,6 +475,15 @@ const styles = StyleSheet.create({
   },
   heroImage: {
     fontSize: 80,
+    marginBottom: 15,
+  },
+  // Cancels heroSection's padding at the top and sides so the photo runs to
+  // the screen edges, with the title block sitting below it as before.
+  heroPhoto: {
+    alignSelf: 'stretch',
+    height: 210,
+    marginTop: -30,
+    marginHorizontal: -30,
     marginBottom: 15,
   },
   heroOverlay: {

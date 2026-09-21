@@ -43,6 +43,7 @@ import B2BDashboard from './src/screens/B2BDashboard';
 import ChatInboxScreen from './src/screens/ChatInboxScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AdminItineraryUploadScreen from './src/screens/AdminItineraryUploadScreen';
+import AdminItinerariesScreen from './src/screens/AdminItinerariesScreen';
 import ManageSuppliersScreen from './src/screens/ManageSuppliersScreen';
 import PromoBannersScreen from './src/screens/PromoBannersScreen';
 import HotelCatalogAdminScreen from './src/screens/HotelCatalogAdminScreen';
@@ -457,6 +458,7 @@ export default function App() {
               <Stack.Screen name="ChatInbox" component={ChatInboxScreen} />
               <Stack.Screen name="ChatScreen" component={ChatScreen} />
               <Stack.Screen name="AdminItineraryUpload" component={AdminItineraryUploadScreen} />
+              <Stack.Screen name="AdminItineraries" component={AdminItinerariesScreen} />
               <Stack.Screen name="SupplierNetwork" component={ManageSuppliersScreen} />
               <Stack.Screen name="PromoBanners" component={PromoBannersScreen} />
               <Stack.Screen name="HotelCatalogAdmin" component={HotelCatalogAdminScreen} />
