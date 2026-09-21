@@ -91,3 +91,39 @@ export const marketForDestination = (destination) => {
   }
   return null;
 };
+
+// Every destination the publish form offers to pick from, so a package's
+// market is decided by choosing a known place rather than by typing a name
+// and hoping the category chip beside it was set to match. The extras above
+// are plain lowercase keys for matching, so they get title-cased for display.
+const titleCase = (value) =>
+  value
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+export const selectableDestinations = [
+  ...indianDestinations.map((item) => ({
+    name: item.name,
+    market: 'india',
+    region: item.state,
+  })),
+  ...internationalDestinations.map((item) => ({
+    name: item.name,
+    market: 'international',
+    region: item.country,
+  })),
+  ...EXTRA_INDIA.map((name) => ({ name: titleCase(name), market: 'india', region: 'India' })),
+  ...EXTRA_INTERNATIONAL.map((name) => ({
+    name: titleCase(name),
+    market: 'international',
+    region: 'International',
+  })),
+]
+  // The featured lists and the extras overlap, and a picker that offers the
+  // same city twice looks broken.
+  .filter(
+    (item, index, all) =>
+      all.findIndex((other) => other.name.toLowerCase() === item.name.toLowerCase()) === index
+  )
+  .sort((a, b) => a.name.localeCompare(b.name));

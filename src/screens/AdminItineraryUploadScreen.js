@@ -21,6 +21,7 @@ import API_CONFIG from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { parseFlyerText } from '../utils/flyerTextParser';
 import { decimalOnly } from '../utils/inputSanitizers';
+import { marketForDestination, selectableDestinations } from '../data/packageDestinations';
 
 const itineraryTypes = [
   'BUDGET', 'PREMIUM', 'LUXURY', 'ADVENTURE', 'FAMILY',
@@ -146,6 +147,10 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
   const [pasteText, setPasteText] = useState('');
   const [selectedImages, setSelectedImages] = useState([]);
   const [existingPhotos, setExistingPhotos] = useState([]);
+  // Once the admin picks a category themselves, stop overriding it.
+  const [categoryTouched, setCategoryTouched] = useState(Boolean(editing));
+  const [destinationOpen, setDestinationOpen] = useState(false);
+  const [destinationQuery, setDestinationQuery] = useState('');
 
   // A package being edited may already have a gallery; it is not in the
   // package body, so it is fetched alongside it.
@@ -168,6 +173,46 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
       cancelled = true;
     };
   }, [editing?.id]);
+
+  // Browsing Packages splits strictly on category - India or International -
+  // so a Goa package saved as INTERNATIONAL is invisible under India, with
+  // nothing on screen to explain why. The category defaulted to
+  // INTERNATIONAL, which is the wrong guess for most of what this agency
+  // sells, so it follows the destination instead once that is recognised.
+  // Still editable: the guess is a default, not a lock, and an unrecognised
+  // destination leaves whatever was chosen alone.
+  const inferredMarket = marketForDestination(form.destination);
+  const inferredCategory = inferredMarket ? inferredMarket.toUpperCase() : null;
+  const categoryMismatch = Boolean(inferredCategory) && inferredCategory !== form.category;
+
+  useEffect(() => {
+    if (!categoryTouched && inferredCategory && inferredCategory !== form.category) {
+      setForm((current) => ({ ...current, category: inferredCategory }));
+    }
+  }, [categoryTouched, inferredCategory, form.category]);
+
+  const destinationMatches = useMemo(() => {
+    const query = destinationQuery.trim().toLowerCase();
+    const matches = query
+      ? selectableDestinations.filter(
+          (item) =>
+            item.name.toLowerCase().includes(query) ||
+            (item.region || '').toLowerCase().includes(query)
+        )
+      : selectableDestinations;
+    // Long enough to scroll through, short enough not to swamp the form.
+    return matches.slice(0, 40);
+  }, [destinationQuery]);
+
+  const chooseDestination = (item) => {
+    updateForm('destination', item.name);
+    // Picking a known place settles the market, which is the whole point of
+    // choosing from a list rather than typing - so this overrides an earlier
+    // manual category choice instead of deferring to it.
+    setCategoryTouched(false);
+    setDestinationOpen(false);
+    setDestinationQuery('');
+  };
 
   const isAdmin = user?.role === 'ADMIN';
   const canSubmit = useMemo(
@@ -401,7 +446,12 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
       appAlert('Itinerary uploaded', 'Your itinerary is now live in the app.', [
         {
           text: 'View Details',
-          onPress: () => navigation.replace('ItineraryDetail', { itinerary: data }),
+          onPress: () =>
+            navigation.replace('ItineraryDetail', {
+              itinerary: data,
+              itineraryId: data.id,
+              destination: data.destination,
+            }),
         },
         {
           text: 'Create Another',
@@ -481,7 +531,72 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Package Basics</Text>
           <TextInput style={styles.input} placeholder="Title" value={form.title} onChangeText={(value) => updateForm('title', value)} />
-          <TextInput style={styles.input} placeholder="Destination" value={form.destination} onChangeText={(value) => updateForm('destination', value)} />
+          <TouchableOpacity
+            style={styles.pickerField}
+            onPress={() => setDestinationOpen((open) => !open)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="location-outline" size={16} color={Colors.primaryDark} />
+            <Text
+              style={[styles.pickerValue, !form.destination && styles.pickerPlaceholder]}
+              numberOfLines={1}
+            >
+              {form.destination || 'Select a destination'}
+            </Text>
+            <Ionicons
+              name={destinationOpen ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={Colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {destinationOpen ? (
+            <View style={styles.pickerPanel}>
+              <TextInput
+                style={styles.pickerSearch}
+                placeholder="Search cities and countries"
+                placeholderTextColor={Colors.textMuted}
+                value={destinationQuery}
+                onChangeText={setDestinationQuery}
+                autoCorrect={false}
+              />
+              <ScrollView style={styles.pickerList} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                {destinationMatches.map((item) => (
+                  <TouchableOpacity
+                    key={`${item.market}-${item.name}`}
+                    style={styles.pickerRow}
+                    onPress={() => chooseDestination(item)}
+                  >
+                    <Text style={styles.pickerRowName}>{item.name}</Text>
+                    <Text style={styles.pickerRowMeta}>{item.region}</Text>
+                  </TouchableOpacity>
+                ))}
+
+                {/* The list is what we sell today, not everywhere that exists -
+                    a destination missing from it must still be publishable. */}
+                {destinationQuery.trim() &&
+                !destinationMatches.some(
+                  (item) => item.name.toLowerCase() === destinationQuery.trim().toLowerCase()
+                ) ? (
+                  <TouchableOpacity
+                    style={styles.pickerRow}
+                    onPress={() => {
+                      updateForm('destination', destinationQuery.trim());
+                      setDestinationOpen(false);
+                      setDestinationQuery('');
+                    }}
+                  >
+                    <Text style={styles.pickerRowName}>Use "{destinationQuery.trim()}"</Text>
+                    <Text style={styles.pickerRowMeta}>Not in the list - set the category yourself</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {!destinationMatches.length && !destinationQuery.trim() ? (
+                  <Text style={styles.pickerEmpty}>No destinations available</Text>
+                ) : null}
+              </ScrollView>
+            </View>
+          ) : null}
           <View style={styles.row}>
             <TextInput
               style={[styles.input, styles.halfInput]}
@@ -601,12 +716,27 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
               <TouchableOpacity
                 key={category}
                 style={[styles.chip, form.category === category && styles.chipActive]}
-                onPress={() => updateForm('category', category)}
+                onPress={() => {
+                  setCategoryTouched(true);
+                  updateForm('category', category);
+                }}
               >
                 <Text style={[styles.chipText, form.category === category && styles.chipTextActive]}>{category}</Text>
               </TouchableOpacity>
             ))}
           </View>
+
+          {categoryMismatch ? (
+            <View style={styles.warningRow}>
+              <Ionicons name="warning-outline" size={15} color="#B26A00" />
+              <Text style={styles.warningText}>
+                {form.destination.trim()} looks like{' '}
+                {inferredCategory === 'INDIA' ? 'an India' : 'an International'} destination. Customers
+                browsing {inferredCategory === 'INDIA' ? 'India' : 'International'} packages won't see this
+                one while it's filed under {form.category}.
+              </Text>
+            </View>
+          ) : null}
 
           <Text style={[styles.sectionTitle, styles.sectionTitleCompact]}>Rating</Text>
           <View style={styles.chipRow}>
@@ -878,6 +1008,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textDark || '#222',
   },
+  pickerField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 13,
+    backgroundColor: '#FFF',
+    marginBottom: 12,
+  },
+  pickerValue: { flex: 1, fontSize: 14, color: Colors.textDark || '#222' },
+  pickerPlaceholder: { color: Colors.textMuted || '#777' },
+  pickerPanel: {
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 10,
+    marginBottom: 12,
+    overflow: 'hidden',
+    backgroundColor: '#FFF',
+  },
+  pickerSearch: {
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontSize: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+    color: Colors.textDark || '#222',
+  },
+  pickerList: { maxHeight: 220 },
+  pickerRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F4F4F4',
+  },
+  pickerRowName: { fontSize: 14, fontWeight: '600', color: Colors.textDark || '#222' },
+  pickerRowMeta: { fontSize: 11, color: Colors.textMuted || '#777', marginTop: 2 },
+  pickerEmpty: { padding: 14, fontSize: 13, color: Colors.textMuted || '#777' },
+  warningRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#FFF6E5',
+  },
+  warningText: { flex: 1, fontSize: 12, lineHeight: 17, color: '#7A4A00' },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
