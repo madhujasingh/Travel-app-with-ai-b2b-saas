@@ -40,8 +40,6 @@ import FlightBookingScreen from './src/screens/FlightBookingScreen';
 import FlightReissueScreen from './src/screens/FlightReissueScreen';
 import MyFlightBookingsScreen from './src/screens/MyFlightBookingsScreen';
 import B2BDashboard from './src/screens/B2BDashboard';
-import AIRecommendationsScreen from './src/screens/AIRecommendationsScreen';
-import AIPlaceInsightScreen from './src/screens/AIPlaceInsightScreen';
 import ChatInboxScreen from './src/screens/ChatInboxScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import AdminItineraryUploadScreen from './src/screens/AdminItineraryUploadScreen';
@@ -81,7 +79,7 @@ const AUTH_STORAGE_KEY = 'itinera.auth';
 // hero has scrolled away instead.
 const HERO_ROUTES = new Set([
   'Flights', 'Hotels', 'Activities', 'Cabs', 'TripSafe',
-  'Cart', 'AIRecommendations', 'MyFlightBookings', 'ChatInbox', 'GroupTripPlanner',
+  'Cart', 'MyFlightBookings', 'ChatInbox', 'GroupTripPlanner',
   'LandPackage',
 ]);
 
@@ -93,7 +91,6 @@ const WEB_HEADER_ROUTES = new Set([
   'Activities', 'ActivityResults', 'ActivityDetail', 'ActivityBooking',
   'Cabs', 'CabResults', 'CabBooking',
   'TripSafe', 'TripSafeResults', 'TripSafeBooking',
-  'AIRecommendations', 'AIPlaceInsight',
   'ChatInbox', 'ChatScreen',
 ]);
 
@@ -156,14 +153,6 @@ function CustomerTabs() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => tabIcon('home', color, focused),
-        }}
-      />
-      <Tab.Screen
-        name="AITab"
-        component={AIRecommendationsScreen}
-        options={{
-          title: 'AI Picks',
-          tabBarIcon: ({ color, focused }) => tabIcon('sparkles', color, focused),
         }}
       />
       <Tab.Screen
@@ -407,8 +396,6 @@ export default function App() {
               <Stack.Screen name="CabResults" component={CabResultsScreen} />
               <Stack.Screen name="TripSafe" component={TripSafeScreen} />
               <Stack.Screen name="TripSafeResults" component={TripSafeResultsScreen} />
-              <Stack.Screen name="AIRecommendations" component={AIRecommendationsScreen} />
-              <Stack.Screen name="AIPlaceInsight" component={AIPlaceInsightScreen} />
               {/* Still reachable directly, for anyone who wants the full page
                   rather than the booking-time prompt. */}
               <Stack.Screen name="Login" component={LoginScreen} />
@@ -459,8 +446,6 @@ export default function App() {
               <Stack.Screen name="FlightBooking" component={FlightBookingScreen} />
               <Stack.Screen name="FlightReissue" component={FlightReissueScreen} />
               <Stack.Screen name="MyFlightBookings" component={MyFlightBookingsScreen} />
-              <Stack.Screen name="AIRecommendations" component={AIRecommendationsScreen} />
-              <Stack.Screen name="AIPlaceInsight" component={AIPlaceInsightScreen} />
               <Stack.Screen name="ChatInbox" component={ChatInboxScreen} />
               <Stack.Screen name="ChatScreen" component={ChatScreen} />
               <Stack.Screen name="AdminItineraryUpload" component={AdminItineraryUploadScreen} />

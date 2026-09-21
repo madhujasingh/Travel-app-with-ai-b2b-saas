@@ -30,7 +30,6 @@ const BOOKING_TABS = new Set(['bookings', 'transactions']);
 
 const PROFILE_TABS = [
   { key: 'preferences', label: 'Preferences', icon: 'settings-outline' },
-  { key: 'insights', label: 'AI Insights', icon: 'bulb-outline' },
   { key: 'bookings', label: 'Bookings', icon: 'calendar-outline' },
   { key: 'saved', label: 'Saved', icon: 'heart-outline' },
   { key: 'groups', label: 'Groups', icon: 'people-outline' },
@@ -367,19 +366,6 @@ const CustomerProfileScreen = ({ navigation }) => {
               'options-outline',
               'No travel preferences yet',
               "Preferences you set will show up here to personalize your recommendations."
-            )}
-          </View>
-        );
-
-      case 'insights':
-        return (
-          <View style={styles.tabContent}>
-            {renderEmptyState(
-              'bulb-outline',
-              'No AI insights yet',
-              'Get personalized destination picks based on your budget and mood.',
-              'Open AI Picks',
-              () => navigation.navigate('AITab')
             )}
           </View>
         );

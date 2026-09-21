@@ -6,11 +6,14 @@ import com.itinera.model.Itinerary;
 import com.itinera.repository.ItineraryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 public class ItineraryService {
+
+    private static final BigDecimal BUDGET_HEADROOM = new BigDecimal("1.2");
 
     @Autowired
     private ItineraryRepository itineraryRepository;
@@ -31,6 +34,17 @@ public class ItineraryService {
         return itineraryRepository.findByDestinationContainingIgnoreCaseAndCategoryAndIsActiveTrue(
             destination,
             Itinerary.Category.valueOf(category.toUpperCase())
+        );
+    }
+
+    // Home's trip search takes a budget, a destination, or both, so a budget
+    // with no destination has to answer "what can I afford anywhere?". The 20%
+    // headroom mirrors the client-side budget filter in ItineraryListScreen so
+    // the two agree on what "within budget" means, rather than each trimming
+    // what the other returned.
+    public List<Itinerary> searchByBudget(BigDecimal budget) {
+        return itineraryRepository.findByPriceLessThanEqualAndIsActiveTrueOrderByPriceAsc(
+            budget.multiply(BUDGET_HEADROOM)
         );
     }
 

@@ -4,6 +4,7 @@ import com.itinera.model.Itinerary;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Repository
@@ -14,6 +15,13 @@ public interface ItineraryRepository extends JpaRepository<Itinerary, Long> {
     List<Itinerary> findByTypeAndIsActiveTrue(Itinerary.ItineraryType type);
     List<Itinerary> findByIsActiveTrue();
     List<Itinerary> findByDestinationContainingIgnoreCaseAndCategoryAndIsActiveTrue(String destination, Itinerary.Category category);
+
+    // Powers budget-only search from Home, where the traveller gives a budget
+    // but no destination: show everything we can actually sell under it,
+    // whoever authored it - hand-made or previously AI-generated. Nothing new
+    // can be generated on this path, since AiItineraryService needs a
+    // destination to generate for.
+    List<Itinerary> findByPriceLessThanEqualAndIsActiveTrueOrderByPriceAsc(BigDecimal maxPrice);
 
     // ai_generated is NULL on rows created before that column existed (old
     // hand-seeded demo packages) - match both so the one-time cleanup in

@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -40,10 +41,24 @@ public class ItineraryController {
         return ResponseEntity.ok(itineraryService.getDestinations());
     }
 
+    // destination and budget are both optional, but at least one is required -
+    // Home's trip search lets the traveller fill either or both. With a
+    // destination we can fall back to generating packages for it; with only a
+    // budget we can only offer what already exists, since AiItineraryService
+    // generates per destination and has nothing to generate for here.
     @GetMapping("/search")
     public ResponseEntity<List<Itinerary>> searchItineraries(
-            @RequestParam String destination,
+            @RequestParam(required = false) String destination,
+            @RequestParam(required = false) BigDecimal budget,
             @RequestParam(required = false) String category) {
+
+        if (destination == null || destination.isBlank()) {
+            if (budget == null || budget.signum() <= 0) {
+                return ResponseEntity.badRequest().build();
+            }
+            return ResponseEntity.ok(itineraryService.searchByBudget(budget));
+        }
+
         List<Itinerary> results = category != null
                 ? itineraryService.searchByDestinationAndCategory(destination, category)
                 : itineraryService.searchByDestination(destination);

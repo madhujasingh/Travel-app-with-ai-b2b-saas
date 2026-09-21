@@ -52,8 +52,8 @@ const WebHero = ({
 
       {/* Account actions stay visible at the top of every hero - the tiles below
           only cover products, and the sticky site header is hidden until you
-          scroll, so this is the only route to Cart/Deals/AI Picks/Profile from
-          the top of the page. */}
+          scroll, so this is the only route to Cart/Deals/Profile from the top
+          of the page. */}
       <View style={styles.topBar}>
         <WebHeroTopBar />
       </View>

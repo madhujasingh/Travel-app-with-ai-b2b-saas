@@ -6,13 +6,17 @@ const linking = {
   prefixes: ['travelapp2://', 'https://myitineri.com', 'https://www.myitineri.com'],
   config: {
     screens: {
-      Splash: '',
+      // Splash used to claim '' as well, which CustomerTabs needs for its
+      // tabs to sit at /home, /deals and so on. Two screens on one path leaves
+      // the route map ambiguous, and an empty-path parent can absorb URLs its
+      // own children do not match - which sends a deep link to the first tab
+      // instead of the screen it named.
+      Splash: 'welcome',
       Login: 'login',
       CustomerTabs: {
         path: '',
         screens: {
           HomeTab: 'home',
-          AITab: 'ai-picks',
           PromotionsTab: 'deals',
           CartTab: 'cart',
           ProfileTab: 'profile',
@@ -62,10 +66,6 @@ const linking = {
       TripSafe: 'insurance',
       TripSafeResults: 'insurance/quotes',
       TripSafeBooking: 'insurance/book',
-
-      // AI
-      AIRecommendations: 'ai-picks',
-      AIPlaceInsight: 'ai-picks/:placeName',
 
       // Messaging
       ChatInbox: 'messages',

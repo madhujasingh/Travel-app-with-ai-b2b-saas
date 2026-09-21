@@ -1,9 +1,9 @@
 // Account actions across the top of a hero, over the photo.
 //
 // The hero's product tiles only cover products, and the sticky site header is
-// hidden until you scroll - so without this there is no way to reach Cart, Deals,
-// AI Picks or your profile from the top of a landing page. The reference sites
-// all park these in the hero's top-right for the same reason.
+// hidden until you scroll - so without this there is no way to reach Cart, Deals
+// or your profile from the top of a landing page. The reference sites all park
+// these in the hero's top-right for the same reason.
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -14,7 +14,6 @@ import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 
 const ACTIONS = [
-  { key: 'AITab', label: 'AI Picks', icon: 'sparkles-outline' },
   { key: 'PromotionsTab', label: 'Deals', icon: 'pricetags-outline' },
 ];
 

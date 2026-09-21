@@ -52,15 +52,15 @@ const HomeScreen = ({ navigation }) => {
   const progressPercent = `${(tripStep / 5) * 100}%`;
   const stepSlide = useRef(new Animated.Value(0)).current;
   const stepMeta = [
-    { step: 1, title: 'Budget', subtitle: 'Set your trip budget in INR', icon: 'wallet-outline' },
-    { step: 2, title: 'Destination', subtitle: 'Choose where you want to travel', icon: 'location-outline' },
+    { step: 1, title: 'Budget', subtitle: 'Optional: set your trip budget in INR', icon: 'wallet-outline' },
+    { step: 2, title: 'Destination', subtitle: 'Optional: choose where you want to travel', icon: 'location-outline' },
     { step: 3, title: 'Adults', subtitle: 'How many adults are traveling?', icon: 'people-outline' },
     { step: 4, title: 'Children', subtitle: 'Optional: add children travelers', icon: 'happy-outline' },
     { step: 5, title: 'Review', subtitle: 'Confirm details and search', icon: 'checkmark-circle-outline' },
   ];
   const stepHints = [
-    "We'll help you find the best options within your budget.",
-    "Not sure where to go? Try 'Goa', 'Bali' or 'Jaipur' for inspiration.",
+    "Skip this if you'd rather browse a destination at any price.",
+    "Leave this blank and we'll show you everything your budget covers.",
     'Include yourself and anyone 12 or older.',
     'Traveling with kids under 12? Add them here.',
     "Double-check everything - we'll search the moment you tap Search.",
@@ -128,8 +128,18 @@ const HomeScreen = ({ navigation }) => {
   ];
 
   const handleSearch = () => {
-    if (!budget || !destination || !adults) {
-      appAlert('Error', 'Please fill all fields');
+    // Budget and destination are each optional, because either one on its own
+    // is a real question - "anywhere for 40k" and "Goa at any price" both are.
+    // With neither there is nothing to search on, so one of the two is
+    // required; ItineraryListScreen branches on which arrived.
+    const trimmedBudget = budget.trim();
+    const trimmedDestination = destination.trim();
+
+    if (!trimmedBudget && !trimmedDestination) {
+      appAlert(
+        'Add a budget or a destination',
+        'Tell us your budget, where you want to go, or both - either one is enough to search.'
+      );
       return;
     }
 
@@ -143,8 +153,8 @@ const HomeScreen = ({ navigation }) => {
     }
 
     navigation.navigate('ItineraryList', {
-      budget,
-      destination,
+      budget: trimmedBudget,
+      destination: trimmedDestination,
       people: String(totalPeople),
       adults: String(adultsCount),
       children: String(childrenCount),
@@ -153,16 +163,14 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const goNextStep = () => {
-    if (tripStep === 1 && !budget.trim()) {
-      appAlert('Missing budget', 'Please enter your budget to continue.');
-      return;
-    }
-    if (tripStep === 2 && !destination.trim()) {
-      appAlert('Missing destination', 'Please enter destination to continue.');
-      return;
-    }
-    if (tripStep === 3 && !adults.trim()) {
-      appAlert('Missing adults', 'Please enter number of adults to continue.');
+    // Budget (step 1) and destination (step 2) are individually skippable, so
+    // the "at least one of them" check lands on the way out of step 2 - the
+    // first point where the traveller has seen both fields.
+    if (tripStep === 2 && !budget.trim() && !destination.trim()) {
+      appAlert(
+        'Add a budget or a destination',
+        'Fill in at least one of budget or destination to continue - both is fine too.'
+      );
       return;
     }
     if (tripStep === 3 && (parseInt(adults, 10) || 0) < 1) {
@@ -188,14 +196,14 @@ const HomeScreen = ({ navigation }) => {
             The trip search moves into the hero panel alongside it. */}
         {isDesktop ? (
           <WebHero
-            title="Plan your perfect trip"
-            subtitle="Tell us your budget and where you're headed - we'll build the itinerary around it."
+            title="Make My Itinerary"
+            subtitle="Tell us your budget, where you're headed, or both - we'll build the itinerary around it."
             activeProduct="home"
             image={HERO_IMAGE}
           >
             <WebSearchPanel onSearch={handleSearch}>
               <WebField
-                label="Trip Budget (INR)"
+                label="Trip Budget (INR) (Optional)"
                 icon="wallet-outline"
                 value={budget}
                 onChangeText={(value) => setBudget(digitsOnly(value))}
@@ -204,7 +212,7 @@ const HomeScreen = ({ navigation }) => {
                 maxLength={9}
               />
               <WebField
-                label="Destination"
+                label="Destination (Optional)"
                 icon="location-outline"
                 flex={1.6}
                 minWidth={220}
@@ -262,7 +270,7 @@ const HomeScreen = ({ navigation }) => {
 
           <Text style={styles.greeting}>Welcome to</Text>
           <Text style={styles.appName}>MyItineri</Text>
-          <Text style={styles.subtitle}>Plan your perfect trip</Text>
+          <Text style={styles.subtitle}>Make My Itinerary</Text>
         </ImageBackground>
         )}
 
@@ -388,7 +396,7 @@ const HomeScreen = ({ navigation }) => {
                   ]}
                 >
                   <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Trip Budget (INR)</Text>
+                    <Text style={styles.inputLabel}>Trip Budget (INR) (Optional)</Text>
                     <View style={styles.inputRow}>
                       <View style={styles.inputPrefixBox}>
                         <Text style={styles.inputPrefixText}>₹</Text>
@@ -418,7 +426,7 @@ const HomeScreen = ({ navigation }) => {
                   ]}
                 >
                   <View style={styles.inputContainer}>
-                    <Text style={styles.inputLabel}>Destination</Text>
+                    <Text style={styles.inputLabel}>Destination (Optional)</Text>
                     <View style={styles.inputRow}>
                       <View style={styles.inputPrefixBox}>
                         <Ionicons name="location-outline" size={16} color={Colors.primaryDark} />
@@ -505,11 +513,11 @@ const HomeScreen = ({ navigation }) => {
                 >
                   <View style={styles.reviewRow}>
                     <Text style={styles.reviewLabel}>Budget</Text>
-                    <Text style={styles.reviewValue}>{budget || '-'}</Text>
+                    <Text style={styles.reviewValue}>{budget || 'Any'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={styles.reviewLabel}>Destination</Text>
-                    <Text style={styles.reviewValue}>{destination || '-'}</Text>
+                    <Text style={styles.reviewValue}>{destination || 'Anywhere'}</Text>
                   </View>
                   <View style={styles.reviewRow}>
                     <Text style={styles.reviewLabel}>Adults</Text>

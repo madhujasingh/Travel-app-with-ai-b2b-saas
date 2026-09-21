@@ -72,11 +72,17 @@ const ItineraryListScreen = ({ route, navigation }) => {
           }
         }
 
-        // Then try to get additional itineraries from API
+        // Then try to get additional itineraries from API. Home sends a
+        // destination, a budget, or both - with no destination there is
+        // nothing to generate for, so /search answers from existing inventory
+        // (ours and anything Gemini generated on an earlier search) instead.
         try {
-          if (destination) {
+          if (destination || budget) {
+            const searchQuery = destination
+              ? `destination=${encodeURIComponent(destination)}`
+              : `budget=${encodeURIComponent(budget)}`;
             const searchResponse = await fetch(
-              `${API_CONFIG.BASE_URL}/itineraries/search?destination=${encodeURIComponent(destination)}`
+              `${API_CONFIG.BASE_URL}/itineraries/search?${searchQuery}`
             );
 
             if (searchResponse.ok) {
@@ -91,8 +97,11 @@ const ItineraryListScreen = ({ route, navigation }) => {
             }
           }
 
-          // If still no data, try general API endpoint
-          if (data.length === 0) {
+          // If still no data, try general API endpoint. A budget-only search
+          // is already an authoritative answer over the whole catalogue, so an
+          // empty result there means nothing is affordable - falling back to
+          // three arbitrary packages would only get budget-filtered away below.
+          if (data.length === 0 && destination) {
             const fallbackResponse = await fetch(`${API_CONFIG.BASE_URL}/itineraries`);
 
             if (fallbackResponse.ok) {
@@ -194,7 +203,9 @@ const ItineraryListScreen = ({ route, navigation }) => {
   const handleItineraryPress = (itinerary) => {
     navigation.navigate('ItineraryDetail', {
       itinerary,
-      destination,
+      // A budget-only search has no destination of its own, so the package's
+      // own destination is the only one that means anything downstream.
+      destination: destination || itinerary.destination,
       people,
       adults,
       children,
@@ -275,7 +286,9 @@ const ItineraryListScreen = ({ route, navigation }) => {
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Itineraries</Text>
-          <Text style={styles.headerSubtitle}>{destination}</Text>
+          <Text style={styles.headerSubtitle}>
+            {destination || (budget ? `Anywhere under \u20B9${Number(budget).toLocaleString()}` : 'All packages')}
+          </Text>
         </View>
         <TouchableOpacity onPress={() => navigation.navigate('CustomerTabs', { screen: 'CartTab' })}>
           <Ionicons name="cart" size={24} color={Colors.secondary} />
@@ -333,7 +346,9 @@ const ItineraryListScreen = ({ route, navigation }) => {
               <Text style={styles.emptyText}>
                 {destination
                   ? `We don't have a package ready for ${destination} right now. Try another destination, or talk to us and we'll build one for you.`
-                  : "We don't have a package matching that yet. Try another destination, or talk to us and we'll build one for you."}
+                  : budget
+                    ? `Nothing in our packages comes in under \u20B9${Number(budget).toLocaleString()} yet. Try a higher budget or name a destination, and we'll build something for you.`
+                    : "We don't have a package matching that yet. Try another destination, or talk to us and we'll build one for you."}
               </Text>
               <TouchableOpacity
                 style={styles.emptyCta}

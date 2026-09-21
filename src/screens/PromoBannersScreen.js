@@ -37,7 +37,6 @@ const SCREEN_OPTIONS = [
   { label: 'Activities', value: 'Activities' },
   { label: 'Land Packages', value: 'LandPackage' },
   { label: 'Group Trip Planner', value: 'GroupTripPlanner' },
-  { label: 'AI Picks', value: 'AIRecommendations' },
 ];
 
 const EMPTY_FORM = {

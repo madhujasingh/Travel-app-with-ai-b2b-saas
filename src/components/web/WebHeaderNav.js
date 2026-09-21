@@ -114,12 +114,6 @@ const WebHeaderNav = ({ state, showBack = false }) => {
 
         <View style={styles.actions}>
           <NavLink
-            label="AI Picks"
-            icon="sparkles-outline"
-            isActive={activeTab === 'AITab'}
-            onPress={() => goToTab('AITab')}
-          />
-          <NavLink
             label="Deals"
             icon="pricetags-outline"
             isActive={activeTab === 'PromotionsTab'}

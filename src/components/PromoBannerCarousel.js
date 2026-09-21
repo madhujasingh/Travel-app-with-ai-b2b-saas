@@ -60,7 +60,15 @@ const PromoBannerCarousel = ({ placement, heading }) => {
 
   const handlePress = (banner) => {
     if (banner.linkType === 'SCREEN' && banner.linkTarget) {
-      navigation.navigate(banner.linkTarget);
+      // linkTarget is a free-form screen name stored on the banner row, so it
+      // can outlive the screen it names - a banner authored against a screen
+      // that has since been removed would otherwise throw on tap. A banner
+      // that goes nowhere is a far smaller problem than one that crashes.
+      try {
+        navigation.navigate(banner.linkTarget);
+      } catch (error) {
+        console.log(`Promo banner points at an unknown screen: ${banner.linkTarget}`);
+      }
     } else if (banner.linkType === 'URL' && banner.linkTarget) {
       WebBrowser.openBrowserAsync(banner.linkTarget);
     } else if (banner.linkType === 'IMAGE') {
