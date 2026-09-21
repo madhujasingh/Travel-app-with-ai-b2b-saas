@@ -3,11 +3,16 @@ package com.itinera.service;
 import com.itinera.model.Activity;
 import com.itinera.model.DayPlan;
 import com.itinera.model.Itinerary;
+import com.itinera.model.ItineraryPhoto;
+import com.itinera.repository.ItineraryPhotoRepository;
 import com.itinera.repository.ItineraryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +24,9 @@ public class ItineraryService {
 
     @Autowired
     private ItineraryRepository itineraryRepository;
+
+    @Autowired
+    private ItineraryPhotoRepository itineraryPhotoRepository;
 
     public List<Itinerary> getAllItineraries() {
         return itineraryRepository.findByIsActiveTrue();
@@ -68,6 +76,42 @@ public class ItineraryService {
         return itineraryRepository.findAllByOrderByCreatedAtDesc();
     }
 
+    public List<ItineraryPhoto> getPhotos(Long itineraryId) {
+        return itineraryPhotoRepository.findByItineraryIdOrderBySortOrderAsc(itineraryId);
+    }
+
+    public ItineraryPhoto getPhoto(Long photoId) {
+        return itineraryPhotoRepository.findById(photoId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Photo not found: " + photoId));
+    }
+
+    // New photos go on the end of the gallery rather than renumbering it, so
+    // adding one never reshuffles which picture is the cover.
+    public List<ItineraryPhoto> addPhotos(Long itineraryId, List<MultipartFile> files) throws IOException {
+        Itinerary itinerary = itineraryRepository.findById(itineraryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Itinerary not found: " + itineraryId));
+
+        List<ItineraryPhoto> existing = itineraryPhotoRepository.findByItineraryIdOrderBySortOrderAsc(itineraryId);
+        int nextOrder = existing.isEmpty() ? 0 : existing.get(existing.size() - 1).getSortOrder() + 1;
+
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) {
+                continue;
+            }
+            ItineraryPhoto photo = new ItineraryPhoto();
+            photo.setItinerary(itinerary);
+            photo.setImageData(file.getBytes());
+            photo.setImageContentType(file.getContentType() != null ? file.getContentType() : "image/jpeg");
+            photo.setSortOrder(nextOrder++);
+            itineraryPhotoRepository.save(photo);
+        }
+        return itineraryPhotoRepository.findByItineraryIdOrderBySortOrderAsc(itineraryId);
+    }
+
+    public void deletePhoto(Long photoId) {
+        itineraryPhotoRepository.deleteById(photoId);
+    }
+
     public Itinerary setImage(Long id, byte[] data, String contentType) {
         Itinerary itinerary = itineraryRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Itinerary not found: " + id));
@@ -99,7 +143,11 @@ public class ItineraryService {
         return itineraryRepository.save(itinerary);
     }
 
+    @Transactional
     public void deleteItinerary(Long id) {
+        // Gallery photos hold a foreign key to the itinerary, so deleting the
+        // package before them would violate it.
+        itineraryPhotoRepository.deleteByItineraryId(id);
         itineraryRepository.deleteById(id);
     }
 

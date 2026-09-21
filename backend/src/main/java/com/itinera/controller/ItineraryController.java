@@ -1,6 +1,7 @@
 package com.itinera.controller;
 
 import com.itinera.model.Itinerary;
+import com.itinera.model.ItineraryPhoto;
 import com.itinera.repository.ItineraryRepository;
 import com.itinera.service.AiItineraryService;
 import com.itinera.service.ItineraryService;
@@ -129,6 +130,41 @@ public class ItineraryController {
         }
         return ResponseEntity.ok(
                 itineraryService.setImage(id, image.getBytes(), image.getContentType()));
+    }
+
+    // The gallery beyond the cover photo. Public to read, like the cover and
+    // like promo banner images - it is display content on a public screen.
+    @GetMapping("/{id}/photos")
+    public ResponseEntity<List<ItineraryPhoto>> photos(@PathVariable Long id) {
+        return ResponseEntity.ok(itineraryService.getPhotos(id));
+    }
+
+    @GetMapping("/photos/{photoId}")
+    public ResponseEntity<byte[]> photo(@PathVariable Long photoId) {
+        ItineraryPhoto photo = itineraryService.getPhoto(photoId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(photo.getImageContentType()))
+                .body(photo.getImageData());
+    }
+
+    // Takes several files in one request so picking five pictures is one
+    // upload rather than five round trips.
+    @PostMapping("/{id}/photos")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<ItineraryPhoto>> addPhotos(
+            @PathVariable Long id,
+            @RequestParam("images") List<MultipartFile> images) throws IOException {
+        if (images == null || images.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(itineraryService.addPhotos(id, images));
+    }
+
+    @DeleteMapping("/photos/{photoId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deletePhoto(@PathVariable Long photoId) {
+        itineraryService.deletePhoto(photoId);
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping
