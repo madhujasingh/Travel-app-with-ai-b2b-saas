@@ -22,17 +22,64 @@ import { useAuth } from '../context/AuthContext';
 const ItineraryDetailScreen = ({ route, navigation }) => {
   const { requireAuth } = useAuth();
   const { centeredContent } = useResponsive();
-  const { itinerary, destination, people, adults, children } = route.params;
+  const {
+    itinerary: passedItinerary,
+    itineraryId,
+    destination,
+    people,
+    adults,
+    children,
+  } = route.params || {};
   const { addItemToCart } = useCart();
-  const dayPlans = itinerary.dayPlans || [];
+
+  // This screen's deep link is 'itineraries/:itineraryId', but every caller
+  // passes the whole package object and no id - so on web the URL becomes
+  // /itineraries/undefined, and any state rebuilt from that URL (a reload, a
+  // shared link, a replace() after publishing) arrives with no package at
+  // all. Reading straight through it threw on the first line and left a blank
+  // screen. The id now travels alongside the object, and the package is
+  // fetched when only the id survives.
+  const [fetchedItinerary, setFetchedItinerary] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const itinerary = passedItinerary || fetchedItinerary;
+  const resolvedId = itineraryId || passedItinerary?.id;
+
+  useEffect(() => {
+    if (passedItinerary || !resolvedId) {
+      return;
+    }
+    let cancelled = false;
+    fetch(`${API_CONFIG.BASE_URL}/itineraries/${resolvedId}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('That package could not be found.');
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setFetchedItinerary(data);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLoadError(error.message || 'That package could not be loaded.');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [passedItinerary, resolvedId]);
+
+  const dayPlans = itinerary?.dayPlans || [];
   const [selectedDay, setSelectedDay] = useState(0);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherBundle, setWeatherBundle] = useState(null);
   const [weatherError, setWeatherError] = useState('');
-  const heroIcon = itinerary.image || itinerary.imageUrl || 'briefcase-outline';
+  const heroIcon = itinerary?.image || itinerary?.imageUrl || 'briefcase-outline';
   // An admin-uploaded cover photo is served from the API rather than stored on
   // the row; without one the icon above stays as the hero.
-  const heroPhotoUri = (itinerary.hasImage || itinerary.photoUri)
+  const heroPhotoUri = (itinerary?.hasImage || itinerary?.photoUri)
     ? (itinerary.photoUri || `${API_CONFIG.BASE_URL}/itineraries/${itinerary.id}/image`)
     : null;
 
@@ -59,11 +106,11 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
       cancelled = true;
     };
   }, [itinerary?.id]);
-  const inclusions = itinerary.inclusions || [];
-  const exclusions = itinerary.exclusions || [];
-  const highlights = itinerary.highlights || [];
-  const reviewCount = itinerary.reviews ?? itinerary.reviewCount ?? 0;
-  const effectiveDestination = destination || itinerary.destination;
+  const inclusions = itinerary?.inclusions || [];
+  const exclusions = itinerary?.exclusions || [];
+  const highlights = itinerary?.highlights || [];
+  const reviewCount = itinerary?.reviews ?? itinerary?.reviewCount ?? 0;
+  const effectiveDestination = destination || itinerary?.destination;
 
   useEffect(() => {
     let active = true;
@@ -179,6 +226,33 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
       'Sign in to plan a group trip.'
     );
   };
+
+  // Every hook above runs unconditionally, so this guard is safe here and
+  // nowhere earlier. Without a package there is nothing to render - showing
+  // that plainly beats the blank screen reading through undefined produced.
+  if (!itinerary) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar backgroundColor={Colors.primaryDark} barStyle="light-content" />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={28} color={Colors.secondary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.missingState}>
+          <Ionicons
+            name={loadError ? 'alert-circle-outline' : 'hourglass-outline'}
+            size={40}
+            color={Colors.textMuted}
+          />
+          <Text style={styles.missingTitle}>
+            {loadError ? "We couldn't open this package" : 'Loading package...'}
+          </Text>
+          {loadError ? <Text style={styles.missingBody}>{loadError}</Text> : null}
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -508,6 +582,24 @@ const styles = StyleSheet.create({
   },
   cartIcon: {
     fontSize: 24,
+  },
+  missingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  missingTitle: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.textDark || '#222',
+  },
+  missingBody: {
+    marginTop: 6,
+    fontSize: 13,
+    color: Colors.textMuted || '#777',
+    textAlign: 'center',
   },
   heroSection: {
     backgroundColor: Colors.primaryLight,

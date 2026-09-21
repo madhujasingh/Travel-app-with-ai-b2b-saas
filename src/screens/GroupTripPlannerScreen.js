@@ -655,6 +655,7 @@ const GroupTripPlannerScreen = ({ navigation, route }) => {
 
       navigation.navigate('ItineraryDetail', {
         itinerary: data,
+        itineraryId: data.id,
         destination: data.destination,
         people: String(tripDetail.members.length || 1),
       });

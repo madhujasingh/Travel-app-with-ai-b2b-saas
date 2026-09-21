@@ -217,6 +217,7 @@ const ItineraryListScreen = ({ route, navigation }) => {
   const handleItineraryPress = (itinerary) => {
     navigation.navigate('ItineraryDetail', {
       itinerary,
+      itineraryId: itinerary.id,
       // A budget-only search has no destination of its own, so the package's
       // own destination is the only one that means anything downstream.
       destination: destination || itinerary.destination,
