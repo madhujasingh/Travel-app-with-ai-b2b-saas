@@ -42,12 +42,37 @@ public class AiItineraryService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Gemini returned invalid JSON: " + ex.getMessage());
         }
 
+        // Whatever the traveller typed reaches this method verbatim, and
+        // anything generated from it is persisted as a real, sellable package.
+        // A typo therefore used to enter the catalogue permanently - a search
+        // for "Ranthambore2" left two packages filed under that as a
+        // destination, sitting next to the genuine Ranthambore ones. Nothing
+        // is saved now unless Gemini confirms the text names a real place.
+        if (!root.path("isRealDestination").asBoolean(true)) {
+            return List.of();
+        }
+
+        // Gemini also resolves a misspelling or a stray suffix back onto the
+        // destination it meant, so store packages under that name rather than
+        // the raw input - and if we already hold packages for it, return those
+        // instead of generating a near-duplicate set under a variant spelling.
+        String resolved = root.path("resolvedDestination").asText("").trim();
+        if (resolved.isEmpty()) {
+            resolved = destination;
+        }
+        if (!resolved.equalsIgnoreCase(destination)) {
+            List<Itinerary> existing = itineraryService.searchByDestination(resolved);
+            if (!existing.isEmpty()) {
+                return existing;
+            }
+        }
+
         Itinerary.Category category = parseEnum(
                 root.path("category").asText("INDIA"), Itinerary.Category.class, Itinerary.Category.INDIA);
 
         List<Itinerary> saved = new ArrayList<>();
         for (JsonNode pkg : root.path("packages")) {
-            saved.add(itineraryService.createItinerary(toItinerary(pkg, destination, category)));
+            saved.add(itineraryService.createItinerary(toItinerary(pkg, resolved, category)));
         }
 
         if (saved.isEmpty()) {
@@ -122,11 +147,21 @@ public class AiItineraryService {
 
     private String buildPrompt(String destination) {
         return """
-                You are a travel planner for an Indian travel agency. Generate exactly 2 travel package \
-                options for a trip to "%s", covering different budgets: one BUDGET tier and one PREMIUM tier.
+                You are a travel planner for an Indian travel agency.
+
+                First decide whether "%s" actually names a real, travellable place - a city, \
+                region or country. Treat obvious typos, stray digits and trailing characters as \
+                the place they were meant to be ("Ranthambore2" means Ranthambore, "goaa" means \
+                Goa), but text that names no place at all is not a destination.
+
+                If it is not a real place, return {"isRealDestination": false, "packages": []} \
+                and nothing else. Otherwise generate exactly 2 travel package options for a trip \
+                there, covering different budgets: one BUDGET tier and one PREMIUM tier.
 
                 Return ONLY a JSON object matching this exact schema - no markdown fences, no commentary:
                 {
+                  "isRealDestination": true,
+                  "resolvedDestination": "the canonical, correctly-spelled name of the place",
                   "category": "INDIA or INTERNATIONAL depending on the destination",
                   "packages": [
                     {
