@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   ScrollView,
@@ -22,22 +22,27 @@ import { useAuth } from '../context/AuthContext';
 import { parseFlyerText } from '../utils/flyerTextParser';
 import { decimalOnly } from '../utils/inputSanitizers';
 
-const itineraryTypes = ['BUDGET', 'PREMIUM', 'ADVENTURE', 'FAMILY', 'ROMANTIC'];
+const itineraryTypes = [
+  'BUDGET', 'PREMIUM', 'LUXURY', 'ADVENTURE', 'FAMILY',
+  'ROMANTIC', 'HONEYMOON', 'WELLNESS', 'PILGRIMAGE', 'WILDLIFE',
+  'BEACH', 'CULTURAL', 'WEEKEND', 'GROUP', 'SOLO',
+];
 const ratingOptions = [1, 2, 3, 4, 5];
 
 // expo-image-picker hands back a file:// uri on native and a blob:/data: one
 // on web. React Native's FormData takes the {uri, name, type} shape; the
 // browser's needs a real Blob, so the picked asset is normalised here rather
 // than at each call site.
-const appendImageTo = async (formData, asset) => {
+const appendImageTo = async (formData, asset, field) => {
+  const name = asset.fileName || `${field}.jpg`;
   if (Platform.OS === 'web') {
     const blob = await (await fetch(asset.uri)).blob();
-    formData.append('image', blob, asset.fileName || 'cover.jpg');
+    formData.append(field, blob, name);
     return;
   }
-  formData.append('image', {
+  formData.append(field, {
     uri: asset.uri,
-    name: asset.fileName || 'cover.jpg',
+    name,
     type: asset.mimeType || 'image/jpeg',
   });
 };
@@ -139,7 +144,30 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
       : [createEmptyDay(1)]
   );
   const [pasteText, setPasteText] = useState('');
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [existingPhotos, setExistingPhotos] = useState([]);
+
+  // A package being edited may already have a gallery; it is not in the
+  // package body, so it is fetched alongside it.
+  useEffect(() => {
+    if (!editing?.id) {
+      return;
+    }
+    let cancelled = false;
+    fetch(`${API_CONFIG.BASE_URL}/itineraries/${editing.id}/photos`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((photos) => {
+        if (!cancelled) {
+          setExistingPhotos(photos);
+        }
+      })
+      .catch(() => {
+        // A gallery that fails to load shouldn't block editing the package.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing?.id]);
 
   const isAdmin = user?.role === 'ADMIN';
   const canSubmit = useMemo(
@@ -219,14 +247,34 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
         return;
       }
     }
+    // allowsEditing forces a single-image crop flow, so it has to go for a
+    // multi-pick to be possible at all.
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
-      aspect: [16, 9],
-      allowsEditing: true,
+      allowsMultipleSelection: true,
+      selectionLimit: 10,
     });
-    if (!result.canceled && result.assets?.[0]) {
-      setSelectedImage(result.assets[0]);
+    if (!result.canceled && result.assets?.length) {
+      setSelectedImages((current) => [...current, ...result.assets]);
+    }
+  };
+
+  const removePickedImage = (index) =>
+    setSelectedImages((current) => current.filter((_, i) => i !== index));
+
+  const deleteExistingPhoto = async (photoId) => {
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/photos/${photoId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error('Delete failed');
+      }
+      setExistingPhotos((current) => current.filter((photo) => photo.id !== photoId));
+    } catch (error) {
+      appAlert('Could not remove photo', error.message);
     }
   };
 
@@ -234,18 +282,46 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
   // @JsonIgnore on the server, so they can't ride along in the JSON, and
   // keeping them apart means the cover can be swapped later without
   // resending the whole package.
-  const uploadCoverPhoto = async (itineraryId) => {
-    if (!selectedImage) {
+  const uploadPhotos = async (itineraryId) => {
+    if (!selectedImages.length) {
       return true;
     }
-    const formData = new FormData();
-    await appendImageTo(formData, selectedImage);
-    const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/${itineraryId}/image`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-    return response.ok;
+
+    // The first picture is the cover - the one a card and the detail hero
+    // show when there is room for only one. A package that already has a
+    // cover keeps it, so adding photos to it adds to the gallery rather than
+    // quietly replacing the picture it already leads with.
+    const hasCover = Boolean(editing?.hasImage);
+    const cover = hasCover ? null : selectedImages[0];
+    const gallery = hasCover ? selectedImages : selectedImages.slice(1);
+    let ok = true;
+
+    if (cover) {
+      const formData = new FormData();
+      await appendImageTo(formData, cover, 'image');
+      const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/${itineraryId}/image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      ok = ok && response.ok;
+    }
+
+    if (gallery.length) {
+      // One request for the whole gallery rather than one per picture.
+      const formData = new FormData();
+      for (const asset of gallery) {
+        await appendImageTo(formData, asset, 'images');
+      }
+      const response = await fetch(`${API_CONFIG.BASE_URL}/itineraries/${itineraryId}/photos`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      ok = ok && response.ok;
+    }
+
+    return ok;
   };
 
   const submitItinerary = async () => {
@@ -307,11 +383,11 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
       // A failed photo must not read as a failed package - the package is
       // already saved by this point, and saying otherwise would send the
       // admin back to re-enter everything.
-      const photoOk = await uploadCoverPhoto(data.id);
+      const photoOk = await uploadPhotos(data.id);
       if (!photoOk) {
         appAlert(
           'Package saved, photo failed',
-          'The package was saved, but its cover photo could not be uploaded. Open it from Manage Packages to try the photo again.'
+          'The package was saved, but one or more photos could not be uploaded. Open it from Manage Packages to try the photos again.'
         );
       }
 
@@ -346,7 +422,7 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
               exclusions: '',
             });
             setDayPlans([createEmptyDay(1)]);
-            setSelectedImage(null);
+            setSelectedImages([]);
           },
         },
       ]);
@@ -439,40 +515,71 @@ const AdminItineraryUploadScreen = ({ navigation, route }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Cover Photo</Text>
           <Text style={styles.sectionHint}>
-            Shown on the package card and detail screen. 16:9 works best.
+            Pick as many as you like - the first is the cover, shown on the
+            package card. The rest become a gallery on the detail screen.
           </Text>
 
-          {selectedImage ? (
-            <Image source={{ uri: selectedImage.uri }} style={styles.coverPreview} />
-          ) : editing?.hasImage ? (
-            <Image
-              source={{ uri: `${API_CONFIG.BASE_URL}/itineraries/${editing.id}/image` }}
-              style={styles.coverPreview}
-            />
-          ) : (
-            <View style={[styles.coverPreview, styles.coverEmpty]}>
-              <Ionicons name="image-outline" size={32} color={Colors.textMuted} />
-              <Text style={styles.coverEmptyText}>No photo yet</Text>
+          {editing?.hasImage ? (
+            <View style={styles.photoTile}>
+              <Image
+                source={{ uri: `${API_CONFIG.BASE_URL}/itineraries/${editing.id}/image` }}
+                style={styles.photoTileImage}
+              />
+              <View style={styles.coverTag}>
+                <Text style={styles.coverTagText}>Cover</Text>
+              </View>
             </View>
-          )}
+          ) : null}
 
-          <View style={styles.row}>
-            <TouchableOpacity style={[styles.photoButton, styles.halfInput]} onPress={pickImage}>
-              <Ionicons name="image-outline" size={18} color={Colors.primary} />
-              <Text style={styles.photoButtonText}>
-                {selectedImage || editing?.hasImage ? 'Change photo' : 'Choose photo'}
-              </Text>
-            </TouchableOpacity>
-            {selectedImage ? (
-              <TouchableOpacity
-                style={[styles.photoButton, styles.halfInput]}
-                onPress={() => setSelectedImage(null)}
-              >
-                <Ionicons name="close-outline" size={18} color={Colors.textMuted} />
-                <Text style={styles.photoButtonText}>Clear</Text>
-              </TouchableOpacity>
-            ) : null}
+          <View style={styles.photoGrid}>
+            {existingPhotos.map((photo) => (
+              <View key={`saved-${photo.id}`} style={styles.photoTileSmall}>
+                <Image
+                  source={{ uri: `${API_CONFIG.BASE_URL}/itineraries/photos/${photo.id}` }}
+                  style={styles.photoTileImage}
+                />
+                <TouchableOpacity
+                  style={styles.photoRemove}
+                  onPress={() => deleteExistingPhoto(photo.id)}
+                >
+                  <Ionicons name="close" size={13} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {selectedImages.map((asset, index) => (
+              <View key={`new-${asset.uri}-${index}`} style={styles.photoTileSmall}>
+                <Image source={{ uri: asset.uri }} style={styles.photoTileImage} />
+                <TouchableOpacity
+                  style={styles.photoRemove}
+                  onPress={() => removePickedImage(index)}
+                >
+                  <Ionicons name="close" size={13} color="#FFF" />
+                </TouchableOpacity>
+                {!editing?.hasImage && index === 0 ? (
+                  <View style={styles.coverTag}>
+                    <Text style={styles.coverTagText}>Cover</Text>
+                  </View>
+                ) : null}
+              </View>
+            ))}
           </View>
+
+          {!editing?.hasImage && !selectedImages.length && !existingPhotos.length ? (
+            <View style={[styles.coverPreview, styles.coverEmpty]}>
+              <Ionicons name="images-outline" size={32} color={Colors.textMuted} />
+              <Text style={styles.coverEmptyText}>No photos yet</Text>
+            </View>
+          ) : null}
+
+          <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
+            <Ionicons name="images-outline" size={18} color={Colors.primary} />
+            <Text style={styles.photoButtonText}>
+              {selectedImages.length || existingPhotos.length || editing?.hasImage
+                ? 'Add more photos'
+                : 'Choose photos'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -712,6 +819,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted || '#777',
   },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  photoTile: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+    backgroundColor: '#EFEFEF',
+  },
+  photoTileSmall: {
+    width: 92,
+    height: 92,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#EFEFEF',
+  },
+  photoTileImage: { width: '100%', height: '100%' },
+  photoRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  coverTag: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  coverTagText: { fontSize: 9, fontWeight: '700', color: '#FFF' },
   photoButton: {
     flexDirection: 'row',
     alignItems: 'center',

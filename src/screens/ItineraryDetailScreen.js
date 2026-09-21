@@ -35,6 +35,30 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
   const heroPhotoUri = (itinerary.hasImage || itinerary.photoUri)
     ? (itinerary.photoUri || `${API_CONFIG.BASE_URL}/itineraries/${itinerary.id}/image`)
     : null;
+
+  // Gallery photos beyond the cover live on their own endpoint rather than in
+  // the package body, so they are fetched separately and shown under the hero.
+  const [galleryPhotos, setGalleryPhotos] = useState([]);
+
+  useEffect(() => {
+    if (!itinerary?.id) {
+      return;
+    }
+    let cancelled = false;
+    fetch(`${API_CONFIG.BASE_URL}/itineraries/${itinerary.id}/photos`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((photos) => {
+        if (!cancelled) {
+          setGalleryPhotos(photos);
+        }
+      })
+      .catch(() => {
+        // A gallery that won't load shouldn't take the whole screen with it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [itinerary?.id]);
   const inclusions = itinerary.inclusions || [];
   const exclusions = itinerary.exclusions || [];
   const highlights = itinerary.highlights || [];
@@ -179,6 +203,24 @@ const ItineraryDetailScreen = ({ route, navigation }) => {
           ) : (
             <Ionicons name={heroIcon} size={80} color={Colors.secondary} style={styles.heroImage} />
           )}
+
+          {galleryPhotos.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.gallery}
+              contentContainerStyle={styles.galleryContent}
+            >
+              {galleryPhotos.map((photo) => (
+                <Image
+                  key={photo.id}
+                  source={{ uri: `${API_CONFIG.BASE_URL}/itineraries/photos/${photo.id}` }}
+                  style={styles.galleryPhoto}
+                  resizeMode="cover"
+                />
+              ))}
+            </ScrollView>
+          ) : null}
           <View style={styles.heroOverlay}>
             <Text style={styles.heroTitle}>{itinerary.title}</Text>
             <Text style={styles.heroDuration}>{itinerary.duration}</Text>
@@ -485,6 +527,18 @@ const styles = StyleSheet.create({
     marginTop: -30,
     marginHorizontal: -30,
     marginBottom: 15,
+  },
+  gallery: {
+    alignSelf: 'stretch',
+    marginHorizontal: -30,
+    marginBottom: 14,
+  },
+  galleryContent: { paddingHorizontal: 30, gap: 8 },
+  galleryPhoto: {
+    width: 116,
+    height: 82,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
   heroOverlay: {
     alignItems: 'center',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,9 +22,19 @@ import { useAuth } from '../context/AuthContext';
 const TYPE_TO_ICON = {
   budget: 'wallet-outline',
   premium: 'sparkles',
+  luxury: 'diamond-outline',
   adventure: 'trail-sign',
   family: 'people',
   romantic: 'heart',
+  honeymoon: 'heart-circle-outline',
+  wellness: 'leaf-outline',
+  pilgrimage: 'moon-outline',
+  wildlife: 'paw-outline',
+  beach: 'sunny-outline',
+  cultural: 'library-outline',
+  weekend: 'calendar-outline',
+  group: 'people-circle-outline',
+  solo: 'person-outline',
 };
 
 const normalizeItinerary = (item) => {
@@ -274,14 +284,21 @@ const ItineraryListScreen = ({ route, navigation }) => {
     </TouchableOpacity>
   );
 
-  const filters = [
-    { id: 'all', label: 'All' },
-    { id: 'budget', label: 'Budget' },
-    { id: 'premium', label: 'Premium' },
-    { id: 'adventure', label: 'Adventure' },
-    { id: 'family', label: 'Family' },
-    { id: 'romantic', label: 'Romantic' },
-  ];
+  // Only offer a filter the current results can actually match - a row of
+  // fifteen chips where twelve lead to an empty list reads as a broken
+  // screen rather than a rich catalogue.
+  const filters = useMemo(() => {
+    const present = new Set(itineraries.map((item) => item.type).filter(Boolean));
+    return [
+      { id: 'all', label: 'All' },
+      ...Object.keys(TYPE_TO_ICON)
+        .filter((type) => present.has(type))
+        .map((type) => ({
+          id: type,
+          label: type.charAt(0).toUpperCase() + type.slice(1),
+        })),
+    ];
+  }, [itineraries]);
 
   return (
     <SafeAreaView style={styles.container}>
