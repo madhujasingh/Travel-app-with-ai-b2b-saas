@@ -5,9 +5,12 @@ import com.itinera.repository.ItineraryRepository;
 import com.itinera.service.AiItineraryService;
 import com.itinera.service.ItineraryService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -87,6 +90,45 @@ public class ItineraryController {
         return ResponseEntity.ok(
             itineraryService.getByType(Itinerary.ItineraryType.valueOf(type.toUpperCase()))
         );
+    }
+
+    // Everything an admin can manage, inactive rows included - the public
+    // listing above only returns isActive=true, which would hide exactly the
+    // packages an admin needs to find in order to switch them back on.
+    @GetMapping("/admin/all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<Itinerary>> getAllForAdmin() {
+        return ResponseEntity.ok(itineraryService.getAllForAdmin());
+    }
+
+    // Public, like the promo banner images it mirrors - a package's cover
+    // photo is display content on a screen anyone can open.
+    @GetMapping("/{id}/image")
+    public ResponseEntity<byte[]> image(@PathVariable Long id) {
+        Itinerary itinerary = itineraryService.getItineraryById(id).orElse(null);
+        if (itinerary == null || itinerary.getImageData() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        itinerary.getImageContentType() != null
+                                ? itinerary.getImageContentType()
+                                : MediaType.IMAGE_JPEG_VALUE))
+                .body(itinerary.getImageData());
+    }
+
+    // Kept separate from create/update so the cover photo can be replaced on
+    // its own, without resending the package's whole nested body.
+    @PostMapping("/{id}/image")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Itinerary> uploadImage(
+            @PathVariable Long id,
+            @RequestParam("image") MultipartFile image) throws IOException {
+        if (image.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(
+                itineraryService.setImage(id, image.getBytes(), image.getContentType()));
     }
 
     @PostMapping

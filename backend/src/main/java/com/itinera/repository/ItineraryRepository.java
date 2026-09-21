@@ -14,6 +14,9 @@ public interface ItineraryRepository extends JpaRepository<Itinerary, Long> {
     List<Itinerary> findByCategoryAndIsActiveTrue(Itinerary.Category category);
     List<Itinerary> findByTypeAndIsActiveTrue(Itinerary.ItineraryType type);
     List<Itinerary> findByIsActiveTrue();
+
+    // Admin package management lists everything, active or not, newest first.
+    List<Itinerary> findAllByOrderByCreatedAtDesc();
     List<Itinerary> findByDestinationContainingIgnoreCaseAndCategoryAndIsActiveTrue(String destination, Itinerary.Category category);
 
     // Powers budget-only search from Home, where the traveller gives a budget

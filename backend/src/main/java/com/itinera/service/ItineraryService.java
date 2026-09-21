@@ -5,7 +5,9 @@ import com.itinera.model.DayPlan;
 import com.itinera.model.Itinerary;
 import com.itinera.repository.ItineraryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -60,6 +62,20 @@ public class ItineraryService {
         return itineraryRepository.findDestinationCounts();
     }
 
+    // The manage-packages screen needs inactive rows too - an admin has to be
+    // able to see what they deactivated in order to turn it back on.
+    public List<Itinerary> getAllForAdmin() {
+        return itineraryRepository.findAllByOrderByCreatedAtDesc();
+    }
+
+    public Itinerary setImage(Long id, byte[] data, String contentType) {
+        Itinerary itinerary = itineraryRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Itinerary not found: " + id));
+        itinerary.setImageData(data);
+        itinerary.setImageContentType(contentType);
+        return itineraryRepository.save(itinerary);
+    }
+
     public Itinerary createItinerary(Itinerary itinerary) {
         prepareRelationships(itinerary);
         return itineraryRepository.save(itinerary);
@@ -67,6 +83,18 @@ public class ItineraryService {
 
     public Itinerary updateItinerary(Long id, Itinerary itinerary) {
         itinerary.setId(id);
+
+        // The cover photo is @JsonIgnore, so it never reaches the client and
+        // the client can never send it back - a plain full-replace save would
+        // therefore wipe the image on every edit. Carry the stored bytes over
+        // unless this request is deliberately replacing them.
+        if (itinerary.getImageData() == null) {
+            itineraryRepository.findById(id).ifPresent(existing -> {
+                itinerary.setImageData(existing.getImageData());
+                itinerary.setImageContentType(existing.getImageContentType());
+            });
+        }
+
         prepareRelationships(itinerary);
         return itineraryRepository.save(itinerary);
     }

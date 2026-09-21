@@ -45,6 +45,24 @@ public class Itinerary {
     @Column(name = "image_url")
     private String imageUrl;
 
+    // An uploaded cover photo, stored the same way PromoBanner stores its
+    // image - bytes in the row, served from /itineraries/{id}/image. imageUrl
+    // above stays for packages that point at an image hosted elsewhere; a row
+    // may have either, and hasImage tells the client which to render.
+    @Column(name = "image_data", columnDefinition = "bytea")
+    @JsonIgnore
+    private byte[] imageData;
+
+    @Column(name = "image_content_type")
+    private String imageContentType;
+
+    // Lombok's @Data generates isHasImage() for a boolean field, so this is a
+    // plain getter instead - it serialises as "hasImage" and lets a listing
+    // say whether a cover photo exists without shipping the bytes.
+    public boolean getHasImage() {
+        return imageData != null && imageData.length > 0;
+    }
+
     @Enumerated(EnumType.STRING)
     private ItineraryType type;
 

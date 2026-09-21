@@ -121,6 +121,11 @@ public class SecurityConfig {
                 // form) - public. Only an admin can change the fee itself.
                 .requestMatchers(HttpMethod.GET, "/platform-settings").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/platform-settings/**").hasRole("ADMIN")
+                // Must precede the public GET below, which would otherwise
+                // match it: the admin listing returns inactive packages too.
+                // @PreAuthorize guards the method as well - this is the URL
+                // rule agreeing with it rather than contradicting it.
+                .requestMatchers(HttpMethod.GET, "/itineraries/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/itineraries/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/itineraries/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/itineraries/**").hasRole("ADMIN")
