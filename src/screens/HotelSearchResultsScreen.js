@@ -215,6 +215,7 @@ const HotelSearchResultsScreen = ({ route, navigation }) => {
       // describe - confirmed against real captured responses.
       tjHotelId: hotel.hotelId,
       hotelName: hotel.name,
+      city: hotel.city,
       searchContext: searchSession,
     });
   };

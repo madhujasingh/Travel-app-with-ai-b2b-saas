@@ -6,6 +6,7 @@ import {
   Image,
   Modal,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -202,6 +203,60 @@ const parsePolicyText = (raw) => {
     .filter(Boolean);
 };
 
+// "2 Adults, 1 Room" - summed across every room in the search (each room can
+// carry its own adult/child split), matching how HotelsScreen's own room
+// picker describes the same searchContext.rooms array.
+const describeGuests = (rooms = []) => {
+  const roomCount = rooms.length || 1;
+  const adults = rooms.reduce((sum, room) => sum + Number(room?.adults || 0), 0) || 2;
+  const children = rooms.reduce((sum, room) => sum + Number(room?.children || 0), 0);
+  const parts = [`${adults} Adult${adults === 1 ? '' : 's'}`];
+  if (children) parts.push(`${children} Child${children === 1 ? '' : 'ren'}`);
+  parts.push(`${roomCount} Room${roomCount === 1 ? '' : 's'}`);
+  return parts.join(', ');
+};
+
+const nightsBetween = (checkIn, checkOut) => {
+  const start = parseDateValue(checkIn);
+  const end = parseDateValue(checkOut);
+  if (!start || !end) return null;
+  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+};
+
+// Builds the WhatsApp-style stay summary a travel agent would send a
+// customer, mirroring the flight itinerary share format (see
+// buildFlightShareMessage in FlightsScreen.js).
+const buildHotelShareMessage = ({ hotelName, city, searchContext, roomLabel, option, reviewResult }) => {
+  const nights = nightsBetween(searchContext.checkIn, searchContext.checkOut);
+  const total = reviewResult?.option?.pricing?.totalPrice ?? option?.pricing?.totalPrice ?? 0;
+  const currency = reviewResult?.option?.pricing?.currency || option?.pricing?.currency || '₹';
+  const refundable = (reviewResult?.option?.cancellation ?? option?.cancellation)?.isRefundable;
+
+  return [
+    'Hello, please find details with regards to your hotel stay query for:',
+    `*${hotelName}${city ? `, ${city}` : ''}*`,
+    describeGuests(searchContext.rooms),
+    '',
+    'Below mentioned price is the total price inclusive of taxes:',
+    '-'.repeat(80),
+    `*STAY*: 🏨 ${hotelName}`,
+    `Check-in: *${formatDisplayDate(searchContext.checkIn)}*`,
+    `Check-out: *${formatDisplayDate(searchContext.checkOut)}*${nights ? ` (*${nights} night${nights === 1 ? '' : 's'}*)` : ''}`,
+    `Room: *${roomLabel || 'Standard Room'}*`,
+    `Meal: *${option?.mealBasis || 'Room Only'}*`,
+    `*${refundable ? 'Refundable' : 'Non-refundable'}*`,
+    '-'.repeat(80),
+    `Price: *${currency} ${Math.round(total).toLocaleString()}*`,
+    '',
+    'Thank you for choosing *MyItineri*',
+    'In case of any support :',
+    '☎️ Contact : 8235221988',
+    '📧 Email : fiestadreamholidays@gmail.com',
+    '',
+    'Hotel pricing is dynamic. Rates are valid as of now and might change at the time of booking.',
+  ].join('\n');
+};
+
 const cancellationSummary = (cancellation) => {
   if (!cancellation) return null;
   if (!cancellation.isRefundable) {
@@ -218,7 +273,7 @@ const cancellationSummary = (cancellation) => {
 const HotelDetailScreen = ({ route, navigation }) => {
   const { requireAuth } = useAuth();
   const { centeredContent } = useResponsive();
-  const { tjHotelId, hotelName } = route.params;
+  const { tjHotelId, hotelName, city } = route.params;
   const { markupFor } = useMarkup();
 
   // Held in state (not just destructured from route.params) because changing
@@ -519,6 +574,20 @@ const HotelDetailScreen = ({ route, navigation }) => {
     } finally {
       setReviewingOptionId(null);
     }
+  };
+
+  const shareReviewedOption = (roomLabel, option) => {
+    if (!reviewResult) return;
+    Share.share({
+      message: buildHotelShareMessage({
+        hotelName: detail?.hotelName || hotelName,
+        city,
+        searchContext,
+        roomLabel,
+        option,
+        reviewResult,
+      }),
+    }).catch(() => {});
   };
 
   return (
@@ -944,6 +1013,12 @@ const HotelDetailScreen = ({ route, navigation }) => {
                     <View style={styles.reviewResultHeader}>
                       <Ionicons name="checkmark-circle" size={20} color={Colors.success} />
                       <Text style={styles.reviewResultTitle}>Reviewed &amp; held</Text>
+                      <TouchableOpacity
+                        onPress={() => shareReviewedOption(group.key, option)}
+                        style={styles.reviewResultShareButton}
+                      >
+                        <Ionicons name="share-social-outline" size={19} color={Colors.primaryDark} />
+                      </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => {
                           setReviewResult(null);
@@ -1418,6 +1493,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
     color: Colors.text,
+  },
+  reviewResultShareButton: {
+    padding: 2,
   },
   reviewResultRow: {
     fontSize: 13,
