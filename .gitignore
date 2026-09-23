@@ -68,6 +68,7 @@ docu/
 # Local certification working notes (contain booking IDs / draft correspondence)
 certification-run-notes.local.md
 tripsafe-api/TRIPJACK-SUPPORT-EMAIL.draft.txt
+tripsafe-api/cancellation-evidence/
 
 # Web build output (regenerate with ./deploy-web.sh)
 dist/

@@ -107,6 +107,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
       ln: '',
       eid: user?.email || '',
       pnum: '',
+      cnum: user?.phone && user.phone !== '0000000000' ? digitsOnly(user.phone).slice(-10) : '',
       gen: 'M',
       nomineeName: '',
       nomineeRelation: 'SPOUSE',
@@ -158,6 +159,11 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
       if (!t.dob || !t.fn.trim() || !t.ln.trim() || !t.eid.trim() || !t.pnum.trim()) {
         return `Fill in all required details for Traveller ${i + 1}.`;
       }
+      // TripJack feedback (2026-09-24): cnum was missing from every shared
+      // booking, leaving the travel cover with a blank mobile number.
+      if (!/^\d{10}$/.test(t.cnum.trim())) {
+        return `Enter a valid 10-digit contact number for Traveller ${i + 1}.`;
+      }
       // Doc FAQ: nominee info is MANDATORY - booking fails without it.
       if (!t.nomineeName.trim()) {
         return `Enter a nominee name for Traveller ${i + 1}.`;
@@ -196,6 +202,7 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
               ln: t.ln.trim(),
               eid: t.eid.trim(),
               pnum: t.pnum.trim().toUpperCase(),
+              cnum: t.cnum.trim(),
               gen: t.gen,
               ni: [{ nn: t.nomineeName.trim(), nr: t.nomineeRelation }],
               // tripsafe-api/08-student-api-integration.txt - confirmed
@@ -563,6 +570,15 @@ const TripSafeBookingScreen = ({ route, navigation }) => {
                   placeholder="Passport number"
                   placeholderTextColor={Colors.textMuted}
                   autoCapitalize="characters"
+                />
+                <TextInput
+                  style={styles.input}
+                  value={t.cnum}
+                  onChangeText={(v) => updateTraveller(index, 'cnum', digitsOnly(v).slice(0, 10))}
+                  placeholder="Contact number"
+                  placeholderTextColor={Colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={10}
                 />
                 <View style={styles.chipRow}>
                   {['M', 'F'].map((g) => (
