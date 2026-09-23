@@ -1,6 +1,7 @@
 package com.itinera.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.itinera.service.FareCalendarService;
 import com.itinera.service.FlightService;
 import com.itinera.service.FlightTicketPdfService;
 import org.springframework.http.HttpHeaders;
@@ -18,15 +19,28 @@ public class FlightController {
 
     private final FlightService flightService;
     private final FlightTicketPdfService flightTicketPdfService;
+    private final FareCalendarService fareCalendarService;
 
-    public FlightController(FlightService flightService, FlightTicketPdfService flightTicketPdfService) {
+    public FlightController(
+            FlightService flightService,
+            FlightTicketPdfService flightTicketPdfService,
+            FareCalendarService fareCalendarService
+    ) {
         this.flightService = flightService;
         this.flightTicketPdfService = flightTicketPdfService;
+        this.fareCalendarService = fareCalendarService;
     }
 
     @PostMapping("/search")
     public ResponseEntity<JsonNode> searchFlights(@RequestBody JsonNode payload) {
         return ResponseEntity.ok(flightService.searchFlights(payload));
+    }
+
+    // Not a TripJack passthrough like the rest of this controller - see
+    // FareCalendarService for why (no vendor fare-calendar API exists).
+    @PostMapping("/fare-calendar")
+    public ResponseEntity<JsonNode> fareCalendar(@RequestBody JsonNode payload) {
+        return ResponseEntity.ok(fareCalendarService.fareCalendar(payload));
     }
 
     @PostMapping("/review")

@@ -7,6 +7,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
@@ -116,6 +117,19 @@ const formatDateForDisplay = (date) => {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
+};
+
+// YYYY-MM-DD, the fare-calendar response's own date keys.
+const dateKey = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+// "₹8.2K" for the calendar grid - full rupee figures don't fit under a day
+// number, and a fare estimate doesn't need to the rupee anyway.
+const formatCompactPrice = (price) => {
+  if (price == null) return null;
+  if (price >= 100000) return `₹${(price / 100000).toFixed(1)}L`;
+  if (price >= 1000) return `₹${(price / 1000).toFixed(price >= 10000 ? 0 : 1)}K`;
+  return `₹${Math.round(price)}`;
 };
 
 const parseDisplayDate = (value) => {
@@ -644,6 +658,71 @@ const describePassengers = (counts = {}) => {
   return parts.join(', ') || '1 adult';
 };
 
+// "Fri, 25 Sep 26" - the WhatsApp-style share message's date format, built
+// from the same ISO string formatTime() already reads the clock time from.
+const formatShareDate = (isoDateTime) => {
+  if (!isoDateTime) return '--';
+  const date = new Date(isoDateTime);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: '2-digit' });
+};
+
+// A leg's checkInBaggage/cabinBaggage already carry a "Cabin "/"Baggage "
+// prefix baked in for on-screen display (see getBaggageLabel) - strip it
+// back off here so the share message can apply its own "Baggage X | Check-in
+// Y" wording instead of showing that prefix twice.
+const stripBaggagePrefix = (label) => (label || '').replace(/^(Cabin|Baggage)\s+/, '').trim();
+
+// Builds the WhatsApp-style itinerary text a travel agent would send a
+// customer - one block per leg (Onward/Return/Leg N), route/timing/baggage,
+// then a single all-in total (the app only computes one combined total with
+// markup/coupon applied, not a genuine per-leg price split, so a per-leg
+// "Price" line would have to be invented rather than read from real data).
+const buildFlightShareMessage = (reviewedFare, cabinClass) => {
+  if (!reviewedFare) return '';
+  const { flights, passengerCounts, cartItem } = reviewedFare;
+  const first = flights[0];
+  const last = flights[flights.length - 1];
+  const isMultiLeg = flights.length > 1;
+
+  const legBlocks = flights
+    .map((leg) => {
+      const legLabel = isMultiLeg ? buildJourneyLabel(leg.groupKey).toUpperCase() : 'FLIGHT';
+      const cabinBag = stripBaggagePrefix(leg.cabinBaggage) || 'Info at booking';
+      const checkInBag = stripBaggagePrefix(leg.checkInBaggage) || 'Info at booking';
+      return [
+        `*${legLabel}*: ✈️ ${leg.airline}${leg.flightNo ? ` (${leg.flightNo})` : ''}`,
+        `Route: *${leg.from}(${leg.fromCityName || leg.from})→${leg.to}(${leg.toCityName || leg.to})*`,
+        `*${leg.stops}*`,
+        `Departure: *${formatShareDate(leg.departureRaw)} ${leg.departure}* (${leg.from})`,
+        `Arrival: *${formatShareDate(leg.arrivalRaw)} ${leg.arrival}* (${leg.to})`,
+        `Duration: *${leg.duration}*`,
+        `*ADULT: Baggage ${cabinBag} | Check-in ${checkInBag}*`,
+      ].join('\n');
+    })
+    .join(`\n${'-'.repeat(80)}\n`);
+
+  return [
+    'Hello, please find details with regards to your flight(s) query for:',
+    `*${first.fromCityName || first.from} - ${last.toCityName || last.to}*`,
+    describePassengers(passengerCounts),
+    (CABIN_CLASS_LABELS[cabinClass] || 'Economy'),
+    '',
+    'Below mentioned prices are the total price(s) inclusive of taxes:',
+    '-'.repeat(80),
+    legBlocks,
+    '-'.repeat(80),
+    `Price: *₹${Math.round(cartItem.lineTotal).toLocaleString()}*`,
+    '',
+    'Thank you for choosing *MyItineri*',
+    'In case of any support :',
+    '☎️ Contact : 8235221988',
+    '📧 Email : fiestadreamholidays@gmail.com',
+    '',
+    'Airline ticket pricing is dynamic. Fares are valid as of now and might change at the time of issuance.',
+  ].join('\n');
+};
+
 const FlightsScreen = ({ navigation }) => {
   const { requireAuth } = useAuth();
   const { centeredContent, isDesktop } = useResponsive();
@@ -735,6 +814,10 @@ const FlightsScreen = ({ navigation }) => {
     rangeMode: false,
     pendingStart: null,
   });
+  // Fare-calendar prices for whichever leg the date picker above is
+  // currently open for - see FareCalendarService on the backend. Keyed by
+  // "YYYY-MM-DD"; a date missing from `fares` just shows no price hint.
+  const [calendarFares, setCalendarFares] = useState({ loading: false, fares: {} });
 
   const updateRoute = (index, key, value) => {
     setRoutes((currentRoutes) =>
@@ -1495,6 +1578,11 @@ const FlightsScreen = ({ navigation }) => {
     );
   };
 
+  const shareReviewedFare = () => {
+    if (!reviewedFare) return;
+    Share.share({ message: buildFlightShareMessage(reviewedFare, cabinClass) }).catch(() => {});
+  };
+
   const holdThisFare = () => {
     if (!reviewedFare) {
       return;
@@ -1784,6 +1872,42 @@ const FlightsScreen = ({ navigation }) => {
     if (type === 'infants') setInfants(String(next.infants));
   };
 
+  // Fetched once per calendar open, centered on the date the picker opened
+  // to - not re-fetched on every month-navigation tap, so opening the
+  // calendar never costs more than one backend round trip (which itself
+  // fans out to a capped-concurrency window server-side, see
+  // FareCalendarService). Silently shows a plain calendar (no prices) if the
+  // leg's airports aren't resolved yet or the request fails.
+  const fetchCalendarFares = async (fromCode, toCode, centerDate) => {
+    if (!fromCode || !toCode) {
+      setCalendarFares({ loading: false, fares: {} });
+      return;
+    }
+    setCalendarFares({ loading: true, fares: {} });
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/flights/fare-calendar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromCode,
+          toCode,
+          centerDate: dateKey(centerDate),
+          daysBefore: 7,
+          daysAfter: 7,
+          cabinClass,
+          adults: String(Number(adults || 0) || 1),
+          children: String(Number(children || 0)),
+          infants: String(Number(infants || 0)),
+          ...buildSearchModifiers(),
+        }),
+      });
+      const data = await response.json();
+      setCalendarFares({ loading: false, fares: response.ok ? data?.fares || {} : {} });
+    } catch {
+      setCalendarFares({ loading: false, fares: {} });
+    }
+  };
+
   const openCalendar = ({ target, routeIndex = null, currentValue = '', rangeMode = false }) => {
     setAirportSuggestFor(null);
     const parsedDate = parseDisplayDate(currentValue);
@@ -1798,6 +1922,14 @@ const FlightsScreen = ({ navigation }) => {
       rangeMode,
       pendingStart: null,
     });
+
+    // A Return-date pick prices the reverse leg (to -> from); a Departure/
+    // multi-city leg pick prices that route's own from -> to.
+    const legFrom =
+      target === 'return' ? resolveAirportCode(routes[0]?.to || '') : resolveAirportCode(routes[routeIndex]?.from || '');
+    const legTo =
+      target === 'return' ? resolveAirportCode(routes[0]?.from || '') : resolveAirportCode(routes[routeIndex]?.to || '');
+    fetchCalendarFares(legFrom, legTo, safeDate);
   };
 
   const closeCalendar = () => {
@@ -1877,6 +2009,12 @@ const FlightsScreen = ({ navigation }) => {
   const canGoToPreviousMonth =
     startOfMonth(calendarState.month) > startOfMonth(calendarMinDate);
   const calendarDays = buildCalendarDays(calendarState.month);
+  // Cheap/average/expensive tiers are relative to THIS window's own spread,
+  // not a fixed rupee threshold - a ₹3k Delhi-Mumbai fare and a ₹30k
+  // international one should each color-code sensibly against their own range.
+  const calendarFareValues = Object.values(calendarFares.fares);
+  const calendarFareMin = calendarFareValues.length ? Math.min(...calendarFareValues) : null;
+  const calendarFareMax = calendarFareValues.length ? Math.max(...calendarFareValues) : null;
 
   // Round trips get a side-by-side Onward/Return comparison instead of the
   // tap-a-chip-to-switch single list every other trip type uses - with only
@@ -3297,6 +3435,9 @@ const FlightsScreen = ({ navigation }) => {
                       {reviewedFare.flights.map((leg) => `${leg.airline} ${leg.flightNo || ''} (${leg.from}→${leg.to})`).join('  •  ')}
                     </Text>
                   </View>
+                  <TouchableOpacity onPress={shareReviewedFare} style={styles.reviewShareButton}>
+                    <Ionicons name="share-social-outline" size={22} color={Colors.primaryDark} />
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => setReviewedFare(null)}>
                     <Ionicons name="close-circle" size={26} color={Colors.textMuted} />
                   </TouchableOpacity>
@@ -3440,11 +3581,33 @@ const FlightsScreen = ({ navigation }) => {
               ))}
             </View>
 
+            {calendarFares.loading || calendarFareValues.length > 0 ? (
+              <View style={styles.calendarFareHint}>
+                {calendarFares.loading ? (
+                  <>
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                    <Text style={styles.calendarFareHintText}>Checking prices for nearby dates...</Text>
+                  </>
+                ) : (
+                  <Text style={styles.calendarFareHintText}>
+                    Estimated fares for this route, {'±'}7 days - actual price is confirmed on search.
+                  </Text>
+                )}
+              </View>
+            ) : null}
+
             <View style={styles.calendarGrid}>
               {calendarDays.map((date) => {
                 const isCurrentMonth = date.getMonth() === calendarState.month.getMonth();
                 const isPast = date < calendarMinDate;
                 const isSelected = isSameDay(date, calendarState.selected);
+                const farePrice = calendarFares.fares[dateKey(date)];
+                const isCheapest = farePrice != null && calendarFareMin != null && farePrice === calendarFareMin;
+                const isExpensive =
+                  farePrice != null &&
+                  calendarFareMax != null &&
+                  calendarFareMin !== calendarFareMax &&
+                  farePrice >= calendarFareMin + (calendarFareMax - calendarFareMin) * 0.66;
 
                 return (
                   <TouchableOpacity
@@ -3467,6 +3630,19 @@ const FlightsScreen = ({ navigation }) => {
                     >
                       {date.getDate()}
                     </Text>
+                    {farePrice != null && isCurrentMonth && !isPast ? (
+                      <Text
+                        style={[
+                          styles.calendarDayPrice,
+                          isCheapest && styles.calendarDayPriceCheap,
+                          isExpensive && styles.calendarDayPriceExpensive,
+                          isSelected && styles.calendarDayPriceSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {formatCompactPrice(farePrice)}
+                      </Text>
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}
@@ -4941,6 +5117,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 12,
   },
+  reviewShareButton: {
+    marginRight: 12,
+    marginTop: 2,
+  },
   reviewTitle: {
     fontSize: 16,
     fontWeight: '800',
@@ -5192,7 +5372,8 @@ const styles = StyleSheet.create({
   },
   calendarDay: {
     width: '14.28%',
-    aspectRatio: 1,
+    minHeight: 46,
+    paddingVertical: 5,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 16,
@@ -5217,6 +5398,32 @@ const styles = StyleSheet.create({
   },
   calendarDayTextSelected: {
     color: Colors.secondary,
+  },
+  calendarDayPrice: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    marginTop: 1,
+    color: Colors.textMuted,
+  },
+  calendarDayPriceCheap: {
+    color: Colors.success,
+  },
+  calendarDayPriceExpensive: {
+    color: '#C24A4A',
+  },
+  calendarDayPriceSelected: {
+    color: Colors.secondary,
+    opacity: 0.85,
+  },
+  calendarFareHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  calendarFareHintText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginLeft: 6,
   },
   calendarHint: {
     marginTop: 10,

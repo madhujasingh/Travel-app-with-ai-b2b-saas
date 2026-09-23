@@ -71,6 +71,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/flights/fare-rule").permitAll()
                 .requestMatchers(HttpMethod.POST, "/flights/seat-map").permitAll()
                 .requestMatchers(HttpMethod.POST, "/flights/fare-validate").permitAll()
+                // Same no-money-moved reasoning as search/review above - this
+                // just prices a route across a date window, doesn't book or
+                // reveal anything account-specific, and is used right on the
+                // search form before a customer has necessarily signed in.
+                .requestMatchers(HttpMethod.POST, "/flights/fare-calendar").permitAll()
                 .requestMatchers("/flights/**").authenticated()
                 // Persisted flight bookings are account-scoped (ownership enforced
                 // in FlightBookingController/-Service) - unlike the TripJack
