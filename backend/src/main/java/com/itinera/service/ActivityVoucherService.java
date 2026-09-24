@@ -42,14 +42,44 @@ public class ActivityVoucherService {
 
         Map<String, Object> result = new HashMap<>();
         if (vouchers.isArray() && !vouchers.isEmpty()) {
-            JsonNode first = vouchers.get(0);
+            JsonNode best = bestVoucher(vouchers, language);
             result.put("hasSupplierVoucher", true);
-            result.put("url", first.path("url").asText(null));
-            result.put("mimeType", first.path("mimeType").asText(null));
+            result.put("url", best.path("url").asText(null));
+            result.put("mimeType", best.path("mimeType").asText(null));
         } else {
             result.put("hasSupplierVoucher", false);
         }
         return result;
+    }
+
+    // Confirmed live: a single activity can return SEVERAL vouchers at once
+    // (one real example had 4 - Spanish+English, each as both HTML and PDF),
+    // not just one. Blindly taking index 0 handed an English-speaking
+    // customer a Spanish-language HTML page while an English PDF sat right
+    // next to it in the same array. Score every candidate instead: a PDF
+    // beats HTML (more useful/printable as an actual voucher), and a
+    // language matching the request beats one that doesn't - ties broken by
+    // array order.
+    private JsonNode bestVoucher(JsonNode vouchers, String language) {
+        String wantLang = (language == null ? "" : language).substring(0, Math.min(2, language == null ? 0 : language.length())).toUpperCase();
+
+        JsonNode best = null;
+        int bestScore = -1;
+        for (JsonNode candidate : vouchers) {
+            int score = 0;
+            if ("application/pdf".equalsIgnoreCase(candidate.path("mimeType").asText(""))) {
+                score += 2;
+            }
+            String voucherLang = candidate.path("language").asText("");
+            if (!wantLang.isEmpty() && voucherLang.toUpperCase().startsWith(wantLang)) {
+                score += 1;
+            }
+            if (best == null || score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return best;
     }
 
     public byte[] generatePdf(String language, String reference) {
