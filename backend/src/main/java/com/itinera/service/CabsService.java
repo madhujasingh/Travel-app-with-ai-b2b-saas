@@ -9,11 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-// TripJack Cabs API - UAT/certification only for now (see TripJackClient's
-// postCabs/getCabs, always authenticated with tripjack.test-api-key, never
-// the production key flights/hotels/activities use). Thin passthrough, same
-// convention as FlightService/HotelService - request/response shapes are
-// TripJack's own JSON as documented in cabs-api/cab-api-doc.txt.
+// TripJack Cabs API - certified and LIVE (2026-09) on the production key via
+// TripJackClient's postCabsLive/getCabsLive (real money, real customer
+// bookings). Thin passthrough, same convention as FlightService/HotelService
+// - request/response shapes are TripJack's own JSON as documented in
+// cabs-api/cab-api-doc.txt.
 @Service
 public class CabsService {
 
@@ -26,18 +26,18 @@ public class CabsService {
     }
 
     public JsonNode locationSearch(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v1/google-places", payload);
+        return tripJackClient.postCabsLive("/cabs/v1/google-places", payload);
     }
 
     public JsonNode latLong(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v1/get-lat-long", payload);
+        return tripJackClient.postCabsLive("/cabs/v1/get-lat-long", payload);
     }
 
     // Same endpoint for airport transfer / outstation / local, and for
     // oneway / roundtrip - the caller controls which via journeyType/tripType
     // in the payload (see doc sections 3.1-3.4).
     public JsonNode quotes(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v2/quotes", payload);
+        return tripJackClient.postCabsLive("/cabs/v2/quotes", payload);
     }
 
     // "agentId" is mandatory on every real Book request (confirmed live:
@@ -46,15 +46,15 @@ public class CabsService {
     // injected here server-side, same account-config-stays-on-the-backend
     // principle as the API key itself.
     public JsonNode book(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v2/booking", withAgentId(payload));
+        return tripJackClient.postCabsLive("/cabs/v2/booking", withAgentId(payload));
     }
 
     private JsonNode withAgentId(JsonNode payload) {
-        if (!StringUtils.hasText(tripJackConfig.getCabsAgentId())) {
+        if (!StringUtils.hasText(tripJackConfig.getCabsProdAgentId())) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "TripJack Cabs agent id is not configured");
         }
         if (payload instanceof ObjectNode objectNode) {
-            objectNode.put("agentId", Long.parseLong(tripJackConfig.getCabsAgentId()));
+            objectNode.put("agentId", Long.parseLong(tripJackConfig.getCabsProdAgentId()));
         }
         return payload;
     }
@@ -63,7 +63,7 @@ public class CabsService {
     // (sourceBookingId) in a single request - same booking endpoint
     // semantics, different path.
     public JsonNode embeddedBook(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v2/embedded/booking", withAgentIdInEmbeddedList(payload));
+        return tripJackClient.postCabsLive("/cabs/v2/embedded/booking", withAgentIdInEmbeddedList(payload));
     }
 
     // Embedded Book nests each individual booking request inside
@@ -71,11 +71,11 @@ public class CabsService {
     // object) - agentId goes on each entry there, per the doc's own sample
     // payload, not at the top level like plain book()'s withAgentId() above.
     private JsonNode withAgentIdInEmbeddedList(JsonNode payload) {
-        if (!StringUtils.hasText(tripJackConfig.getCabsAgentId())) {
+        if (!StringUtils.hasText(tripJackConfig.getCabsProdAgentId())) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "TripJack Cabs agent id is not configured");
         }
         if (payload instanceof ObjectNode objectNode && objectNode.get("bookingRequestList") instanceof ArrayNode list) {
-            long agentId = Long.parseLong(tripJackConfig.getCabsAgentId());
+            long agentId = Long.parseLong(tripJackConfig.getCabsProdAgentId());
             list.forEach(node -> {
                 if (node instanceof ObjectNode entry) {
                     entry.put("agentId", agentId);
@@ -88,14 +88,14 @@ public class CabsService {
     // bookingIds is a query param per the doc
     // ("cabs/v1/booking/details?bookingIds=..."), not a path segment or body.
     public JsonNode bookingDetails(String bookingIds) {
-        return tripJackClient.getCabs(uriBuilder -> uriBuilder
+        return tripJackClient.getCabsLive(uriBuilder -> uriBuilder
                 .path("/cabs/v1/booking/details")
                 .queryParam("bookingIds", bookingIds)
                 .build());
     }
 
     public JsonNode payment(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v1/payment/create", payload);
+        return tripJackClient.postCabsLive("/cabs/v1/payment/create", payload);
     }
 
     // Authoritative "how much do I actually pay" for a booking. Confirmed
@@ -114,11 +114,11 @@ public class CabsService {
     // the Cabs API exposes. Also absent from the PDF, found in TripJack's
     // Postman collection.
     public JsonNode paymentModes(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v1/payment/payment-modes", payload);
+        return tripJackClient.postCabsLive("/cabs/v1/payment/payment-modes", payload);
     }
 
     public JsonNode paymentSummary(String bookingId) {
-        return tripJackClient.getCabs(uriBuilder -> uriBuilder
+        return tripJackClient.getCabsLive(uriBuilder -> uriBuilder
                 .path("/cabs/v1/payment/summary/{bookingId}")
                 .build(bookingId));
     }
@@ -126,7 +126,7 @@ public class CabsService {
     // GET despite "charges" in the name - previews the refund/charge amounts
     // before actually cancelling (see amendmentCancel below).
     public JsonNode amendmentCharges(String bookingId, String type) {
-        return tripJackClient.getCabs(uriBuilder -> uriBuilder
+        return tripJackClient.getCabsLive(uriBuilder -> uriBuilder
                 .path("/cabs/v1/amendment")
                 .queryParam("bookingId", bookingId)
                 .queryParam("type", type)
@@ -137,6 +137,6 @@ public class CabsService {
     // amendmentCharges above but POST, and takes the cancellation as a body
     // instead of query params.
     public JsonNode amendmentCancel(JsonNode payload) {
-        return tripJackClient.postCabs("/cabs/v1/amendment", payload);
+        return tripJackClient.postCabsLive("/cabs/v1/amendment", payload);
     }
 }

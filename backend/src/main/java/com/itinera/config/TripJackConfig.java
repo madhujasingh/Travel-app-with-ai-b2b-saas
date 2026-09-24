@@ -8,11 +8,7 @@ public class TripJackConfig {
     private String baseUrl = "https://apitest.tripjack.com";
     private String hotelBaseUrl = "https://apitest-hms.tripjack.com";
     private String hotelBookerBaseUrl = "https://apitest-hotel-booker.tripjack.com";
-    // Cabs UAT host (Cabs API Documentation v2, "Service Definition") - the
-    // doc's own listed production host ("https://tripjack.com") is almost
-    // certainly a copy-paste error (their marketing homepage, not an API
-    // shape), so no production default is set here yet - confirm the real
-    // one with TripJack before going live.
+    // Cabs UAT host (Cabs API Documentation v2, "Service Definition").
     private String cabsBaseUrl = "https://apitest-cabs.tripjack.com";
     // Cabs Book/Payment both require "agentId" - TripJack's own numeric User
     // Id for this account (the same one referenced when generating the API
@@ -22,16 +18,31 @@ public class TripJackConfig {
     // per account, injected server-side so the frontend never needs it.
     private String cabsAgentId;
     // TripSafe (travel insurance) UAT host - "Service Definition" (p.7 of
-    // TripSafe Documentation v6) lists the same production domain as Cabs
-    // ("https://tripjack.com"), which is unverified/plausible-but-unconfirmed
-    // for the same reason - not enabled on any key we hold yet.
+    // TripSafe Documentation v6).
     private String tripsafeBaseUrl = "https://apitest.tripjack.com";
     private String apiKey;
-    // Separate UAT/certification key for NEW, not-yet-certified TripJack
-    // products (Cabs, TripSafe) - kept distinct from apiKey (production,
-    // already live for flights/hotels/activities) so testing a brand-new
-    // integration can never accidentally hit production with real money.
+    // Separate UAT/certification key for NEW TripJack products (Cabs,
+    // TripSafe) - kept distinct from apiKey (production) so certifying a
+    // brand-new integration or a future feature addition can never
+    // accidentally hit production with real money.
     private String testApiKey;
+
+    // Cabs + TripSafe production - both are now certified (2026-09) and
+    // both docs list, and a live test against the working production
+    // Flights key CONFIRMED, the same shared production domain:
+    // https://tripjack.com (unlike the UAT hosts above, which are split per
+    // product - apitest-cabs.tripjack.com vs apitest.tripjack.com). Kept as
+    // separate *Prod* fields/clients rather than repointing cabsBaseUrl/
+    // tripsafeBaseUrl in place, so UAT re-certification (a future feature
+    // addition, e.g.) still has a safe sandbox path that can never mix with
+    // the one real customers hit.
+    private String cabsProdBaseUrl = "https://tripjack.com";
+    private String tripsafeProdBaseUrl = "https://tripjack.com";
+    // Cabs' production agentId - TripJack's numeric User Id for the
+    // PRODUCTION account, distinct from cabsAgentId (the UAT/test account's
+    // id) above - same "Navigate to the User detail..." portal screen, just
+    // the production account instead of the certification one.
+    private String cabsProdAgentId;
 
     public String getBaseUrl() {
         return baseUrl;
@@ -95,5 +106,29 @@ public class TripJackConfig {
 
     public void setTestApiKey(String testApiKey) {
         this.testApiKey = testApiKey;
+    }
+
+    public String getCabsProdBaseUrl() {
+        return cabsProdBaseUrl;
+    }
+
+    public void setCabsProdBaseUrl(String cabsProdBaseUrl) {
+        this.cabsProdBaseUrl = cabsProdBaseUrl;
+    }
+
+    public String getTripsafeProdBaseUrl() {
+        return tripsafeProdBaseUrl;
+    }
+
+    public void setTripsafeProdBaseUrl(String tripsafeProdBaseUrl) {
+        this.tripsafeProdBaseUrl = tripsafeProdBaseUrl;
+    }
+
+    public String getCabsProdAgentId() {
+        return cabsProdAgentId;
+    }
+
+    public void setCabsProdAgentId(String cabsProdAgentId) {
+        this.cabsProdAgentId = cabsProdAgentId;
     }
 }

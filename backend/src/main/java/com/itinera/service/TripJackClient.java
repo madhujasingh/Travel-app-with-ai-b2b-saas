@@ -34,6 +34,15 @@ public class TripJackClient {
     // as Cabs above; every TripSafe endpoint is POST (including Booking
     // Details, unlike Cabs), so no GET helper is needed for it.
     private final RestClient tripsafeRestClient;
+    // Cabs + TripSafe production clients - both certified 2026-09, both
+    // point at the shared https://tripjack.com production domain (confirmed
+    // live against the working production Flights key), authenticated with
+    // apiKey (production), never testApiKey. Kept as separate clients from
+    // cabsRestClient/tripsafeRestClient above rather than repointing those
+    // in place, so UAT re-certification (e.g. a future feature addition)
+    // still has an isolated sandbox path real customer traffic never touches.
+    private final RestClient cabsProdRestClient;
+    private final RestClient tripsafeProdRestClient;
     private final TripJackConfig tripJackConfig;
 
     public TripJackClient(TripJackConfig tripJackConfig) {
@@ -69,6 +78,18 @@ public class TripJackClient {
 
         this.tripsafeRestClient = RestClient.builder()
                 .baseUrl(trimTrailingSlash(tripJackConfig.getTripsafeBaseUrl()))
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+
+        this.cabsProdRestClient = RestClient.builder()
+                .baseUrl(trimTrailingSlash(tripJackConfig.getCabsProdBaseUrl()))
+                .requestFactory(requestFactory)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+
+        this.tripsafeProdRestClient = RestClient.builder()
+                .baseUrl(trimTrailingSlash(tripJackConfig.getTripsafeProdBaseUrl()))
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
@@ -109,6 +130,25 @@ public class TripJackClient {
     // Details, Raise-Amendments, Cancellation) is POST with a JSON body.
     public JsonNode postTripSafe(String path, JsonNode payload) {
         return post(tripsafeRestClient, path, payload, tripJackConfig.getTestApiKey(), "TripJack test API key is not configured");
+    }
+
+    // Production Cabs/TripSafe - real customer traffic, real money. Callers
+    // (CabsService/TripSafeService) use these once live; the test-key
+    // methods above stay reserved for UAT/re-certification only.
+    public JsonNode postCabsLive(String path, JsonNode payload) {
+        return post(cabsProdRestClient, path, payload, tripJackConfig.getApiKey(), "TripJack API key is not configured");
+    }
+
+    public JsonNode getCabsLive(String path) {
+        return get(cabsProdRestClient, uriBuilder -> uriBuilder.path(path).build(), tripJackConfig.getApiKey(), "TripJack API key is not configured");
+    }
+
+    public JsonNode getCabsLive(Function<UriBuilder, URI> uriFunction) {
+        return get(cabsProdRestClient, uriFunction, tripJackConfig.getApiKey(), "TripJack API key is not configured");
+    }
+
+    public JsonNode postTripSafeLive(String path, JsonNode payload) {
+        return post(tripsafeProdRestClient, path, payload, tripJackConfig.getApiKey(), "TripJack API key is not configured");
     }
 
     // Cancel Booking takes the bookingId as a URL path segment with no request body.

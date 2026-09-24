@@ -3,11 +3,10 @@ package com.itinera.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Service;
 
-// TripJack TripSafe (travel insurance) API - UAT/certification only for now
-// (see TripJackClient.postTripSafe, always authenticated with
-// tripjack.test-api-key, never the production key flights/hotels/activities
-// use). Thin passthrough, same convention as CabsService - request/response
-// shapes are TripJack's own JSON as documented in
+// TripJack TripSafe (travel insurance) API - certified and LIVE (2026-09) on
+// the production key via TripJackClient.postTripSafeLive (real money, real
+// customer policies). Thin passthrough, same convention as CabsService -
+// request/response shapes are TripJack's own JSON as documented in
 // tripsafe-api/01-search-api.txt through 09-amt-api-integration.txt.
 //
 // Only the Standalone journey type's 6 core endpoints are wired here.
@@ -26,29 +25,29 @@ public class TripSafeService {
     }
 
     public JsonNode search(JsonNode payload) {
-        return tripJackClient.postTripSafe("/insurance/v1/searchquery-list", payload);
+        return tripJackClient.postTripSafeLive("/insurance/v1/searchquery-list", payload);
     }
 
     public JsonNode review(JsonNode payload) {
-        return tripJackClient.postTripSafe("/insurance/v1/review", payload);
+        return tripJackClient.postTripSafeLive("/insurance/v1/review", payload);
     }
 
     public JsonNode book(JsonNode payload) {
-        return tripJackClient.postTripSafe("/oms/v1/insurance/book", payload);
+        return tripJackClient.postTripSafeLive("/oms/v1/insurance/book", payload);
     }
 
     public JsonNode bookingDetails(JsonNode payload) {
-        return tripJackClient.postTripSafe("/oms/v1/insurance/booking-details", payload);
+        return tripJackClient.postTripSafeLive("/oms/v1/insurance/booking-details", payload);
     }
 
     // Step 1 of the two-step cancel flow - preview only, does not cancel.
     public JsonNode raiseAmendment(JsonNode payload) {
-        return tripJackClient.postTripSafe("/oms/v1/ins/amendment/raise", payload);
+        return tripJackClient.postTripSafeLive("/oms/v1/ins/amendment/raise", payload);
     }
 
     // Step 2 - confirms/finalizes the cancellation using the amendmentId
     // returned by raiseAmendment above.
     public JsonNode confirmCancellation(JsonNode payload) {
-        return tripJackClient.postTripSafe("/oms/v1/ins/amendment/confirm-insurance-cancellation", payload);
+        return tripJackClient.postTripSafeLive("/oms/v1/ins/amendment/confirm-insurance-cancellation", payload);
     }
 }
