@@ -436,6 +436,23 @@ const ActivityBookingScreen = ({ route, navigation }) => {
                 </View>
               )}
 
+              {/* Certification doc: Question/Answer is mandatory confirmation-
+                  page content when the activity had one. Sourced from the
+                  same local questions/answers state the booking request was
+                  built from (line ~204), not re-read off the booking
+                  response - guaranteed to match what was actually submitted. */}
+              {(questions || []).length > 0 && (
+                <View style={styles.confirmationSection}>
+                  <Text style={styles.confirmationSectionTitle}>Question / Answer</Text>
+                  {questions.map((q) => (
+                    <View key={q.code} style={styles.confirmationRow}>
+                      <Text style={styles.confirmationLabel}>{q.text}</Text>
+                      <Text style={styles.confirmationValue}>{answers[q.code] || '-'}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {!!remarks && (
                 <View style={styles.confirmationSection}>
                   <Text style={styles.confirmationSectionTitle}>Redeem Instructions</Text>

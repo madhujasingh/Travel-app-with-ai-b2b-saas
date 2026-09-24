@@ -109,4 +109,23 @@ public class ActivitiesController {
                 .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
+
+    // Admin-only (see SecurityConfig) - HotelBeds' own Booking List operation,
+    // queried directly against their system of record. Reconciliation tool,
+    // not a customer-facing flow - see ActivitiesService.bookingList.
+    @GetMapping("/admin/bookings")
+    public ResponseEntity<JsonNode> bookingList(
+            @RequestParam(defaultValue = "en") String language,
+            @RequestParam String start,
+            @RequestParam String end,
+            @RequestParam(defaultValue = "CHECKIN") String filterType,
+            @RequestParam(defaultValue = "true") boolean includedCancelled,
+            @RequestParam(required = false) String holder,
+            @RequestParam(defaultValue = "20") int itemsPerPage,
+            @RequestParam(defaultValue = "1") int page
+    ) {
+        return ResponseEntity.ok(activitiesService.bookingList(
+                language, start, end, filterType, includedCancelled, holder, itemsPerPage, page
+        ));
+    }
 }

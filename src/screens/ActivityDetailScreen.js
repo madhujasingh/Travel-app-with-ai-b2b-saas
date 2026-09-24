@@ -174,6 +174,18 @@ const ActivityDetailScreen = ({ route, navigation }) => {
             </Text>
           )}
 
+          {/* Certification doc: operationDays (which days of the week the
+              activity runs) is mandatory Detail-page content - distinct from
+              the per-rate operationDates used for cancellation policies. */}
+          {(activity?.operationDays || []).length > 0 && (
+            <Text style={styles.operationDays}>
+              <Ionicons name="calendar-outline" size={14} color={Colors.textMuted} />{' '}
+              {activity.operationDays.length === 7
+                ? 'Runs every day of the week'
+                : `Runs: ${activity.operationDays.map((d) => d.name || d.code).join(', ')}`}
+            </Text>
+          )}
+
           {!!activity?.content?.description && (
             <Text style={styles.description}>{stripHtml(activity.content.description)}</Text>
           )}
@@ -196,6 +208,31 @@ const ActivityDetailScreen = ({ route, navigation }) => {
               <Text style={styles.importantInfoTitle}>Important Information</Text>
               {activity.content.importantInfo.map((info, index) => (
                 <Text key={index} style={styles.importantInfoText}>{stripHtml(info)}</Text>
+              ))}
+            </View>
+          )}
+
+          {/* Certification doc: featureGroups (what's included/excluded) is
+              mandatory Detail-page content. Each group can carry included
+              and/or excluded items - not every group has both. */}
+          {(activity?.content?.featureGroups || []).length > 0 && (
+            <View style={styles.featuresSection}>
+              <Text style={styles.sectionTitle}>What&apos;s Included</Text>
+              {activity.content.featureGroups.map((group, groupIndex) => (
+                <View key={groupIndex}>
+                  {(group.included || []).map((item, index) => (
+                    <View key={`inc-${groupIndex}-${index}`} style={styles.featureRow}>
+                      <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+                      <Text style={styles.featureText}>{item.description}</Text>
+                    </View>
+                  ))}
+                  {(group.excluded || []).map((item, index) => (
+                    <View key={`exc-${groupIndex}-${index}`} style={styles.featureRow}>
+                      <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+                      <Text style={[styles.featureText, styles.featureTextExcluded]}>{item.description}</Text>
+                    </View>
+                  ))}
+                </View>
               ))}
             </View>
           )}
@@ -244,52 +281,61 @@ const ActivityDetailScreen = ({ route, navigation }) => {
               {splitRemarks(contractRemarks(modality.comments)).map((line, index) => (
                 <Text key={index} style={styles.modalityRemarks}>{'•'} {line}</Text>
               ))}
-              {(modality.rates || []).map((rate) =>
-                (rate.rateDetails || []).map((detail) => {
-                  const isSelected = selectedRate?.rateKey === detail.rateKey;
-                  return (
-                    <TouchableOpacity
-                      key={detail.rateKey}
-                      style={[styles.rateRow, isSelected && styles.rateRowSelected]}
-                      onPress={() =>
-                        setSelectedRate({
-                          ...detail,
-                          questions: modality.questions,
-                          freeCancellation: rate.freeCancellation,
-                        })
-                      }
-                    >
-                      <View style={{ flex: 1 }}>
-                        {detail.languages?.[0]?.description && (
-                          <Text style={styles.rateLanguage}>{detail.languages[0].description}</Text>
-                        )}
-                        {detail.sessions?.[0]?.name && (
-                          <Text style={styles.rateSession}>Session: {detail.sessions[0].name}</Text>
-                        )}
-                        {rate.freeCancellation === false && (
-                          <Text style={styles.rateCancellation}>Non-refundable</Text>
-                        )}
-                      </View>
-                      <View>
-                        <Text style={styles.ratePrice}>
-                          {activity?.currency} {Number(detail.totalAmount?.amount || 0).toLocaleString()}
-                        </Text>
-                        {!!formatInrEquivalent(detail.totalAmount?.amount, activity?.currency) && (
-                          <Text style={styles.ratePriceInr}>
-                            {formatInrEquivalent(detail.totalAmount?.amount, activity?.currency)}
+              {(modality.rates || []).map((rate) => (
+                <View key={rate.rateCode}>
+                  {/* Certification doc: rates/shortDescription is mandatory
+                      when present - "for the moment only GENERIC [rateCode]
+                      are implemented" per the doc, so most real rates simply
+                      won't carry it and this renders nothing for them. */}
+                  {!!rate.shortDescription && (
+                    <Text style={styles.rateShortDescription}>{stripHtml(rate.shortDescription)}</Text>
+                  )}
+                  {(rate.rateDetails || []).map((detail) => {
+                    const isSelected = selectedRate?.rateKey === detail.rateKey;
+                    return (
+                      <TouchableOpacity
+                        key={detail.rateKey}
+                        style={[styles.rateRow, isSelected && styles.rateRowSelected]}
+                        onPress={() =>
+                          setSelectedRate({
+                            ...detail,
+                            questions: modality.questions,
+                            freeCancellation: rate.freeCancellation,
+                          })
+                        }
+                      >
+                        <View style={{ flex: 1 }}>
+                          {detail.languages?.[0]?.description && (
+                            <Text style={styles.rateLanguage}>{detail.languages[0].description}</Text>
+                          )}
+                          {detail.sessions?.[0]?.name && (
+                            <Text style={styles.rateSession}>Session: {detail.sessions[0].name}</Text>
+                          )}
+                          {rate.freeCancellation === false && (
+                            <Text style={styles.rateCancellation}>Non-refundable</Text>
+                          )}
+                        </View>
+                        <View>
+                          <Text style={styles.ratePrice}>
+                            {activity?.currency} {Number(detail.totalAmount?.amount || 0).toLocaleString()}
                           </Text>
-                        )}
-                      </View>
-                      <Ionicons
-                        name={isSelected ? 'checkmark-circle' : 'chevron-forward'}
-                        size={20}
-                        color={isSelected ? Colors.primary : Colors.textMuted}
-                        style={{ marginLeft: 10 }}
-                      />
-                    </TouchableOpacity>
-                  );
-                })
-              )}
+                          {!!formatInrEquivalent(detail.totalAmount?.amount, activity?.currency) && (
+                            <Text style={styles.ratePriceInr}>
+                              {formatInrEquivalent(detail.totalAmount?.amount, activity?.currency)}
+                            </Text>
+                          )}
+                        </View>
+                        <Ionicons
+                          name={isSelected ? 'checkmark-circle' : 'chevron-forward'}
+                          size={20}
+                          color={isSelected ? Colors.primary : Colors.textMuted}
+                          style={{ marginLeft: 10 }}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
           ))}
         </ScrollView>
@@ -419,6 +465,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 12,
   },
+  operationDays: {
+    fontSize: 12.5,
+    color: Colors.textMuted,
+    marginBottom: 12,
+  },
   description: {
     fontSize: 13,
     color: Colors.textLight,
@@ -456,6 +507,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.text,
     lineHeight: 18,
+  },
+  featuresSection: {
+    marginBottom: 20,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  featureText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.text,
+  },
+  featureTextExcluded: {
+    color: Colors.textMuted,
+    textDecorationLine: 'line-through',
   },
   routesSection: {
     marginBottom: 4,
@@ -542,6 +611,12 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     marginBottom: 8,
     lineHeight: 16,
+  },
+  rateShortDescription: {
+    fontSize: 11.5,
+    fontStyle: 'italic',
+    color: Colors.textMuted,
+    marginBottom: 6,
   },
   rateRow: {
     flexDirection: 'row',

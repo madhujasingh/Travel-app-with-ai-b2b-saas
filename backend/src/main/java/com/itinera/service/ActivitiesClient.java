@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.itinera.config.ActivitiesConfig;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -13,11 +15,14 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.function.Supplier;
+import java.util.zip.GZIPInputStream;
 
 // HotelBeds/HBX Group Activities API client. Unlike TripJackClient's static
 // apikey header, this API's X-Signature is SHA256(apiKey + secret + current
@@ -37,11 +42,20 @@ public class ActivitiesClient {
         requestFactory.setConnectTimeout(10000);
         requestFactory.setReadTimeout(20000);
 
+        // HotelBeds' own certification review checks that this is sent - see
+        // activities-api/activities-knowledge-base/certification process .txt
+        // ("we will review... how well you are using GZIP compression").
+        // SimpleClientHttpRequestFactory wraps java.net.HttpURLConnection,
+        // which - unlike a browser or most other languages' HTTP clients -
+        // does NOT auto-decompress a gzip response just because Accept-
+        // Encoding was sent, so the interceptor below does that manually.
         this.restClient = RestClient.builder()
                 .baseUrl(trimTrailingSlash(activitiesConfig.getBaseUrl()))
                 .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.ACCEPT_ENCODING, "gzip")
+                .requestInterceptor(GZIP_DECOMPRESSING_INTERCEPTOR)
                 .build();
     }
 
@@ -142,5 +156,52 @@ public class ActivitiesClient {
             return value;
         }
         return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    // Transparently unwraps a gzip-encoded response body so Jackson still
+    // just sees plain JSON bytes - HotelBeds only compresses when it decides
+    // to (typically larger portfolio/availability payloads), so this only
+    // kicks in when the response actually says Content-Encoding: gzip.
+    private static final org.springframework.http.client.ClientHttpRequestInterceptor GZIP_DECOMPRESSING_INTERCEPTOR =
+            (request, body, execution) -> {
+                ClientHttpResponse response = execution.execute(request, body);
+                String contentEncoding = response.getHeaders().getFirst(HttpHeaders.CONTENT_ENCODING);
+                if (contentEncoding != null && contentEncoding.equalsIgnoreCase("gzip")) {
+                    return new GzipDecompressedResponse(response);
+                }
+                return response;
+            };
+
+    private static final class GzipDecompressedResponse implements ClientHttpResponse {
+        private final ClientHttpResponse delegate;
+
+        GzipDecompressedResponse(ClientHttpResponse delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public InputStream getBody() throws IOException {
+            return new GZIPInputStream(delegate.getBody());
+        }
+
+        @Override
+        public HttpStatusCode getStatusCode() throws IOException {
+            return delegate.getStatusCode();
+        }
+
+        @Override
+        public String getStatusText() throws IOException {
+            return delegate.getStatusText();
+        }
+
+        @Override
+        public HttpHeaders getHeaders() {
+            return delegate.getHeaders();
+        }
+
+        @Override
+        public void close() {
+            delegate.close();
+        }
     }
 }

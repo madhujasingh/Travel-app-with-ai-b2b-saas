@@ -47,6 +47,7 @@ import AdminItinerariesScreen from './src/screens/AdminItinerariesScreen';
 import ManageSuppliersScreen from './src/screens/ManageSuppliersScreen';
 import PromoBannersScreen from './src/screens/PromoBannersScreen';
 import HotelCatalogAdminScreen from './src/screens/HotelCatalogAdminScreen';
+import ActivityBookingListAdminScreen from './src/screens/ActivityBookingListAdminScreen';
 import AdminPlatformSettingsScreen from './src/screens/AdminPlatformSettingsScreen';
 import GroupTripPlannerScreen from './src/screens/GroupTripPlannerScreen';
 import AdminPosterStudioScreen from './src/screens/AdminPosterStudioScreen';
@@ -462,6 +463,7 @@ export default function App() {
               <Stack.Screen name="SupplierNetwork" component={ManageSuppliersScreen} />
               <Stack.Screen name="PromoBanners" component={PromoBannersScreen} />
               <Stack.Screen name="HotelCatalogAdmin" component={HotelCatalogAdminScreen} />
+              <Stack.Screen name="ActivityBookingListAdmin" component={ActivityBookingListAdminScreen} />
               <Stack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
               <Stack.Screen name="AdminPosterStudio" component={AdminPosterStudioScreen} />
               <Stack.Screen name="AdminCoupons" component={AdminCouponsScreen} />

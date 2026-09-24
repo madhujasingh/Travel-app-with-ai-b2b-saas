@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itinera.model.ActivityReferenceCache;
 import com.itinera.repository.ActivityReferenceCacheRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.function.Supplier;
 
@@ -174,5 +177,37 @@ public class ActivitiesService {
         return activitiesClient.get(
                 "/activity-cache-api/1.0/portfolio?destination=" + destinationCode + "&offset=" + offset + "&limit=" + limit
         );
+    }
+
+    // GET /activity-api/3.0/bookings/{language} - HotelBeds' own Booking List
+    // operation, queried directly against their system of record. Admin-only
+    // reconciliation tool (see ActivitiesController's /admin/bookings) - the
+    // customer-facing "my bookings" screen uses our local ActivityBooking
+    // mirror instead (see ActivityBookingService), which is sufficient for
+    // that purpose; this exists to cross-check our local record against
+    // HotelBeds' own if the two are ever suspected to have drifted, not for
+    // any customer-visible flow.
+    public JsonNode bookingList(
+            String language,
+            String start,
+            String end,
+            String filterType,
+            boolean includedCancelled,
+            String holder,
+            int itemsPerPage,
+            int page
+    ) {
+        StringBuilder path = new StringBuilder("/activity-api/3.0/bookings/")
+                .append(language)
+                .append("?start=").append(start)
+                .append("&end=").append(end)
+                .append("&filterType=").append(filterType)
+                .append("&includedCancelled=").append(includedCancelled)
+                .append("&itemsPerPage=").append(itemsPerPage)
+                .append("&page=").append(page);
+        if (StringUtils.hasText(holder)) {
+            path.append("&holder=").append(URLEncoder.encode(holder, StandardCharsets.UTF_8));
+        }
+        return activitiesClient.get(path.toString());
     }
 }

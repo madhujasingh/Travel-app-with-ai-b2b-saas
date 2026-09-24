@@ -192,6 +192,13 @@ const B2BDashboard = ({ navigation }) => {
       icon: 'pricetag-outline',
       screen: 'AdminPlatformSettings',
     },
+    {
+      id: 9,
+      title: 'HotelBeds Bookings',
+      description: 'Look up activity bookings directly from HotelBeds',
+      icon: 'search-outline',
+      screen: 'ActivityBookingListAdmin',
+    },
   ];
 
   const renderStatCard = (stat) => (

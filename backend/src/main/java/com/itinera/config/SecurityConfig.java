@@ -57,6 +57,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/activities/countries/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/activities/destinations/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/activities/segments/**").permitAll()
+                // Reveals bookings across ALL customers, not just the caller's
+                // own - admin-only, and must precede the catch-all below.
+                .requestMatchers("/activities/admin/**").hasRole("ADMIN")
                 .requestMatchers("/activities/**").authenticated()
                 // Only the discovery/pricing phase of the TripJack flight
                 // passthrough is public (browsing without an account) - Book,
