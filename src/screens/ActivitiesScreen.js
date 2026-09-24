@@ -251,9 +251,17 @@ const ActivitiesScreen = ({ navigation }) => {
       const found = Array.isArray(data?.activities) ? data.activities : [];
       // Results get their own screen, the way hotels and cabs already do -
       // otherwise a search leaves you looking at the form you just filled in.
+      // destinationCode/segmentCode + totalItems let that screen fetch
+      // further pages itself as the user scrolls (see loadMore there) -
+      // itemsPerPage: 20 above was previously a silent hard cap with no way
+      // to see anything past it (confirmed live: a real Madrid search
+      // returns 35 activities, so #21-35 were simply unreachable before).
       navigation.navigate('ActivityResults', {
         results: found,
         destinationLabel,
+        destinationCode,
+        segmentCode: selectedSegment ? String(selectedSegment.code) : null,
+        totalItems: data?.pagination?.totalItems ?? found.length,
         searchContext: {
           from: fromDate,
           to: toDate,
