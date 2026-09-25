@@ -1,6 +1,7 @@
 package com.itinera.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.itinera.config.TripJackConfig;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -14,11 +15,16 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriBuilder;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.util.function.Function;
+import java.util.zip.GZIPInputStream;
 
 @Service
 public class TripJackClient {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final RestClient restClient;
     private final RestClient hotelRestClient;
@@ -158,11 +164,11 @@ public class TripJackClient {
         requireKey(tripJackConfig.getApiKey(), "TripJack API key is not configured");
 
         try {
-            return hotelBookerRestClient.post()
+            return parseJson(hotelBookerRestClient.post()
                     .uri(pathTemplate, uriVariables)
                     .header("apikey", tripJackConfig.getApiKey())
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(byte[].class));
         } catch (HttpStatusCodeException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
@@ -187,12 +193,12 @@ public class TripJackClient {
         requireKey(apiKey, missingKeyMessage);
 
         try {
-            return client.post()
+            return parseJson(client.post()
                     .uri(path)
                     .header("apikey", apiKey)
                     .body(payload)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(byte[].class));
         } catch (HttpStatusCodeException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
@@ -232,11 +238,11 @@ public class TripJackClient {
         requireKey(apiKey, missingKeyMessage);
 
         try {
-            return client.get()
+            return parseJson(client.get()
                     .uri(uriFunction)
                     .header("apikey", apiKey)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(byte[].class));
         } catch (HttpStatusCodeException ex) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
@@ -255,6 +261,26 @@ public class TripJackClient {
                     "TripJack request failed unexpectedly: " + ex.getClass().getSimpleName() + ": " + ex.getMessage()
             );
         }
+    }
+
+    // TripJack sometimes labels a response's Content-Type as
+    // application/octet-stream instead of application/json - seen live on a
+    // larger search result (Patna-Bhubaneswar, 27 Oct) - and Spring's
+    // .body(JsonNode.class) picks its converter by that header, so it threw
+    // "no converter for content type" even though the bytes were valid JSON.
+    // Pulling the raw bytes ourselves and parsing them regardless of what
+    // the header claims sidesteps that entirely, and doubles as gzip-safety
+    // if a response is ever compressed without being labeled as such.
+    private JsonNode parseJson(byte[] raw) throws IOException {
+        if (raw == null || raw.length == 0) {
+            return null;
+        }
+        if (raw.length > 1 && raw[0] == (byte) 0x1f && raw[1] == (byte) 0x8b) {
+            try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(raw))) {
+                return OBJECT_MAPPER.readTree(gzip);
+            }
+        }
+        return OBJECT_MAPPER.readTree(raw);
     }
 
     private void requireKey(String apiKey, String missingKeyMessage) {
