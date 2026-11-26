@@ -8,6 +8,7 @@ import {
   StatusBar,
   TextInput,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import useResponsive from '../hooks/useResponsive';
 import { appAlert } from '../utils/appAlert';
@@ -114,18 +115,58 @@ const CheckoutScreen = ({ route, navigation }) => {
 
   const discount = Number(appliedCoupon?.discountAmount || 0);
   const grandTotal = Math.max(total + convenienceFee - discount, 0);
+  const [paying, setPaying] = useState(false);
 
-  // Online payment is not built yet - there is no gateway, so nothing here can
-  // take money. Say so plainly rather than showing a confirmation: a traveller
-  // who believes they have paid and holds no ticket is far worse than one who
-  // knows to call us.
-  const handleEnquiry = () => {
-    appAlert(
-      'Request received',
-      'Online payment is not available yet. Our team will contact you to confirm '
-        + 'this booking and arrange payment. Nothing has been charged.',
-      [{ text: 'OK', onPress: () => navigation.navigate('CustomerTabs', { screen: 'HomeTab' }) }]
-    );
+  // Online payment only exists for itinerary packages so far - this resolves
+  // a cart item to the package it was priced from. Package cart items are
+  // keyed on the itinerary's own id (see ItineraryDetailScreen
+  // .handleAddToCart); a customized item instead carries the original under
+  // customization.originalItinerary, since its own id is a generated string.
+  // Anything else (e.g. a flight cart item, id "flight-...") resolves to
+  // null and is refused below rather than risk matching the wrong itinerary.
+  const resolveItineraryId = (item) => {
+    const candidate = item.customization?.originalItinerary?.id ?? item.id;
+    const numeric = Number(candidate);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+  };
+
+  const handlePay = async () => {
+    const payItems = cartItems.map((item) => ({
+      itineraryId: resolveItineraryId(item),
+      numberOfPeople: item.people || 1,
+    }));
+    if (payItems.some((item) => !item.itineraryId)) {
+      appAlert(
+        'Online payment not available here yet',
+        'Online payment currently only covers itinerary packages. Please contact '
+          + 'our team to arrange payment for the other item(s) in this order.',
+      );
+      return;
+    }
+
+    setPaying(true);
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/payments/cashfree/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          items: payItems,
+          couponCode: appliedCoupon?.code || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.paymentSessionId) {
+        appAlert('Payment error', data?.message || 'Unable to start payment right now. Please try again.');
+        return;
+      }
+
+      const checkoutUrl = `${API_CONFIG.BASE_URL}/payments/cashfree/checkout-page?session=${encodeURIComponent(data.paymentSessionId)}`;
+      await Linking.openURL(checkoutUrl);
+    } catch (error) {
+      appAlert('Payment error', 'Unable to start payment right now. Please check your connection and try again.');
+    } finally {
+      setPaying(false);
+    }
   };
 
   return (
@@ -247,11 +288,10 @@ const CheckoutScreen = ({ route, navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Payment</Text>
           <View style={styles.pendingNotice}>
-            <Ionicons name="information-circle-outline" size={20} color={Colors.primary} style={styles.pendingIcon} />
+            <Ionicons name="shield-checkmark-outline" size={20} color={Colors.primary} style={styles.pendingIcon} />
             <Text style={styles.pendingText}>
-              Online payment is coming soon. Submit your request and our team will
-              contact you to confirm the booking and arrange payment. You will not
-              be charged now.
+              You'll be taken to Cashfree's secure checkout to pay by UPI, card or
+              netbanking. Your booking is confirmed automatically once payment succeeds.
             </Text>
           </View>
         </View>
@@ -269,10 +309,15 @@ const CheckoutScreen = ({ route, navigation }) => {
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.payButton}
-          onPress={handleEnquiry}
+          style={[styles.payButton, paying && styles.payButtonDisabled]}
+          onPress={handlePay}
+          disabled={paying}
         >
-          <Text style={styles.payButtonText}>Request Booking</Text>
+          {paying ? (
+            <ActivityIndicator color={Colors.secondary} size="small" />
+          ) : (
+            <Text style={styles.payButtonText}>Pay Now</Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -479,6 +524,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 30,
     paddingVertical: 15,
+  },
+  payButtonDisabled: {
+    opacity: 0.6,
   },
   payButtonText: {
     color: Colors.secondary,

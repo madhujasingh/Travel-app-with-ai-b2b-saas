@@ -19,6 +19,7 @@ import ItineraryDetailScreen from './src/screens/ItineraryDetailScreen';
 import CustomizationScreen from './src/screens/CustomizationScreen';
 import CartScreen from './src/screens/CartScreen';
 import CheckoutScreen from './src/screens/CheckoutScreen';
+import PaymentStatusScreen from './src/screens/PaymentStatusScreen';
 import TalkToAgentScreen from './src/screens/TalkToAgentScreen';
 import PromotionsScreen from './src/screens/PromotionsScreen';
 import HotelsScreen from './src/screens/HotelsScreen';
@@ -87,7 +88,7 @@ const HERO_ROUTES = new Set([
 
 const WEB_HEADER_ROUTES = new Set([
   'LandPackage', 'ItineraryList', 'ItineraryDetail', 'Customization',
-  'Cart', 'Checkout', 'TalkToAgent',
+  'Cart', 'Checkout', 'PaymentStatus', 'TalkToAgent',
   'Hotels', 'HotelSearchResults', 'HotelDetail', 'HotelBooking',
   'Flights', 'FlightBooking', 'FlightReissue', 'MyFlightBookings',
   'Activities', 'ActivityResults', 'ActivityDetail', 'ActivityBooking',
@@ -437,6 +438,7 @@ export default function App() {
               <Stack.Screen name="Customization" component={CustomizationScreen} />
               <Stack.Screen name="Cart" component={CartScreen} />
               <Stack.Screen name="Checkout" component={CheckoutScreen} />
+              <Stack.Screen name="PaymentStatus" component={PaymentStatusScreen} />
               <Stack.Screen name="TalkToAgent" component={TalkToAgentScreen} />
               <Stack.Screen name="Hotels" component={HotelsScreen} />
               <Stack.Screen name="HotelSearchResults" component={HotelSearchResultsScreen} />

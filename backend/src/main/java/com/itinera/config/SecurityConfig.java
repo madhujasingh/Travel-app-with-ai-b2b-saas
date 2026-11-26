@@ -177,6 +177,20 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/promo-banners/*/suggest-title").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/promo-banners/**").permitAll()
                 .requestMatchers("/promo-banners/**").hasRole("ADMIN")
+
+                // Cashfree calls the webhook directly and can't carry a JWT -
+                // its signature header is the trust boundary there instead
+                // (see PaymentController/CashfreeClient.verifyWebhookSignature).
+                // Everything else under /payments/** (creating an order,
+                // polling its status) moves real money or reads a specific
+                // customer's payment, so it stays authenticated - the
+                // permitAll entry must precede this catch-all.
+                .requestMatchers(HttpMethod.POST, "/payments/cashfree/webhook").permitAll()
+                // Opened directly in the system browser (Linking.openURL),
+                // which sends no Authorization header - see
+                // PaymentController.checkoutPage for why this is safe to be public.
+                .requestMatchers(HttpMethod.GET, "/payments/cashfree/checkout-page").permitAll()
+                .requestMatchers("/payments/**").authenticated()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

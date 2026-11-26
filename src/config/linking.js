@@ -32,6 +32,13 @@ const linking = {
       Customization: 'itineraries/:itineraryId/customize',
       Checkout: 'checkout',
       TalkToAgent: 'talk-to-agent',
+      // Cashfree's return_url after the hosted checkout page - the browser
+      // redirects here with ?order_id=..., which the OS hands back to the
+      // app via the travelapp2:// scheme (see CheckoutScreen/PaymentService).
+      PaymentStatus: {
+        path: 'payment-return',
+        parse: { order_id: String },
+      },
 
       // Hotels
       Hotels: 'hotels',

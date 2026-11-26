@@ -55,6 +55,13 @@ public class Booking {
     @Column(name = "special_requests", columnDefinition = "TEXT")
     private String specialRequests;
 
+    // The Cashfree order that pays for this booking - nullable because older
+    // rows predate online payment, and because PaymentService writes this on
+    // the same row it just created rather than requiring it up front.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payment_id")
+    private Payment payment;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
