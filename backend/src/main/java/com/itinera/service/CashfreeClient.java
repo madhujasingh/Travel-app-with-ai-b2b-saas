@@ -107,18 +107,19 @@ public class CashfreeClient {
         }
     }
 
-    // HMAC-SHA256(webhookSecret, timestamp + rawBody), base64-encoded, per
-    // Cashfree's webhook verification spec - compared as raw bytes via
-    // MessageDigest.isEqual so a mismatch can't be timed out character by
-    // character.
+    // HMAC-SHA256(secretKey, timestamp + rawBody), base64-encoded, per
+    // Cashfree's webhook verification spec - keyed on the same Client Secret
+    // used for API auth (Cashfree doesn't issue a separate per-webhook
+    // signing secret). Compared as raw bytes via MessageDigest.isEqual so a
+    // mismatch can't be timed out character by character.
     public boolean verifyWebhookSignature(String timestamp, String rawBody, String signature) {
-        if (!StringUtils.hasText(cashfreeConfig.getWebhookSecret()) || !StringUtils.hasText(signature)
+        if (!StringUtils.hasText(cashfreeConfig.getSecretKey()) || !StringUtils.hasText(signature)
                 || !StringUtils.hasText(timestamp)) {
             return false;
         }
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(cashfreeConfig.getWebhookSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.init(new SecretKeySpec(cashfreeConfig.getSecretKey().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             byte[] computed = mac.doFinal((timestamp + rawBody).getBytes(StandardCharsets.UTF_8));
             String expected = Base64.getEncoder().encodeToString(computed);
             return MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8));

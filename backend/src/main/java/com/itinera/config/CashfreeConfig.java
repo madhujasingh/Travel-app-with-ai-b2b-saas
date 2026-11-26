@@ -9,11 +9,10 @@ public class CashfreeConfig {
 
     private String baseUrl = "https://sandbox.cashfree.com";
     private String appId;
+    // Also used to verify inbound webhook signatures (HMAC-SHA256 keyed on
+    // this same secret) - Cashfree doesn't issue a separate per-webhook
+    // signing secret the way some gateways do.
     private String secretKey;
-    // Verifies the signature on inbound webhook callbacks - generated on the
-    // Cashfree Dashboard's webhook setup screen, a different secret from
-    // appId/secretKey above (those come from the API Keys page).
-    private String webhookSecret;
 
     public String getBaseUrl() {
         return baseUrl;
@@ -37,13 +36,5 @@ public class CashfreeConfig {
 
     public void setSecretKey(String secretKey) {
         this.secretKey = secretKey;
-    }
-
-    public String getWebhookSecret() {
-        return webhookSecret;
-    }
-
-    public void setWebhookSecret(String webhookSecret) {
-        this.webhookSecret = webhookSecret;
     }
 }
